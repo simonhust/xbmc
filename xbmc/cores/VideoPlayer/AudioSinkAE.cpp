@@ -325,6 +325,24 @@ void CAudioSinkAE::SetResampleMode(int mode)
   }
 }
 
+void CAudioSinkAE::SetPlaySpeed(double speed)
+{
+  std::unique_lock lock(m_critSection);
+  if (m_pAudioStream)
+  {
+    if (m_bPassthrough && speed != 1.0)
+    {
+      CLog::Log(LOGDEBUG, "CAudioSinkAE::SetPlaySpeed - passthrough active,"
+                " tempo {:.2f}x not supported, audio will be silent", speed);
+      return;
+    }
+    // atempo uses 1/speed as the resample ratio:
+    // ratio < 1.0 = faster playback (atempo > 1.0)
+    // e.g. 2x speed → SetRR(0.5, 0.02) → atempoBuffers->SetTempo(2.0)
+    m_pAudioStream->SetResampleRatio(1.0 / speed);
+  }
+}
+
 double CAudioSinkAE::GetClock()
 {
   if (m_pClock)

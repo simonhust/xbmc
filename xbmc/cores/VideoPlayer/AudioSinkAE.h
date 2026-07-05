@@ -54,6 +54,7 @@ public:
   double GetResampleRatio();
 
   void SetResampleMode(int mode);
+  void SetPlaySpeed(double speed);
   void Flush();
   void Drain();
   void AbortAddPackets();

@@ -23,6 +23,7 @@ public:
   CProcessInfoGBM();
   EINTERLACEMETHOD GetFallbackDeintMethod() override;
   std::vector<AVPixelFormat> GetRenderFormats() override;
+  float MaxTempoPlatform() override { return 3.0f; }
 };
 
 } // namespace VIDEOPLAYER

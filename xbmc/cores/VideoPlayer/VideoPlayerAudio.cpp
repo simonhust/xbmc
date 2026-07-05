@@ -389,6 +389,17 @@ void CVideoPlayerAudio::Process()
             m_stalled = false;
           }
         }
+        // Apply user-requested tempo to audio output
+        double tempo = speed / DVD_PLAYSPEED_NORMAL;
+        if (tempo != 1.0f)
+        {
+          m_audioSink.SetPlaySpeed(tempo);
+          CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - tempo speed {:.2f}x", tempo);
+        }
+        else
+        {
+          m_audioSink.SetPlaySpeed(1.0);
+        }
       }
       else
       {
