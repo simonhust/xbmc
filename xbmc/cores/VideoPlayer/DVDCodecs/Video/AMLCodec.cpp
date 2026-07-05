@@ -2652,6 +2652,43 @@ bool CAMLCodec::AddData(uint8_t *pData, size_t iSize, double dts, double pts)
   // and is controlled by am_pkt.newflag.
   set_header_info(am_private);
 
+  // Tempo speed: scale PTS and optionally drop HEVC non-reference frames
+  if (m_speed > DVD_PLAYSPEED_NORMAL && m_speed <= TEMPO_SPEED_MAX)
+  {
+    double speed_factor = (double)DVD_PLAYSPEED_NORMAL / m_speed;
+
+    // Scale PTS to compress timeline for target speed
+    if (am_private->am_pkt.avpts != UINT64_0)
+    {
+      uint64_t scaled = (uint64_t)(am_private->am_pkt.avpts * speed_factor);
+      am_private->am_pkt.avpts = scaled;
+      am_private->am_pkt.avdts = scaled;
+    }
+
+    // HEVC high-frame-rate: drop non-reference frames to reduce decoder load
+    if (am_private->video_format == VFORMAT_HEVC)
+    {
+      float fps = 0;
+      if (m_hints.fpsscale > 0 && m_hints.fpsrate > 0)
+        fps = (float)m_hints.fpsrate / m_hints.fpsscale;
+
+      if (fps > HFR_THRESH_FPS)
+      {
+        int offset = find_start_code_offset(pData, iSize);
+        if (offset >= 0 && offset + 2 <= (int)iSize)
+        {
+          int nal_type = HEVC_NALU_TYPE(pData, offset);
+          if (HEVC_IS_VCL_NALU(nal_type) && HEVC_IS_NONREF_NALU(nal_type))
+          {
+            // Non-reference HEVC frame (TRAIL_N/TSA_N/STSA_N/RADL_N/RASL_N):
+            // skip feeding to decoder, no other frame depends on it.
+            return true;
+          }
+        }
+      }
+    }
+  }
+
   // loop until we write all into codec, am_pkt.isvalid
   // will get set to zero once everything is consumed.
   // PLAYER_SUCCESS means all is ok, not all bytes were written.
@@ -2845,6 +2882,25 @@ CDVDVideoCodec::VCReturn CAMLCodec::GetPicture(VideoPicture *pVideoPicture)
   return CDVDVideoCodec::VC_BUFFER;
 }
 
+#define TEMPO_SPEED_MIN  DVD_PLAYSPEED_NORMAL    /* 1.0x */
+#define TEMPO_SPEED_MAX (DVD_PLAYSPEED_NORMAL * 3) /* 3.0x */
+#define HFR_THRESH_FPS  30
+
+/* HEVC NAL unit type helpers */
+#define HEVC_NALU_TYPE(data, off) (((data)[off] >> 1) & 0x3F)
+#define HEVC_IS_NONREF_NALU(t)    (((t) <= 9) && ((t) % 2 == 0))
+#define HEVC_IS_VCL_NALU(t)       ((t) <= 9 || ((t) >= 16 && (t) <= 21))
+
+static int find_start_code_offset(const uint8_t *data, int size)
+{
+  if (size < 4) return -1;
+  if (data[0] == 0 && data[1] == 0 && data[2] == 0 && data[3] == 1)
+    return 4;
+  if (size >= 3 && data[0] == 0 && data[1] == 0 && data[2] == 1)
+    return 3;
+  return -1;
+}
+
 void CAMLCodec::SetSpeed(int speed)
 {
   if (m_speed == speed)
@@ -2858,6 +2914,19 @@ void CAMLCodec::SetSpeed(int speed)
 
   if (!m_opened)
     return;
+
+  bool isTempo = (speed > 0 && speed >= TEMPO_SPEED_MIN && speed <= TEMPO_SPEED_MAX);
+
+  if (isTempo)
+  {
+    // Tempo/倍速: full frame decode, clock runs at speed factor,
+    // RenderManager handles natural frame dropping for low fps,
+    // HEVC non-ref frame dropping for high fps.
+    m_dll->codec_set_cntl_mode(&am_private->vcodec, TRICKMODE_NONE);
+    m_tp_last_frame = std::chrono::system_clock::now();
+    CLog::Log(LOGDEBUG, "CAMLCodec::SetSpeed - tempo mode {:.2f}x", speed / 1000.0f);
+    return;
+  }
 
   switch(speed)
   {
