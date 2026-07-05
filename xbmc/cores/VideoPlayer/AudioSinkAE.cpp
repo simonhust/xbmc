@@ -71,6 +71,12 @@ bool CAudioSinkAE::Create(const DVDAudioFrame &audioframe, AVCodecID codec, bool
   m_channelLayout = audioframe.format.m_channelLayout;
   m_dataType = audioframe.format.m_streamInfo.m_type;
 
+  // Save PCM format info for passthrough fallback
+  m_pcmSampleRate = audioframe.format.m_sampleRate;
+  m_pcmChannelLayout = audioframe.format.m_channelLayout;
+  // If this is already PCM, use it; otherwise default to float
+  m_pcmDataFormat = audioframe.passthrough ? AE_FMT_FLOAT : audioframe.format.m_dataFormat;
+
   return true;
 }
 
@@ -328,19 +334,47 @@ void CAudioSinkAE::SetResampleMode(int mode)
 void CAudioSinkAE::SetPlaySpeed(double speed)
 {
   std::unique_lock lock(m_critSection);
-  if (m_pAudioStream)
+
+  if (m_bPassthrough && speed != 1.0)
   {
-    if (m_bPassthrough && speed != 1.0)
+    CLog::Log(LOGDEBUG, "CAudioSinkAE::SetPlaySpeed - passthrough active,"
+              " tempo {:.2f}x: fallback to PCM", speed);
+    // Recreate stream as PCM: destroy passthrough, create float PCM
+    if (m_pAudioStream)
+      m_pAudioStream.reset();
+    m_bPassthrough = false;
+
+    if (m_pcmDataFormat != AE_FMT_INVALID && m_pcmSampleRate > 0)
     {
-      CLog::Log(LOGDEBUG, "CAudioSinkAE::SetPlaySpeed - passthrough active,"
-                " tempo {:.2f}x not supported, audio will be silent", speed);
-      return;
+      AEAudioFormat pcmFormat;
+      pcmFormat.m_dataFormat = m_pcmDataFormat;
+      pcmFormat.m_sampleRate = m_pcmSampleRate;
+      pcmFormat.m_channelLayout = m_pcmChannelLayout;
+      pcmFormat.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_NULL;
+
+      unsigned int options = AESTREAM_PAUSED | AESTREAM_FORCE_RESAMPLE;
+      m_pAudioStream = CServiceBroker::GetActiveAE()->MakeStream(pcmFormat, options, this);
     }
-    // atempo uses 1/speed as the resample ratio:
-    // ratio < 1.0 = faster playback (atempo > 1.0)
-    // e.g. 2x speed → SetRR(0.5, 0.02) → atempoBuffers->SetTempo(2.0)
-    m_pAudioStream->SetResampleRatio(1.0 / speed);
+    if (!m_pAudioStream)
+      CLog::Log(LOGERROR, "CAudioSinkAE::SetPlaySpeed - PCM fallback failed");
+
+    // Apply tempo after fallback
+    if (m_pAudioStream)
+      m_pAudioStream->SetResampleRatio(1.0 / speed);
+
+    return;
   }
+  else if (!m_bPassthrough && speed == 1.0 && m_pcmDataFormat != AE_FMT_INVALID)
+  {
+    // Returning to 1x from tempo: if we had fallen back from passthrough,
+    // the stream was replaced with PCM. On return to 1x, mark the
+    // current stream type so the next Create() re-evaluates passthrough.
+    // Do nothing here — the next Create() call (on stream change or seek)
+    // will re-enable passthrough naturally.
+  }
+
+  if (m_pAudioStream)
+    m_pAudioStream->SetResampleRatio(1.0 / speed);
 }
 
 double CAudioSinkAE::GetClock()

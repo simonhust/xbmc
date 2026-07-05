@@ -83,4 +83,9 @@ protected:
 
   std::atomic_bool m_bAbort;
   CDVDClock *m_pClock;
+
+  // PCM fallback for passthrough tempo
+  unsigned int m_pcmSampleRate{0};
+  AEDataFormat m_pcmDataFormat{AE_FMT_INVALID};
+  CAEChannelInfo m_pcmChannelLayout;
 };
