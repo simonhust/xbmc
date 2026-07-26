@@ -792,9 +792,21 @@ int CVideoDatabase::GetFileId(const CFileItem &item)
   int fileId = -1;
 
   if (URIUtils::IsBlurayPath(item.GetDynPath()))
-    return GetFileId(item.GetDynPath());
+  {
+    // For disc images (ISO files), the bluray:// URL won't match the database path.
+    // Use the video tag's path which contains the original ISO path.
+    if (item.HasVideoInfoTag() &&
+        URIUtils::IsDiscImage(item.GetVideoInfoTag()->m_strFileNameAndPath))
+    {
+      fileId = GetFileId(*item.GetVideoInfoTag());
+    }
+    else
+    {
+      return GetFileId(item.GetDynPath());
+    }
+  }
 
-  if (item.HasVideoInfoTag())
+  if (fileId == -1 && item.HasVideoInfoTag())
     fileId = GetFileId(*item.GetVideoInfoTag());
 
   if (fileId == -1)

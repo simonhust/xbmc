@@ -2498,6 +2498,13 @@ bool CUtil::UseDynPathForAddOrUpdate(const CFileItem& item)
         item.GetVideoContentType() == VideoDbContentType::EPISODES ||
         item.GetVideoContentType() == VideoDbContentType::UNKNOWN /* Removable bluray */)))
   {
+    // For bluray paths that are disc images (ISO files), the database stores
+    // the original ISO path, not the synthetic bluray:// URL, so we should not
+    // use the dynpath for database operations - use the video tag's path instead.
+    if (URIUtils::IsDiscImage(URIUtils::GetDiscFile(item.GetDynPath())))
+    {
+      return false;
+    }
     return true;
   }
 
