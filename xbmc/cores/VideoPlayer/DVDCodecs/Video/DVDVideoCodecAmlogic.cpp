@@ -477,7 +477,22 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
           m_last_added = true;
           converted = true;
         }
-        KODI::MEMORY::AlignedFree(bl_data);
+        else
+        {
+          converted = false;
+        }
+        if (!converted || !m_last_pData)
+        {
+          CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: orphan BL dts {:.3f} no convert, send direct",
+            __FUNCTION__, bl_dts / DVD_TIME_BASE);
+          m_last_pData = bl_data;
+          m_last_iSize = bl_size;
+          m_last_added = true;
+          converted = true;
+          bl_data = nullptr;
+        }
+        if (bl_data)
+          KODI::MEMORY::AlignedFree(bl_data);
         m_bl_packages.pop_front();
       }
       else
