@@ -451,6 +451,12 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
 
 bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, const DemuxPacket &packet)
 {
+  /* DTS matching tolerance: 5ms to absorb BL/EL demux jitter */
+  static constexpr double DTS_TOLERANCE = 5000.0; /* DVD_TIME_BASE = 1us */
+  auto DtsMatch = [](double a, double b) {
+    return std::abs(a - b) <= DTS_TOLERANCE;
+  };
+
   if (packet.isELPackage)
   {
     /* ---- EL packet: try to pair with BL queue front ---- */
@@ -463,7 +469,7 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
           packet.dts / DVD_TIME_BASE, bl_dts / DVD_TIME_BASE);
         return false;
       }
-      if (packet.dts == bl_dts)
+      if (DtsMatch(packet.dts, bl_dts))
       {
         DLDemuxPacket bl_pkt = m_bl_packages.front();
         m_bl_packages.pop_front();
@@ -516,7 +522,7 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
           packet.dts / DVD_TIME_BASE, standby_dts / DVD_TIME_BASE);
         return false;
       }
-      if (packet.dts == standby_dts)
+      if (DtsMatch(packet.dts, standby_dts))
       {
         CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip duplicate BL dts {:.3f}", __FUNCTION__,
           packet.dts / DVD_TIME_BASE);
@@ -533,7 +539,7 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
       m_el_packages.pop_front();
     }
 
-    if (!m_el_packages.empty() && std::get<3>(m_el_packages.front()) == packet.dts)
+    if (!m_el_packages.empty() && DtsMatch(std::get<3>(m_el_packages.front()), packet.dts))
     {
       DLDemuxPacket el_pkt = m_el_packages.front();
       m_el_packages.pop_front();
