@@ -442,6 +442,10 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
     KODI::MEMORY::AlignedFree(std::get<0>(pkt));
   m_bl_packages.clear();
 
+  for (auto& pkt : m_packages)
+    KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+  m_packages.clear();
+
   m_last_added = true;
   m_last_pData = nullptr;
   m_last_iSize = 0;
@@ -674,8 +678,37 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       {
         if (packet.isDualStream)
         {
-          if (!DualLayerConvert(pData, iSize, packet))
+          bool dual_layer_converted = false;
+
+          if (!m_packages.empty())
+          {
+            // pair BL and EL from the single queue
+            DLDemuxPacket queued = m_packages.front();
+            uint8_t *qData = std::get<0>(queued);
+            uint32_t qSize = std::get<1>(queued);
+            bool qIsEL = std::get<2>(queued);
+
+            if (qIsEL != packet.isELPackage)
+            {
+              if (!packet.isELPackage)
+                dual_layer_converted = m_bitstream->Convert(pData, iSize, qData, qSize);
+              else
+                dual_layer_converted = m_bitstream->Convert(qData, qSize, pData, iSize);
+            }
+          }
+
+          if (dual_layer_converted)
+          {
+            KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
+            m_packages.pop_front();
+          }
+          else
+          {
+            uint8_t *pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
+            memcpy(pkt, packet.pData, packet.iSize);
+            m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
             return true;
+          }
         }
         else
         {

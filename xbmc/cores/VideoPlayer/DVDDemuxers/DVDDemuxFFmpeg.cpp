@@ -1767,17 +1767,7 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
 
 if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY) && pStream->id == 0x1015)))
-{
-  // For multi-clip playlists, dual-stream mode is unreliable
-  if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
-  {
-    auto *blurayInput = static_cast<CDVDInputStreamBluray*>(m_pInput.get());
-    if (blurayInput->GetClipCount() <= 1)
-      m_dv_dual_stream = true;
-  }
-  else
-    m_dv_dual_stream = true;
-}
+  m_dv_dual_stream = true;
 
         if (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION)
         {
@@ -2119,14 +2109,6 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     if (m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
     {
       // UHD BD have a secondary video stream called by Dolby as enhancement layer.
-      // For multi-clip playlists, discard EL stream and use single-layer mode.
-      if (pStream->id == 0x1015 && !m_dv_dual_stream)
-      {
-        CLog::Log(LOGDEBUG, "CDVDDemuxFFmpeg::AddStream - discarding Dolby Vision stream (multi-clip)");
-        pStream->discard = AVDISCARD_ALL;
-        delete stream;
-        return nullptr;
-      }
       stream->dvdNavId = pStream->id;
 
       auto it = std::find_if(m_streams.begin(), m_streams.end(),

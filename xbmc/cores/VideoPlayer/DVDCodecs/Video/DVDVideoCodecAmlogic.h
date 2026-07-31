@@ -113,6 +113,7 @@ private:
 
   std::list<DLDemuxPacket> m_el_packages;  /* EL queue sorted by DTS ascending */
   std::list<DLDemuxPacket> m_bl_packages;  /* BL queue sorted by DTS ascending */
+  std::list<DLDemuxPacket> m_packages;     /* single package queue for dual layer */
 
   bool      m_last_added = true;
   uint8_t  *m_last_pData = nullptr;
