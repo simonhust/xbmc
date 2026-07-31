@@ -686,6 +686,9 @@ bool CBitstreamConverter::Convert(uint8_t* pData, int iSize)
                 CLog::Log(LOGDEBUG, LOGVIDEO, "CBitstreamConverter::Convert: nal_type: {}, size: {}",
                   nal_type, size);
 
+              if (!m_start_decode && IsIDR(nal_type))
+                m_start_decode = true;
+
               buf += size;
             }
 
@@ -702,6 +705,8 @@ bool CBitstreamConverter::Convert(uint8_t* pData, int iSize)
           {
             m_inputSize = iSize;
             m_inputBuffer = pData;
+            if (!m_start_decode)
+              m_start_decode = true;
           }
 
           return true;
