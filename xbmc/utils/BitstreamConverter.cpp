@@ -862,7 +862,11 @@ bool CBitstreamConverter::Convert(uint8_t *pData_bl, int iSize_bl, uint8_t *pDat
       nal_type = (buf[0] >> 1) & 0x3f;
 
       if (nal_type != AVC_NAL_END_SEQUENCE)
+      {
         BitstreamAllocAndCopy(&m_convertBuffer, &offset, buf, size, nal_type);
+        if (!m_start_decode && IsIDR(nal_type))
+          m_start_decode = true;
+      }
       else
       {
         buf_eos = buf;
