@@ -457,17 +457,14 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
     return std::abs(a - b) <= DTS_TOLERANCE;
   };
 
-  /* DVD_TIME_BASE = 1us, one frame at 24fps ≈ 41667us */
-  static constexpr double ONE_FRAME_US = DVD_TIME_BASE * 100 / 2400;
-
   /* Skip orphan BL: BL queue front whose EL has already passed */
   auto SkipOrphanBL = [&](double el_dts = -1.0) -> bool {
     bool converted = false;
     while (!m_bl_packages.empty())
     {
       double bl_dts = std::get<3>(m_bl_packages.front());
-      double cmp_dts = (!m_el_packages.empty() && el_dts < 0) ? std::get<3>(m_el_packages.front()) : el_dts;
-      if (cmp_dts > bl_dts + ONE_FRAME_US + DTS_TOLERANCE)
+      double cmp_dts = (!m_el_packages.empty()) ? std::get<3>(m_el_packages.front()) : el_dts;
+      if (cmp_dts > bl_dts + DTS_TOLERANCE)
       {
         CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip orphan BL dts {:.3f} (EL already at {:.3f})",
           __FUNCTION__, bl_dts / DVD_TIME_BASE, cmp_dts / DVD_TIME_BASE);
