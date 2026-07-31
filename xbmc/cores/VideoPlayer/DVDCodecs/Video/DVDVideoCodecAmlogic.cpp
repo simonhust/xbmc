@@ -457,9 +457,33 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
     return std::abs(a - b) <= DTS_TOLERANCE;
   };
 
+  /* DVD_TIME_BASE = 1us, one frame at 24fps ≈ 41667us */
+  static constexpr double ONE_FRAME_US = DVD_TIME_BASE * 100 / 2400;
+
+  /* Skip orphan BL: BL queue front whose EL has already passed */
+  auto SkipOrphanBL = [&](double el_dts = -1.0) {
+    while (!m_bl_packages.empty())
+    {
+      double bl_dts = std::get<3>(m_bl_packages.front());
+      double cmp_dts = (!m_el_packages.empty() && el_dts < 0) ? std::get<3>(m_el_packages.front()) : el_dts;
+      if (cmp_dts > bl_dts + ONE_FRAME_US + DTS_TOLERANCE)
+      {
+        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip orphan BL dts {:.3f} (EL already at {:.3f})",
+          __FUNCTION__, bl_dts / DVD_TIME_BASE, cmp_dts / DVD_TIME_BASE);
+        KODI::MEMORY::AlignedFree(std::get<0>(m_bl_packages.front()));
+        m_bl_packages.pop_front();
+      }
+      else
+      {
+        break;
+      }
+    }
+  };
+
   if (packet.isELPackage)
   {
     /* ---- EL packet: try to pair with BL queue front ---- */
+    SkipOrphanBL(packet.dts);
     while (!m_bl_packages.empty())
     {
       double bl_dts = std::get<3>(m_bl_packages.front());
@@ -513,6 +537,7 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
   else
   {
     /* ---- BL packet: compare with standby BL (FIFO front), then trim EL and try to pair ---- */
+    SkipOrphanBL();
     if (!m_bl_packages.empty())
     {
       double standby_dts = std::get<3>(m_bl_packages.front());
@@ -530,13 +555,17 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
       }
     }
 
-    /* Trim EL queue: remove all EL with DTS < BL DTS */
-    while (!m_el_packages.empty() && std::get<3>(m_el_packages.front()) < packet.dts)
+    /* Trim EL queue: remove all EL with DTS < min(BL_queue_front, current_BL) */
     {
-      CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: trim EL dts {:.3f} < BL dts {:.3f}", __FUNCTION__,
-        std::get<3>(m_el_packages.front()) / DVD_TIME_BASE, packet.dts / DVD_TIME_BASE);
-      KODI::MEMORY::AlignedFree(std::get<0>(m_el_packages.front()));
-      m_el_packages.pop_front();
+      double trim_dts = m_bl_packages.empty() ? packet.dts : std::min(
+          std::get<3>(m_bl_packages.front()), packet.dts);
+      while (!m_el_packages.empty() && std::get<3>(m_el_packages.front()) < trim_dts)
+      {
+        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: trim EL dts {:.3f} < trim_dts {:.3f}", __FUNCTION__,
+          std::get<3>(m_el_packages.front()) / DVD_TIME_BASE, trim_dts / DVD_TIME_BASE);
+        KODI::MEMORY::AlignedFree(std::get<0>(m_el_packages.front()));
+        m_el_packages.pop_front();
+      }
     }
 
     if (!m_el_packages.empty() && DtsMatch(std::get<3>(m_el_packages.front()), packet.dts))
