@@ -461,7 +461,8 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
   static constexpr double ONE_FRAME_US = DVD_TIME_BASE * 100 / 2400;
 
   /* Skip orphan BL: BL queue front whose EL has already passed */
-  auto SkipOrphanBL = [&](double el_dts = -1.0) {
+  auto SkipOrphanBL = [&](double el_dts = -1.0) -> bool {
+    bool converted = false;
     while (!m_bl_packages.empty())
     {
       double bl_dts = std::get<3>(m_bl_packages.front());
@@ -470,7 +471,16 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
       {
         CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip orphan BL dts {:.3f} (EL already at {:.3f})",
           __FUNCTION__, bl_dts / DVD_TIME_BASE, cmp_dts / DVD_TIME_BASE);
-        KODI::MEMORY::AlignedFree(std::get<0>(m_bl_packages.front()));
+        uint8_t *bl_data = std::get<0>(m_bl_packages.front());
+        uint32_t bl_size = std::get<1>(m_bl_packages.front());
+        if (m_bitstream->Convert(bl_data, bl_size))
+        {
+          m_last_pData = m_bitstream->GetConvertBuffer();
+          m_last_iSize = m_bitstream->GetConvertSize();
+          m_last_added = true;
+          converted = true;
+        }
+        KODI::MEMORY::AlignedFree(bl_data);
         m_bl_packages.pop_front();
       }
       else
@@ -478,12 +488,14 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
         break;
       }
     }
+    return converted;
   };
 
   if (packet.isELPackage)
   {
     /* ---- EL packet: try to pair with BL queue front ---- */
-    SkipOrphanBL(packet.dts);
+    if (SkipOrphanBL(packet.dts))
+      return true;
     while (!m_bl_packages.empty())
     {
       double bl_dts = std::get<3>(m_bl_packages.front());
@@ -537,7 +549,8 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
   else
   {
     /* ---- BL packet: compare with standby BL (FIFO front), then trim EL and try to pair ---- */
-    SkipOrphanBL();
+    if (SkipOrphanBL())
+      return true;
     if (!m_bl_packages.empty())
     {
       double standby_dts = std::get<3>(m_bl_packages.front());
