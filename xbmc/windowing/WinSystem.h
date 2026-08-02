@@ -271,6 +271,12 @@ public:
   // alpha blend (see CGUIFontTTFGLES::FirstBegin).
   virtual bool IsHdrComposite() const { return false; }
 
+  // Dedicated subtitle plane rendering. When BeginSubtitleRender returns
+  // true, the caller renders subtitle overlays into a separate plane surface
+  // instead of the GUI surface, then must call EndSubtitleRender afterwards.
+  virtual bool BeginSubtitleRender() { return false; }
+  virtual void EndSubtitleRender() {}
+
   /*!
    * \brief Gets debug info from video renderer for use in "Debug Info OSD" (Alt + O)
    *

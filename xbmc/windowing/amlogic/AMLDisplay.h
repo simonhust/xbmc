@@ -28,8 +28,15 @@ public:
   struct gbm_device *GetDevice() const { return m_device.get(); }
   struct gbm_surface *GetSurface() const { return m_surface.get(); }
   bool CreateSurface(int width, int height, uint32_t format);
-  uint32_t GetFBId() { return m_drm_fb->fb_id; }
+  uint32_t GetFBId() { return m_drm_fb ? m_drm_fb->fb_id : 0; }
   bool LockFrontBuffer(int fd);
+
+  // Subtitle layer support: a second GBM surface used as the subtitle plane.
+  struct gbm_surface *GetSubtitleSurface() const { return m_subtitle_surface.get(); }
+  bool CreateSubtitleSurface(int width, int height, uint32_t format);
+  uint32_t GetSubtitleFBId() { return m_subtitle_drm_fb ? m_subtitle_drm_fb->fb_id : 0; }
+  bool LockSubtitleFrontBuffer(int fd);
+  void ReleaseSubtitleSurface();
 private:
   struct drm_fb* GetFBFromBo(int fd, struct gbm_bo* bo);
 
@@ -73,6 +80,10 @@ private:
   std::unique_ptr<struct gbm_surface, GbmSurfaceDeleter> m_surface{nullptr};
   std::unique_ptr<CGBMSurfaceBuffer> m_buffer{nullptr};
   struct drm_fb* m_drm_fb{nullptr};
+
+  std::unique_ptr<struct gbm_surface, GbmSurfaceDeleter> m_subtitle_surface{nullptr};
+  std::unique_ptr<CGBMSurfaceBuffer> m_subtitle_buffer{nullptr};
+  struct drm_fb* m_subtitle_drm_fb{nullptr};
 };
 
 class CAMLDRMUtils
@@ -94,13 +105,22 @@ public:
   bool aml_set_drmDevice_active(std::string mode, int fractional_rate,
     const RenderStereoMode stereo_mode, bool force_mode_switch, bool active);
   bool aml_get_drmDevice_connected() const { return m_connection == DRM_MODE_CONNECTED; }
-  void FlipPage(uint32_t fb_id);
+  void FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id = 0);
 
   void SetInFenceFd(int fd) { m_inFenceFd = fd; }
   int TakeOutFenceFd()
   {
     int fd{-1};
     return std::exchange(m_outFenceFd, fd);
+  }
+
+  // The overlay plane (osd1) is used for the GUI surface.
+  // The primary plane (osd0, m_plane) is used for the subtitle surface.
+  bool HasOverlayPlane() const { return m_overlay_plane != nullptr; }
+  int GetOverlayPlaneId() const { return m_overlay_plane ? m_overlay_plane->plane_id : -1; }
+  bool SupportsOverlayFormat(uint32_t format) const
+  {
+    return m_overlay_plane && SupportsFormat(m_overlay_plane, format);
   }
 private:
   void CleanAndClose();
@@ -111,7 +131,7 @@ private:
   int get_drmProp(unsigned int id, std::string name, unsigned int obj_type);
   void set_drmProp(unsigned int id, std::string name,
     unsigned int obj_type, unsigned int value, drmModeAtomicReqPtr req);
-  bool SupportsFormat(drmModePlane *plane, uint32_t format);
+  bool SupportsFormat(drmModePlane *plane, uint32_t format) const;
   int m_fd{-1};
   int m_width;
   int m_height;
@@ -125,6 +145,7 @@ private:
   drmModeCrtcPtr m_crtc{nullptr};
   drmModeCrtcPtr m_orig_crtc{nullptr};
   drmModePlanePtr m_plane{nullptr};
+  drmModePlanePtr m_overlay_plane{nullptr};
 
   int m_inFenceFd{-1};
   int m_outFenceFd{-1};
@@ -151,7 +172,11 @@ public:
   bool aml_probe_resolutions(std::vector<RESOLUTION_INFO> &resolutions);
   int aml_get_drmProperty(std::string name, unsigned int obj_type) const
     { return m_amlDRMUtils->aml_get_drmProperty(name, obj_type); }
-  void FlipPage(uint32_t fb_id) { m_amlDRMUtils->FlipPage(fb_id); }
+  void FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id = 0)
+    { m_amlDRMUtils->FlipPage(fb_id, subtitle_fb_id); }
+  bool HasOverlayPlane() const { return m_amlDRMUtils->HasOverlayPlane(); }
+  bool SupportsOverlayFormat(uint32_t format) const
+    { return m_amlDRMUtils->SupportsOverlayFormat(format); }
   bool aml_set_drmDevice_active(bool active) const
     { return m_amlDRMUtils->aml_set_drmDevice_active(
       m_amlDRMUtils->aml_get_drmDevice_mode(),

@@ -25,6 +25,7 @@ using namespace KODI::WINDOWING::AML;
 CWinSystemAmlogicGLESContext::CWinSystemAmlogicGLESContext()
 : m_pGLContext(new CEGLContextUtils(EGL_PLATFORM_GBM_MESA, "EGL_EXT_platform_base"))
 {
+  m_subtitleLayer = std::make_unique<CAMLSubtitleLayer>(m_amlDisplay.get(), m_amlGBMUtils.get());
 }
 
 void CWinSystemAmlogicGLESContext::Register()
@@ -87,6 +88,7 @@ bool CWinSystemAmlogicGLESContext::InitWindowSystem()
 
 bool CWinSystemAmlogicGLESContext::DestroyWindowSystem()
 {
+  CleanupSubtitleLayer();
   m_amlDisplay->aml_set_drmDevice_active(false);
 
   m_pGLContext->DestroyContext();
@@ -206,6 +208,8 @@ bool CWinSystemAmlogicGLESContext::CreateNewWindow(const std::string& name,
     return false;
   }
 
+  InitSubtitleLayer(res);
+
   if (!m_delayDispReset)
   {
     std::unique_lock<CCriticalSection> lock(m_resourceSection);
@@ -219,6 +223,7 @@ bool CWinSystemAmlogicGLESContext::CreateNewWindow(const std::string& name,
 
 bool CWinSystemAmlogicGLESContext::DestroyWindow()
 {
+  CleanupSubtitleLayer();
   m_pGLContext->DestroySurface();
   return CWinSystemAmlogic::DestroyWindow();
 }
@@ -278,7 +283,11 @@ void CWinSystemAmlogicGLESContext::PresentRender(bool rendered, bool videoLayer)
 #endif
 
     if (m_amlGBMUtils && m_amlGBMUtils->LockFrontBuffer(m_amlDisplay->aml_get_Device_handle()))
-      m_amlDisplay->FlipPage(m_amlGBMUtils->GetFBId());
+    {
+      uint32_t subtitle_fb_id = (m_subtitleLayer && m_subtitleLayer->HasFb()) ?
+          m_subtitleLayer->GetFbId() : 0;
+      m_amlDisplay->FlipPage(m_amlGBMUtils->GetFBId(), subtitle_fb_id);
+    }
   }
   else if (!videoLayer)
   {
@@ -293,6 +302,41 @@ void CWinSystemAmlogicGLESContext::PresentRender(bool rendered, bool videoLayer)
     for (std::vector<IDispResource *>::iterator i = m_resources.begin(); i != m_resources.end(); ++i)
       (*i)->OnResetDisplay();
   }
+}
+
+void CWinSystemAmlogicGLESContext::InitSubtitleLayer(const RESOLUTION_INFO& res)
+{
+  CleanupSubtitleLayer();
+
+  if (!m_subtitleLayer)
+    return;
+
+  if (!m_subtitleLayer->Init(res.iWidth, res.iHeight, GetEGLDisplay(), GetEGLConfig(),
+                             GetEGLContext()))
+  {
+    CLog::Log(LOGDEBUG, "CWinSystemAmlogicGLESContext::{} - subtitle layer not available",
+              __FUNCTION__);
+  }
+}
+
+void CWinSystemAmlogicGLESContext::CleanupSubtitleLayer()
+{
+  if (m_subtitleLayer)
+    m_subtitleLayer->Cleanup();
+}
+
+bool CWinSystemAmlogicGLESContext::BeginSubtitleRender()
+{
+  if (!m_subtitleLayer)
+    return false;
+
+  return m_subtitleLayer->BeginRender();
+}
+
+void CWinSystemAmlogicGLESContext::EndSubtitleRender()
+{
+  if (m_subtitleLayer)
+    m_subtitleLayer->EndRender();
 }
 
 EGLDisplay CWinSystemAmlogicGLESContext::GetEGLDisplay() const

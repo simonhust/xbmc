@@ -89,7 +89,7 @@ struct drm_fb* CAMLGBMUtils::GetFBFromBo(int fd, struct gbm_bo* bo)
     struct drm_fb* fb = static_cast<drm_fb*>(gbm_bo_get_user_data(bo));
     if (fb)
     {
-      if (fb->format == m_format)
+      if (fb->format == gbm_bo_get_format(bo))
         return fb;
       else
         FbDestroyCallback(bo, gbm_bo_get_user_data(bo));
@@ -97,7 +97,7 @@ struct drm_fb* CAMLGBMUtils::GetFBFromBo(int fd, struct gbm_bo* bo)
   }
 
   struct drm_fb* fb = new drm_fb;
-  fb->format = m_format;
+  fb->format = gbm_bo_get_format(bo);
 
   uint32_t width, height, handles[4] = {0}, strides[4] = {0}, offsets[4] = {0};
 
@@ -151,6 +151,64 @@ bool CAMLGBMUtils::LockFrontBuffer(int fd)
   }
 
   return m_drm_fb != nullptr;
+}
+
+bool CAMLGBMUtils::CreateSubtitleSurface(int width, int height, uint32_t format)
+{
+  if (m_subtitle_surface)
+    ReleaseSubtitleSurface();
+
+  uint64_t modifier = DRM_FORMAT_MOD_LINEAR;
+
+  m_subtitle_surface.reset(gbm_surface_create_with_modifiers(GetDevice(),
+                                                             width,
+                                                             height,
+                                                             format,
+                                                             &modifier,
+                                                             1));
+
+  if (!m_subtitle_surface)
+  {
+    m_subtitle_surface.reset(gbm_surface_create(GetDevice(),
+                                                width,
+                                                height,
+                                                format,
+                                                GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING));
+  }
+
+  if (!m_subtitle_surface)
+  {
+    CLog::Log(LOGERROR, "CAMLGBMUtils::{} - failed to create subtitle surface: {}", __FUNCTION__,
+              strerror(errno));
+    return false;
+  }
+
+  CLog::Log(LOGDEBUG, "CAMLGBMUtils::{} - created subtitle surface with size {}x{}", __FUNCTION__,
+            width, height);
+
+  m_subtitle_buffer.reset();
+  m_subtitle_drm_fb = nullptr;
+
+  return true;
+}
+
+bool CAMLGBMUtils::LockSubtitleFrontBuffer(int fd)
+{
+  m_subtitle_drm_fb = nullptr;
+  if (m_subtitle_surface && gbm_surface_has_free_buffers(m_subtitle_surface.get()))
+  {
+    m_subtitle_buffer.reset(new CGBMSurfaceBuffer(m_subtitle_surface.get()));
+    m_subtitle_drm_fb = GetFBFromBo(fd, m_subtitle_buffer->Get());
+  }
+
+  return m_subtitle_drm_fb != nullptr;
+}
+
+void CAMLGBMUtils::ReleaseSubtitleSurface()
+{
+  m_subtitle_buffer.reset();
+  m_subtitle_drm_fb = nullptr;
+  m_subtitle_surface.reset();
 }
 
 CAMLDRMUtils::CAMLDRMUtils()
@@ -238,6 +296,12 @@ void CAMLDRMUtils::CleanAndClose()
     m_plane = nullptr;
   }
 
+  if (m_overlay_plane)
+  {
+    drmModeFreePlane(m_overlay_plane);
+    m_overlay_plane = nullptr;
+  }
+
   m_connection = DRM_MODE_DISCONNECTED;
 }
 
@@ -291,16 +355,28 @@ void CAMLDRMUtils::aml_init_drmDevice()
 
   for (uint32_t i = 0; i < planeResources->count_planes; i++)
   {
-    m_plane = drmModeGetPlane(m_fd, planeResources->planes[i]);
+    drmModePlanePtr plane = drmModeGetPlane(m_fd, planeResources->planes[i]);
 
-    if (m_plane == NULL)
+    if (plane == NULL)
       continue;
 
-    if (get_drmProp(m_plane->plane_id, "type", DRM_MODE_OBJECT_PLANE) == DRM_PLANE_TYPE_PRIMARY)
-      break;
+    int plane_type = get_drmProp(plane->plane_id, "type", DRM_MODE_OBJECT_PLANE);
 
-    drmModeFreePlane(m_plane);
-    m_plane = NULL;
+    if (plane_type == DRM_PLANE_TYPE_PRIMARY)
+    {
+      if (!m_plane)
+        m_plane = plane;
+      else
+        drmModeFreePlane(plane);
+    }
+    else if (plane_type == DRM_PLANE_TYPE_OVERLAY && !m_overlay_plane)
+    {
+      m_overlay_plane = plane;
+    }
+    else
+    {
+      drmModeFreePlane(plane);
+    }
   }
   drmModeFreePlaneResources(planeResources);
   if (!m_plane)
@@ -309,6 +385,12 @@ void CAMLDRMUtils::aml_init_drmDevice()
     CleanAndClose();
     throw std::runtime_error("failed to get primary plane of drmDevice");
   }
+
+  if (m_overlay_plane)
+    CLog::Log(LOGDEBUG, "CAMLDRMUtils::{} - using plane {} as overlay plane (GUI)", __FUNCTION__,
+      m_overlay_plane->plane_id);
+  else
+    CLog::Log(LOGWARNING, "CAMLDRMUtils::{} - no overlay plane found for GUI", __FUNCTION__);
 
   if (aml_get_drmDevice_connected())
     aml_init_drmDevice_display();
@@ -775,7 +857,7 @@ bool CAMLDRMUtils::aml_set_drmDevice_active(std::string mode, int fractional_rat
   return ret;
 }
 
-bool CAMLDRMUtils::SupportsFormat(drmModePlane *plane, uint32_t format)
+bool CAMLDRMUtils::SupportsFormat(drmModePlane *plane, uint32_t format) const
 {
   for (uint32_t i = 0; i < plane->count_formats; i++)
     if (plane->formats[i] == format)
@@ -784,14 +866,15 @@ bool CAMLDRMUtils::SupportsFormat(drmModePlane *plane, uint32_t format)
   return false;
 }
 
-void CAMLDRMUtils::FlipPage(uint32_t fb_id)
+void CAMLDRMUtils::FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id)
 {
   if (!aml_get_drmDevice_connected())
     return;
 
   drmModeAtomicReqPtr req = drmModeAtomicAlloc();
 
-  set_drmProp(m_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE , fb_id, req);
+  // Primary plane (osd0) → subtitle surface
+  set_drmProp(m_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE , subtitle_fb_id, req);
   set_drmProp(m_plane->plane_id, "CRTC_ID", DRM_MODE_OBJECT_PLANE , m_crtc->crtc_id, req);
   set_drmProp(m_plane->plane_id, "SRC_X", DRM_MODE_OBJECT_PLANE , 0, req);
   set_drmProp(m_plane->plane_id, "SRC_Y", DRM_MODE_OBJECT_PLANE , 0, req);
@@ -801,6 +884,21 @@ void CAMLDRMUtils::FlipPage(uint32_t fb_id)
   set_drmProp(m_plane->plane_id, "CRTC_Y", DRM_MODE_OBJECT_PLANE , 0, req);
   set_drmProp(m_plane->plane_id, "CRTC_W", DRM_MODE_OBJECT_PLANE , m_ScreenWidth, req);
   set_drmProp(m_plane->plane_id, "CRTC_H", DRM_MODE_OBJECT_PLANE , m_ScreenHeight, req);
+
+  // Overlay plane (osd1) → GUI surface
+  if (m_overlay_plane)
+  {
+    set_drmProp(m_overlay_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE , fb_id, req);
+    set_drmProp(m_overlay_plane->plane_id, "CRTC_ID", DRM_MODE_OBJECT_PLANE , m_crtc->crtc_id, req);
+    set_drmProp(m_overlay_plane->plane_id, "SRC_X", DRM_MODE_OBJECT_PLANE , 0, req);
+    set_drmProp(m_overlay_plane->plane_id, "SRC_Y", DRM_MODE_OBJECT_PLANE , 0, req);
+    set_drmProp(m_overlay_plane->plane_id, "SRC_W", DRM_MODE_OBJECT_PLANE , m_width << 16, req);
+    set_drmProp(m_overlay_plane->plane_id, "SRC_H", DRM_MODE_OBJECT_PLANE , m_height << 16, req);
+    set_drmProp(m_overlay_plane->plane_id, "CRTC_X", DRM_MODE_OBJECT_PLANE , 0, req);
+    set_drmProp(m_overlay_plane->plane_id, "CRTC_Y", DRM_MODE_OBJECT_PLANE , 0, req);
+    set_drmProp(m_overlay_plane->plane_id, "CRTC_W", DRM_MODE_OBJECT_PLANE , m_ScreenWidth, req);
+    set_drmProp(m_overlay_plane->plane_id, "CRTC_H", DRM_MODE_OBJECT_PLANE , m_ScreenHeight, req);
+  }
 
   if (m_inFenceFd != -1)
   {

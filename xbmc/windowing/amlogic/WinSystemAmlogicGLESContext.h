@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "AMLSubtitleLayer.h"
 #include "utils/EGLUtils.h"
 #include "rendering/gles/RenderSystemGLES.h"
 #include "utils/GlobalsHandling.h"
@@ -48,6 +49,12 @@ public:
   bool SupportsStereo(const RenderStereoMode mode) const override;
   void PresentRender(bool rendered, bool videoLayer) override;
 
+  // Subtitle plane rendering. Returns true if a separate subtitle surface was
+  // bound and the caller should render overlays into it before EndSubtitleRender.
+  bool BeginSubtitleRender();
+  void EndSubtitleRender();
+  bool HasSubtitleLayer() const { return m_subtitleLayer && m_subtitleLayer->IsActive(); }
+
   EGLDisplay GetEGLDisplay() const;
   EGLSurface GetEGLSurface() const;
   EGLContext GetEGLContext() const;
@@ -57,7 +64,10 @@ protected:
   void PresentRenderImpl(bool rendered) override {};
 
 private:
+  void InitSubtitleLayer(const RESOLUTION_INFO& res);
+  void CleanupSubtitleLayer();
   std::unique_ptr<CEGLContextUtils> m_pGLContext;
+  std::unique_ptr<CAMLSubtitleLayer> m_subtitleLayer;
   StreamHdrType m_hdrType = StreamHdrType::HDR_TYPE_NONE;
 };
 

@@ -759,7 +759,19 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
     CRect src, dst, view;
     m_pRenderer->GetVideoRect(src, dst, view);
     m_overlays.SetVideoRect(src, dst, view);
+
+    // Render subtitles into the dedicated subtitle plane (if available) so
+    // they can be tone-mapped independently of the GUI. When the window
+    // system has no subtitle plane, BeginSubtitleRender returns false and
+    // overlays are drawn into the GUI surface as before. Only bind the
+    // subtitle surface when something is actually on screen to avoid
+    // pointless EGL surface switches every frame.
+    const bool subtitlePlane =
+        m_overlays.HasVisibleOverlay(m_presentsource) &&
+        CServiceBroker::GetWinSystem()->BeginSubtitleRender();
     m_overlays.Render(m_presentsource);
+    if (subtitlePlane)
+      CServiceBroker::GetWinSystem()->EndSubtitleRender();
 
     if (m_renderDebug)
     {
