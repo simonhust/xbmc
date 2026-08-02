@@ -401,9 +401,7 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
     const CHDRCapabilities caps = CServiceBroker::GetWinSystem()->GetDisplayHDRCapabilities();
     if (!caps.SupportsHDR10Plus())
       m_bitstream->SetRemoveHdr10Plus(true);
-    if (caps.SupportsDolbyVision() == DolbyVisionFormat::DOLBYVISION_TYPE_NONE &&
-        m_hints.dovi.dv_profile != 5)
-      m_bitstream->SetRemoveDovi(true);
+    
   }
 
   CLog::Log(LOGINFO, "{}: Opened Amlogic Codec", __MODULE_NAME__);

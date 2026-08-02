@@ -970,7 +970,6 @@ void CMediaPipelineWebOS::SetupBitstreamConverter(CDVDStreamInfo& hint)
       {
         if (hint.codec == AV_CODEC_ID_HEVC)
         {
-          m_bitstream->SetRemoveDovi(removeDovi);
           m_bitstream->SetDoviZeroLevel5(doviZeroLevel5);
 
           // webOS doesn't support HDR10+ and it can cause issues

@@ -114,7 +114,7 @@ public:
   void ResetStartDecode();
   bool CanStartDecode() const;
   void SetConvertDovi(bool value) { m_convert_dovi = value; }
-  void SetRemoveDovi(bool value) { m_removeDovi = value; }
+  
   void SetRemoveHdr10Plus(bool value) { m_removeHdr10Plus = value; }
   void SetDoviZeroLevel5(bool value) { m_setDoviZeroLevel5 = value; }
   bool GetDoviIsFEL() const { return m_doviIsFEL; }
@@ -181,7 +181,7 @@ protected:
   AVCodecID m_codec;
   bool m_start_decode;
   bool m_convert_dovi;
-  bool m_removeDovi;
+  
   bool m_removeHdr10Plus;
   bool m_setDoviZeroLevel5;
   bool m_doviIsFEL{false};

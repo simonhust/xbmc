@@ -380,7 +380,7 @@ CBitstreamConverter::CBitstreamConverter()
   m_sps_pps_context.sps_pps_data = NULL;
   m_start_decode = true;
   m_convert_dovi = false;
-  m_removeDovi = false;
+  
   m_removeHdr10Plus = false;
   m_setDoviZeroLevel5 = false;
   m_combine = false;
@@ -1405,9 +1405,6 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         m_sps_pps_context.first_idr = 1;
         m_sps_pps_context.idr_sps_pps_seen = 0;
       }
-
-      if (m_removeDovi && (unit_type == HEVC_NAL_UNSPEC62 || unit_type == HEVC_NAL_UNSPEC63))
-        write_buf = false;
 
       // Try removing HDR10+ only if the NAL is big enough, optimization
       if (unit_type == HEVC_NAL_SEI_PREFIX && nal_size >= 7)

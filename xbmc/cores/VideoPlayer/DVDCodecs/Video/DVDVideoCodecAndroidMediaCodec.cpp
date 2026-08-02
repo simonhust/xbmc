@@ -600,7 +600,6 @@ bool CDVDVideoCodecAndroidMediaCodec::Open(CDVDStreamInfo &hints, CDVDCodecOptio
 
         if (m_bitstream)
         {
-          m_bitstream->SetRemoveDovi(removeDovi);
           m_bitstream->SetRemoveHdr10Plus(removeHdr10Plus);
           m_bitstream->SetDoviZeroLevel5(doviZeroLevel5);
 
