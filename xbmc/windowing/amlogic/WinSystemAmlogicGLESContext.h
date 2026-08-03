@@ -54,8 +54,7 @@ public:
   bool BeginSubtitleRender();
   void EndSubtitleRender();
   bool HasActiveSubtitleLayer() const override { return m_subtitleRendering; }
-  bool HasSubtitleLayer() const override { return m_subtitleLayer && m_subtitleLayer->IsActive(); }
-  void UpdateSubtitleHdrState(uint32_t hdrType) override;
+  bool HasSubtitleLayer() const { return m_subtitleLayer && m_subtitleLayer->IsActive(); }
 
   EGLDisplay GetEGLDisplay() const;
   EGLSurface GetEGLSurface() const;

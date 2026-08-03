@@ -13,7 +13,6 @@
 
 #include <EGL/egl.h>
 
-#include "AMLHdrLut.h"
 #include "windowing/Resolution.h"
 
 class CAMLDisplay;
@@ -23,16 +22,12 @@ class CAMLGBMUtils;
  * Dedicated subtitle plane on the Amlogic display pipeline.
  *
  * The GUI renders on the primary plane (osd0, VPP_OSD1) and subtitles
- * render on an overlay plane (osd1, VPP_OSD2). The overlay plane's
- * OSD HDR2 block converts sRGB content to PQ/HLG via the hardware LUT,
- * keeping the GUI plane in SDR.
+ * render on an overlay plane (osd1, VPP_OSD2).
  *
  * Usage per frame (called from the GUI render thread, around overlay render):
  *   layer.BeginRender();   // make subtitle EGL surface current, clear
  *   ... render overlays ...
  *   layer.EndRender();     // swap subtitle surface, lock front buffer
- *
- * On HDR mode changes, call UpdateHdrState() to configure the hardware LUT.
  */
 class CAMLSubtitleLayer
 {
@@ -48,12 +43,6 @@ public:
   bool BeginRender();
   void EndRender();
 
-  // Configure the hardware OSD HDR2 pipeline for subtitle color mapping.
-  // hdrType: HDR_TYPE_HDR10/PQ → SDR_HDR, HDR_TYPE_HLG → SDR_HLG,
-  //          HDR_TYPE_NONE (or other) → BYPASS (disable).
-  // drmFd: DRM device file descriptor for the ioctl.
-  void UpdateHdrState(uint32_t hdrType, int drmFd);
-
   bool IsActive() const { return m_active; }
   uint32_t GetFbId() const { return m_fbId; }
   bool HasFb() const { return m_fbId != 0; }
@@ -66,7 +55,6 @@ private:
 
   CAMLDisplay* m_display{nullptr};
   CAMLGBMUtils* m_gbmUtils{nullptr};
-  CAMLHdrLut m_hdrLut;
 
   EGLDisplay m_eglDisplay{EGL_NO_DISPLAY};
   EGLConfig m_eglConfig{};

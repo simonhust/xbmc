@@ -341,12 +341,6 @@ void CWinSystemAmlogicGLESContext::EndSubtitleRender()
   m_subtitleRendering = false;
 }
 
-void CWinSystemAmlogicGLESContext::UpdateSubtitleHdrState(uint32_t hdrType)
-{
-  if (m_subtitleLayer && m_subtitleLayer->IsActive())
-    m_subtitleLayer->UpdateHdrState(hdrType, m_amlDisplay->aml_get_Device_handle());
-}
-
 EGLDisplay CWinSystemAmlogicGLESContext::GetEGLDisplay() const
 {
   return m_pGLContext->GetEGLDisplay();

@@ -10,7 +10,6 @@
 #include "AMLDisplay.h"
 #include "utils/EGLUtils.h"
 #include "utils/log.h"
-#include "utils/StreamDetails.h"
 
 #include <drm_fourcc.h>
 
@@ -165,34 +164,4 @@ void CAMLSubtitleLayer::EndRender()
 
   if (m_fbId == 0)
     CLog::Log(LOGDEBUG, "CAMLSubtitleLayer::{} - failed to get subtitle fb", __FUNCTION__);
-}
-
-void CAMLSubtitleLayer::UpdateHdrState(uint32_t hdrType, int drmFd)
-{
-  if (!m_active)
-    return;
-
-  CAMLHdrLut::ProcessSelect process;
-
-  switch (hdrType)
-  {
-    case static_cast<uint32_t>(StreamHdrType::HDR_TYPE_HDR10):
-    case static_cast<uint32_t>(StreamHdrType::HDR_TYPE_HDR10PLUS):
-    case static_cast<uint32_t>(StreamHdrType::HDR_TYPE_DOLBYVISION):
-      process = CAMLHdrLut::PROC_SDR_HDR;
-      break;
-    case static_cast<uint32_t>(StreamHdrType::HDR_TYPE_HLG):
-      process = CAMLHdrLut::PROC_SDR_HLG;
-      break;
-    default:
-      process = CAMLHdrLut::PROC_BYPASS;
-      break;
-  }
-
-  // Configure OSD2_HDR (the subtitle overlay plane) for the selected transfer.
-  // The overlay plane is the first OVERLAY DRM plane, typically osd1 = VPP_OSD2.
-  m_hdrLut.Configure(drmFd, CAMLHdrLut::MODULE_OSD2, process);
-
-  CLog::Log(LOGDEBUG, "CAMLSubtitleLayer::{} - hdrType={} process={}", __FUNCTION__,
-            hdrType, static_cast<int>(process));
 }
