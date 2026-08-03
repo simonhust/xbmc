@@ -3426,8 +3426,16 @@ void CVideoDatabase::GetEpisodesByBlurayPath(const std::string& path,
                    "where (strPath = '%s' and strFileName = '%s') or strPath = '%s'",
                    basePath.c_str(), baseFile.c_str(), blurayPath.c_str())};
     m_pDS->query(sql);
-    if (!m_pDS->eof())
-      return GetEpisodesByFileId(m_pDS->fv("idFile").get_asInt(), episodes);
+    std::vector<int> idFiles;
+    while (!m_pDS->eof())
+    {
+      idFiles.push_back(m_pDS->fv("idFile").get_asInt());
+      m_pDS->next();
+    }
+    m_pDS->close();
+
+    for (const int idFile : idFiles)
+      GetEpisodesByFileId(idFile, episodes);
   }
   catch (...)
   {

@@ -418,29 +418,37 @@ bool GetPlaylistsInformation(const CURL& url,
       return false;
     }
 
-    // Get all titles on disc
-    GetPlaylists(url, realPath, flags, ALL_PLAYLISTS, allTitles, clipCache);
+    // Get all playlists from disc (parse .mpls files only, no M2TS parsing)
+    // M2TS stream detail parsing is deferred to playback for performance
+    // (see DVDInputStreamBluray for the playback path)
+    std::vector<PlaylistInformation> playlistVector;
+    if (!GetPlaylistsFromDisc(url, realPath, flags, playlistVector, clipCache))
+      return false;
 
-    // Get information on all playlists
-    // Including relationship between clips and playlists
-    // List all playlists
+    // Remove invalid playlists (no clips, repeated clips, duplicate playlists, length < 1s)
+    if (!FilterPlaylists(playlistVector))
+      return false; // No playlists remain
+
+    // Build allTitles (without M2TS stream details) and clip/playlist maps
     CLog::LogF(LOGDEBUG, "*** Playlist information ***");
 
-    for (const auto& title : allTitles)
+    for (auto& title : playlistVector)
     {
-      const int playlist{title->GetProperty("bluray_playlist").asInteger32(0)};
-      PlaylistInformation titleInfo;
-      if (!GetPlaylistInfoFromDisc(url, realPath, playlist, false, titleInfo, clipCache))
-      {
-        CLog::LogF(LOGDEBUG, "Unable to get playlist {}", playlist);
-        continue;
-      }
+      // Build allTitles - FileItem without M2TS stream details
+      CURL path{url};
+      path.SetFileName(StringUtils::Format("BDMV/PLAYLIST/{:05}.mpls", title.playlist));
+      const auto item{std::make_shared<CFileItem>(path.Get(), false)};
+      item->GetVideoInfoTag()->SetDuration(
+          static_cast<int>(title.duration.count() / 1000));
+      item->SetProperty("bluray_playlist", title.playlist);
+      allTitles.Add(item);
 
-      ProcessPlaylist(playlists, titleInfo, clips);
+      // Build clip/playlist maps
+      ProcessPlaylist(playlists, title, clips);
 
-      CLog::LogF(LOGDEBUG, "Playlist {}, Duration {}, Langs {}, Clips {} ", playlist,
-                 title->GetVideoInfoTag()->GetDuration(), titleInfo.languages,
-                 fmt::join(titleInfo.clips, ","));
+      CLog::LogF(LOGDEBUG, "Playlist {}, Duration {}, Langs {}, Clips {} ", title.playlist,
+                 title.duration.count() / 1000, title.languages,
+                 fmt::join(title.clips, ","));
     }
 
     // List clip info (automatically sorted as map)
