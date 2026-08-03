@@ -276,6 +276,9 @@ public:
   // instead of the GUI surface, then must call EndSubtitleRender afterwards.
   virtual bool BeginSubtitleRender() { return false; }
   virtual void EndSubtitleRender() {}
+  virtual bool HasActiveSubtitleLayer() const { return false; }
+  virtual bool HasSubtitleLayer() const { return false; }
+  virtual void UpdateSubtitleHdrState(uint32_t hdrType) {}
 
   /*!
    * \brief Gets debug info from video renderer for use in "Debug Info OSD" (Alt + O)

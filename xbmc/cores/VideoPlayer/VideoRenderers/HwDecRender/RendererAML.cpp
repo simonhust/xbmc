@@ -35,6 +35,8 @@ CRendererAML::~CRendererAML()
 {
   Reset();
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
+  CServiceBroker::GetWinSystem()->UpdateSubtitleHdrState(
+      static_cast<uint32_t>(StreamHdrType::HDR_TYPE_NONE));
 }
 
 CBaseRenderer* CRendererAML::Create(CVideoBuffer *buffer)
@@ -76,7 +78,20 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   CLog::Log(LOGDEBUG, "CRendererAML::Configure {}DV support, {}, DV system is {}, HDR is {}", device_support_dv ? "" : "no ",
     user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled", hdr_is_used ? "used" : "not used");
 
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(dv_is_used | hdr_is_used);
+  // When the subtitle plane has hardware OSD HDR2 conversion, configure the
+  // hardware LUT and keep the GUI in SDR. Otherwise fall back to the legacy
+  // software PQ path on the GUI surface.
+  bool hdrActive = (dv_is_used | hdr_is_used);
+  if (hdrActive && CServiceBroker::GetWinSystem()->HasSubtitleLayer())
+  {
+    CServiceBroker::GetWinSystem()->UpdateSubtitleHdrState(
+        static_cast<uint32_t>(picture.hdrType));
+    CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
+  }
+  else
+  {
+    CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdrActive);
+  }
 
   m_bConfigured = true;
 

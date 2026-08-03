@@ -13,6 +13,7 @@
 
 #include <EGL/egl.h>
 
+#include "AMLHdrLut.h"
 #include "windowing/Resolution.h"
 
 class CAMLDisplay;
@@ -21,18 +22,16 @@ class CAMLGBMUtils;
 /*
  * Dedicated subtitle plane on the Amlogic display pipeline.
  *
- * The GUI/OSD renders into the primary GBM surface which is flipped to the
- * primary DRM plane. Subtitles are rendered into a second GBM/EGL surface
- * that is flipped to a separate overlay plane, so they can be tone-mapped
- * independently of the GUI (hardware OSD HDR2 block).
+ * The subtitle plane (osd0, primary) carries subtitle content with hardware
+ * HDR2 conversion (sRGB->PQ/HLG via OSD1_HDR2 LUT), while the GUI renders
+ * in SDR on the overlay plane (osd1).
  *
  * Usage per frame (called from the GUI render thread, around overlay render):
  *   layer.BeginRender();   // make subtitle EGL surface current, clear
  *   ... render overlays ...
  *   layer.EndRender();     // swap subtitle surface, lock front buffer
  *
- * The resulting framebuffer id is handed to CAMLDisplay::FlipPage() so both
- * planes are committed atomically.
+ * On HDR mode changes, call UpdateHdrState() to configure the hardware LUT.
  */
 class CAMLSubtitleLayer
 {
@@ -45,12 +44,14 @@ public:
   void Cleanup();
 
   // Make the subtitle EGL surface current and clear it for a new frame.
-  // Returns false (and leaves the main surface current) if the layer is
-  // not usable so callers can fall back to rendering into the GUI.
   bool BeginRender();
-  // Swap the subtitle surface, lock its front buffer into a DRM fb and
-  // restore the main surface as current.
   void EndRender();
+
+  // Configure the hardware OSD HDR2 pipeline for subtitle color mapping.
+  // hdrType: HDR_TYPE_HDR10/PQ → SDR_HDR, HDR_TYPE_HLG → SDR_HLG,
+  //          HDR_TYPE_NONE (or other) → BYPASS (disable).
+  // drmFd: DRM device file descriptor for the ioctl.
+  void UpdateHdrState(uint32_t hdrType, int drmFd);
 
   bool IsActive() const { return m_active; }
   uint32_t GetFbId() const { return m_fbId; }
@@ -64,6 +65,7 @@ private:
 
   CAMLDisplay* m_display{nullptr};
   CAMLGBMUtils* m_gbmUtils{nullptr};
+  CAMLHdrLut m_hdrLut;
 
   EGLDisplay m_eglDisplay{EGL_NO_DISPLAY};
   EGLConfig m_eglConfig{};

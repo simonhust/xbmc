@@ -373,7 +373,9 @@ void COverlayGlyphGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  renderSystem->EnableGUIShader(ShaderMethodGLES::SM_FONTS);
+  const bool hasSubtitlePlane = CServiceBroker::GetWinSystem()->HasActiveSubtitleLayer();
+  renderSystem->EnableGUIShader(hasSubtitlePlane ? ShaderMethodGLES::SM_FONTS_SRGB
+                                                 : ShaderMethodGLES::SM_FONTS);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint colLoc = renderSystem->GUIShaderGetCol();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();
@@ -459,7 +461,11 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_NOBLEND);
+  // The subtitle plane has hardware OSD HDR2 conversion (sRGB->PQ/HLG),
+  // so the shader must output plain sRGB without any PQ scaling.
+  const bool hasSubtitlePlane = CServiceBroker::GetWinSystem()->HasActiveSubtitleLayer();
+  renderSystem->EnableGUIShader(hasSubtitlePlane ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB
+                                                 : ShaderMethodGLES::SM_TEXTURE_NOBLEND);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();
   GLint depthLoc = renderSystem->GUIShaderGetDepth();

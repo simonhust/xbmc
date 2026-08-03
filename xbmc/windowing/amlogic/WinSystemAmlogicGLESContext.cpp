@@ -330,13 +330,21 @@ bool CWinSystemAmlogicGLESContext::BeginSubtitleRender()
   if (!m_subtitleLayer)
     return false;
 
-  return m_subtitleLayer->BeginRender();
+  m_subtitleRendering = m_subtitleLayer->BeginRender();
+  return m_subtitleRendering;
 }
 
 void CWinSystemAmlogicGLESContext::EndSubtitleRender()
 {
   if (m_subtitleLayer)
     m_subtitleLayer->EndRender();
+  m_subtitleRendering = false;
+}
+
+void CWinSystemAmlogicGLESContext::UpdateSubtitleHdrState(uint32_t hdrType)
+{
+  if (m_subtitleLayer && m_subtitleLayer->IsActive())
+    m_subtitleLayer->UpdateHdrState(hdrType, m_amlDisplay->aml_get_Device_handle());
 }
 
 EGLDisplay CWinSystemAmlogicGLESContext::GetEGLDisplay() const

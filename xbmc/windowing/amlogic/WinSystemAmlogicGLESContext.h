@@ -53,7 +53,9 @@ public:
   // bound and the caller should render overlays into it before EndSubtitleRender.
   bool BeginSubtitleRender();
   void EndSubtitleRender();
-  bool HasSubtitleLayer() const { return m_subtitleLayer && m_subtitleLayer->IsActive(); }
+  bool HasActiveSubtitleLayer() const override { return m_subtitleRendering; }
+  bool HasSubtitleLayer() const override { return m_subtitleLayer && m_subtitleLayer->IsActive(); }
+  void UpdateSubtitleHdrState(uint32_t hdrType) override;
 
   EGLDisplay GetEGLDisplay() const;
   EGLSurface GetEGLSurface() const;
@@ -68,6 +70,7 @@ private:
   void CleanupSubtitleLayer();
   std::unique_ptr<CEGLContextUtils> m_pGLContext;
   std::unique_ptr<CAMLSubtitleLayer> m_subtitleLayer;
+  bool m_subtitleRendering{false};
   StreamHdrType m_hdrType = StreamHdrType::HDR_TYPE_NONE;
 };
 

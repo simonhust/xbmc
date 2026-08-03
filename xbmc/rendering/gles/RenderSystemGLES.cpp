@@ -527,6 +527,17 @@ void CRenderSystemGLES::InitialiseShaders()
                         "and link failed");
   }
 
+  // Plain sRGB fonts variant for the subtitle plane (hardware HDR2 LUT).
+  m_pShader[ShaderMethodGLES::SM_FONTS_SRGB] =
+      std::make_unique<CGLESShader>("gles_shader_simple.vert", "gles_shader_fonts.frag",
+                                    std::string{});
+  if (!m_pShader[ShaderMethodGLES::SM_FONTS_SRGB]->CompileAndLink())
+  {
+    m_pShader[ShaderMethodGLES::SM_FONTS_SRGB]->Free();
+    m_pShader[ShaderMethodGLES::SM_FONTS_SRGB].reset();
+    CLog::Log(LOGERROR, "GUI Shader gles_shader_fonts.frag (sRGB) - compile and link failed");
+  }
+
   m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND] =
       std::make_unique<CGLESShader>("gles_shader_texture_noblend.frag", defines);
   if (!m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND]->CompileAndLink())
@@ -534,6 +545,18 @@ void CRenderSystemGLES::InitialiseShaders()
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND]->Free();
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND].reset();
     CLog::Log(LOGERROR, "GUI Shader gles_shader_texture_noblend.frag - compile and link failed");
+  }
+
+  // Plain sRGB variant for the subtitle plane: no PQ transfer, no limited range.
+  // The hardware OSD HDR2 block does the sRGB->PQ conversion via the configured LUT.
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB] =
+      std::make_unique<CGLESShader>("gles_shader_texture_noblend.frag", std::string{});
+  if (!m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB]->CompileAndLink())
+  {
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB]->Free();
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB].reset();
+    CLog::Log(LOGERROR, "GUI Shader gles_shader_texture_noblend.frag (sRGB) - compile and link "
+                        "failed");
   }
 
   m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR] =
@@ -654,9 +677,17 @@ void CRenderSystemGLES::ReleaseShaders()
     m_pShader[ShaderMethodGLES::SM_FONTS_SHADER_CLIP]->Free();
   m_pShader[ShaderMethodGLES::SM_FONTS_SHADER_CLIP].reset();
 
+  if (m_pShader[ShaderMethodGLES::SM_FONTS_SRGB])
+    m_pShader[ShaderMethodGLES::SM_FONTS_SRGB]->Free();
+  m_pShader[ShaderMethodGLES::SM_FONTS_SRGB].reset();
+
   if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND])
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND]->Free();
   m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND].reset();
+
+  if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB])
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB]->Free();
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_SRGB].reset();
 
   if (m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR])
     m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR]->Free();
