@@ -220,6 +220,7 @@ CDVDDemuxFFmpeg::CDVDDemuxFFmpeg() : CDVDDemux()
   m_checkTransportStream = false;
   m_dtsAtDisplayTime = DVD_NOPTS_VALUE;
   m_dv_dual_stream = false;
+  m_dv_no_el_epmap = false;
 }
 
 CDVDDemuxFFmpeg::~CDVDDemuxFFmpeg()
@@ -1220,6 +1221,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
       {
         pPacket->isDualStream = m_dv_dual_stream;
         pPacket->isELPackage = (stream->uniqueId > 0) ? m_dv_dual_stream : false;
+        pPacket->isNoElEpMap = m_dv_no_el_epmap;
       }
     }
     if (stream && m_pSSIF)
@@ -1767,7 +1769,15 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
 
 if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY) && pStream->id == 0x1015)))
+{
   m_dv_dual_stream = true;
+  if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
+  {
+    CDVDInputStreamBluray *bluray = static_cast<CDVDInputStreamBluray*>(m_pInput.get());
+    if (bluray->GetNumStreamPid() < 2)
+      m_dv_no_el_epmap = true;
+  }
+}
 
         if (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION)
         {

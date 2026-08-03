@@ -455,195 +455,103 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
   m_last_added = true;
   m_last_pData = nullptr;
   m_last_iSize = 0;
+  m_last_dts = DVD_NOPTS_VALUE;
 
   if (m_bitstream) m_bitstream->ResetStartDecode();
 }
 
 bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, const DemuxPacket &packet)
 {
-  /* DTS matching tolerance: 5ms to absorb BL/EL demux jitter */
-  static constexpr double DTS_TOLERANCE = 5000.0; /* DVD_TIME_BASE = 1us */
-  auto DtsMatch = [](double a, double b) {
-    return std::abs(a - b) <= DTS_TOLERANCE;
-  };
+  CLog::Log(LOGDEBUG, "DV: DualLayerConvert called, EL={}, dts={:.3f}, el_q={}, bl_q={}",
+    packet.isELPackage, packet.dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size());
 
-  /* Skip orphan BL: BL queue front whose EL has already passed */
-  auto SkipOrphanBL = [&](double el_dts = -1.0) -> bool {
-    bool converted = false;
-    while (!m_bl_packages.empty())
-    {
-      double bl_dts = std::get<3>(m_bl_packages.front());
-      double cmp_dts = (!m_el_packages.empty()) ? std::get<3>(m_el_packages.front()) : el_dts;
-      if (cmp_dts > bl_dts + DTS_TOLERANCE)
-      {
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip orphan BL dts {:.3f} (EL already at {:.3f})",
-          __FUNCTION__, bl_dts / DVD_TIME_BASE, cmp_dts / DVD_TIME_BASE);
-        uint8_t *bl_data = std::get<0>(m_bl_packages.front());
-        uint32_t bl_size = std::get<1>(m_bl_packages.front());
-        if (m_bitstream->Convert(bl_data, bl_size))
-        {
-          m_last_pData = m_bitstream->GetConvertBuffer();
-          m_last_iSize = m_bitstream->GetConvertSize();
-          m_last_added = true;
-          converted = true;
-        }
-        else
-        {
-          converted = false;
-        }
-        if (!converted || !m_last_pData)
-        {
-          CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: orphan BL dts {:.3f} no convert, send direct",
-            __FUNCTION__, bl_dts / DVD_TIME_BASE);
-          m_last_pData = bl_data;
-          m_last_iSize = bl_size;
-          m_last_added = true;
-          converted = true;
-          bl_data = nullptr;
-        }
-        if (bl_data)
-          KODI::MEMORY::AlignedFree(bl_data);
-        m_bl_packages.pop_front();
-      }
-      else
-      {
-        break;
-      }
-    }
-    return converted;
-  };
-
-  if (packet.isELPackage)
+  /* Insert packet into the appropriate queue (sorted by DTS ascending) */
   {
-    /* ---- EL packet: try to pair with BL queue front ---- */
-    if (SkipOrphanBL(packet.dts))
-      return true;
-    while (!m_bl_packages.empty())
+    auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
+    memcpy(pkt, packet.pData, packet.iSize);
+    DLDemuxPacket new_pkt(pkt, iSize, packet.isELPackage, packet.dts);
+
+    if (packet.isELPackage)
     {
-      double bl_dts = std::get<3>(m_bl_packages.front());
-      if (packet.dts < bl_dts)
-      {
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip EL dts {:.3f} < standby BL dts {:.3f}", __FUNCTION__,
-          packet.dts / DVD_TIME_BASE, bl_dts / DVD_TIME_BASE);
-        return false;
-      }
-      if (DtsMatch(packet.dts, bl_dts))
-      {
-        DLDemuxPacket bl_pkt = m_bl_packages.front();
-        m_bl_packages.pop_front();
-        uint8_t *bl_data = std::get<0>(bl_pkt);
-        uint32_t bl_size = std::get<1>(bl_pkt);
-
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: paired EL dts {:.3f} with standby BL", __FUNCTION__,
-          packet.dts / DVD_TIME_BASE);
-
-        bool converted = m_bitstream->Convert(bl_data, bl_size, pData, iSize);
-        KODI::MEMORY::AlignedFree(bl_data);
-
-        if (converted)
-        {
-          if (!m_bitstream->CanStartDecode())
-          {
-            CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: waiting for keyframe (bitstream)", __FUNCTION__);
-            return false;
-          }
-          return true;
-        }
-        return false;
-      }
-      /* EL dts > standby BL dts → insert into EL queue */
-      break;
-    }
-
-    /* Insert EL into queue sorted by DTS ascending */
-    {
-      auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
-      memcpy(pkt, packet.pData, packet.iSize);
       auto it = m_el_packages.begin();
       while (it != m_el_packages.end() && std::get<3>(*it) < packet.dts)
         ++it;
-      m_el_packages.emplace(it, pkt, iSize, true, packet.dts);
-      CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: queued EL dts {:.3f}", __FUNCTION__,
-        packet.dts / DVD_TIME_BASE);
+      m_el_packages.emplace(it, std::move(new_pkt));
     }
+    else
+    {
+      auto it = m_bl_packages.begin();
+      while (it != m_bl_packages.end() && std::get<3>(*it) < packet.dts)
+        ++it;
+      m_bl_packages.emplace(it, std::move(new_pkt));
+    }
+  }
+
+  /* Only start pairing when both queues have accumulated enough packets */
+  if (m_el_packages.size() <= 5 || m_bl_packages.size() <= 5)
+    return false;
+
+  /* Find overlap range: max(el_min, bl_min) <= min(el_max, bl_max) */
+  double el_min = std::get<3>(m_el_packages.front());
+  double el_max = std::get<3>(m_el_packages.back());
+  double bl_min = std::get<3>(m_bl_packages.front());
+  double bl_max = std::get<3>(m_bl_packages.back());
+
+  double overlap_start = std::max(el_min, bl_min);
+  double overlap_end   = std::min(el_max, bl_max);
+
+  if (overlap_start > overlap_end)
+  {
+    /* No overlap - queues are disjoint, keep accumulating */
     return false;
   }
-  else
+
+  /* Trim queues: discard packets with DTS < overlap_start (impossible to pair) */
+  auto trim_queue = [](std::list<DLDemuxPacket> &q, double boundary) {
+    while (!q.empty() && std::get<3>(q.front()) < boundary)
+    {
+      KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
+      q.pop_front();
+    }
+  };
+  trim_queue(m_el_packages, overlap_start);
+  trim_queue(m_bl_packages, overlap_start);
+
+  /* Pair ONE BL and EL from the front of both queues (same DTS = same frame) */
+  if (!m_el_packages.empty() && !m_bl_packages.empty())
   {
-    /* ---- BL packet: compare with standby BL (FIFO front), then trim EL and try to pair ---- */
-    if (SkipOrphanBL())
-      return true;
-    if (!m_bl_packages.empty())
-    {
-      double standby_dts = std::get<3>(m_bl_packages.front());
-      if (packet.dts < standby_dts)
-      {
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip BL dts {:.3f} < standby BL dts {:.3f}", __FUNCTION__,
-          packet.dts / DVD_TIME_BASE, standby_dts / DVD_TIME_BASE);
-        return false;
-      }
-      if (DtsMatch(packet.dts, standby_dts))
-      {
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip duplicate BL dts {:.3f}", __FUNCTION__,
-          packet.dts / DVD_TIME_BASE);
-        return false;
-      }
-    }
+    double el_dts = std::get<3>(m_el_packages.front());
+    double bl_dts = std::get<3>(m_bl_packages.front());
 
-    /* Trim EL queue: remove all EL with DTS < min(BL_queue_front, current_BL) */
+    if (std::abs(bl_dts - el_dts) <= 5000.0)
     {
-      double trim_dts = m_bl_packages.empty() ? packet.dts : std::min(
-          std::get<3>(m_bl_packages.front()), packet.dts);
-      while (!m_el_packages.empty() && std::get<3>(m_el_packages.front()) < trim_dts)
-      {
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: trim EL dts {:.3f} < trim_dts {:.3f}", __FUNCTION__,
-          std::get<3>(m_el_packages.front()) / DVD_TIME_BASE, trim_dts / DVD_TIME_BASE);
-        KODI::MEMORY::AlignedFree(std::get<0>(m_el_packages.front()));
-        m_el_packages.pop_front();
-      }
-    }
-
-    if (!m_el_packages.empty() && DtsMatch(std::get<3>(m_el_packages.front()), packet.dts))
-    {
-      DLDemuxPacket el_pkt = m_el_packages.front();
+      /* Match! Convert and output one pair */
+      DLDemuxPacket bl_pkt = std::move(m_bl_packages.front());
+      m_bl_packages.pop_front();
+      DLDemuxPacket el_pkt = std::move(m_el_packages.front());
       m_el_packages.pop_front();
+
+      uint8_t *bl_data = std::get<0>(bl_pkt);
+      uint32_t bl_size = std::get<1>(bl_pkt);
       uint8_t *el_data = std::get<0>(el_pkt);
       uint32_t el_size = std::get<1>(el_pkt);
 
-      CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: paired BL dts {:.3f} with EL", __FUNCTION__,
-        packet.dts / DVD_TIME_BASE);
-
-      bool converted = m_bitstream->Convert(pData, iSize, el_data, el_size);
+      bool converted = m_bitstream->Convert(bl_data, bl_size, el_data, el_size);
+      KODI::MEMORY::AlignedFree(bl_data);
       KODI::MEMORY::AlignedFree(el_data);
 
       if (converted)
       {
-        if (!m_bitstream->CanStartDecode())
-        {
-          CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: waiting for keyframe (bitstream)", __FUNCTION__);
-          return false;
-        }
+        m_last_pData = m_bitstream->GetConvertBuffer();
+        m_last_iSize = m_bitstream->GetConvertSize();
+        m_last_dts = bl_dts;
+        m_last_added = true;
         return true;
       }
-      return false;
     }
-
-    /* No matching EL: only queue BL if DTS > max DTS in queue (monotonic) */
-    {
-      if (!m_bl_packages.empty() && packet.dts <= std::get<3>(m_bl_packages.back()))
-      {
-        CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: skip BL dts {:.3f} <= queue tail dts {:.3f}", __FUNCTION__,
-          packet.dts / DVD_TIME_BASE, std::get<3>(m_bl_packages.back()) / DVD_TIME_BASE);
-        return false;
-      }
-      auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
-      memcpy(pkt, packet.pData, packet.iSize);
-      m_bl_packages.emplace_back(pkt, iSize, false, packet.dts);
-      CLog::Log(LOGDEBUG, LOGVIDEO, "CDVDVideoCodecAmlogic::{}: queued BL dts {:.3f} (FIFO, {} total)", __FUNCTION__,
-        packet.dts / DVD_TIME_BASE, m_bl_packages.size());
-    }
-    return false;
   }
+
+  return false;
 }
 
 bool CDVDVideoCodecAmlogic::SingleLayerConvert(uint8_t *pData, uint32_t iSize, const DemuxPacket &packet) const
@@ -682,38 +590,51 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       }
       else
       {
+        bool dual_layer_queued = false;
         if (packet.isDualStream)
         {
-          bool dual_layer_converted = false;
-
-          if (!m_packages.empty())
+          if (packet.isNoElEpMap)
           {
-            // pair BL and EL from the single queue
-            DLDemuxPacket queued = m_packages.front();
-            uint8_t *qData = std::get<0>(queued);
-            uint32_t qSize = std::get<1>(queued);
-            bool qIsEL = std::get<2>(queued);
-
-            if (qIsEL != packet.isELPackage)
+            /* EL has no EP_map: use DualLayerConvert with separate BL/EL queues */
+            if (!DualLayerConvert(pData, iSize, packet))
             {
-              if (!packet.isELPackage)
-                dual_layer_converted = m_bitstream->Convert(pData, iSize, qData, qSize);
-              else
-                dual_layer_converted = m_bitstream->Convert(qData, qSize, pData, iSize);
+              /* data queued, continue to open decoder and wait for a pair */
+              dual_layer_queued = true;
             }
-          }
-
-          if (dual_layer_converted)
-          {
-            KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
-            m_packages.pop_front();
           }
           else
           {
-            uint8_t *pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
-            memcpy(pkt, packet.pData, packet.iSize);
-            m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
-            return true;
+            /* EL has EP_map: use simple single-queue pairing */
+            bool dual_layer_converted = false;
+
+            if (!m_packages.empty())
+            {
+              DLDemuxPacket queued = m_packages.front();
+              uint8_t *qData = std::get<0>(queued);
+              uint32_t qSize = std::get<1>(queued);
+              bool qIsEL = std::get<2>(queued);
+
+              if (qIsEL != packet.isELPackage)
+              {
+                if (!packet.isELPackage)
+                  dual_layer_converted = m_bitstream->Convert(pData, iSize, qData, qSize);
+                else
+                  dual_layer_converted = m_bitstream->Convert(qData, qSize, pData, iSize);
+              }
+            }
+
+            if (dual_layer_converted)
+            {
+              KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
+              m_packages.pop_front();
+            }
+            else
+            {
+              uint8_t *pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
+              memcpy(pkt, packet.pData, packet.iSize);
+              m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
+              return true;
+            }
           }
         }
         else
@@ -721,8 +642,18 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           if (!SingleLayerConvert(pData, iSize, packet))
             return true;
         }
-        m_last_pData = pData = m_bitstream->GetConvertBuffer();
-        m_last_iSize = iSize = m_bitstream->GetConvertSize();
+
+        if (dual_layer_queued)
+        {
+          /* DualLayerConvert queued the data, no output buffer to send */
+          pData = nullptr;
+          iSize = 0;
+        }
+        else
+        {
+          m_last_pData = pData = m_bitstream->GetConvertBuffer();
+          m_last_iSize = iSize = m_bitstream->GetConvertSize();
+        }
         doviIsFEL = m_bitstream->GetDoviIsFEL();
         IsHdr10Plus = m_bitstream->GetIsHdrPlus();
       }
@@ -757,21 +688,31 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
     }
   }
 
-  if (packet.pSideData && packet.iSideDataElems > 0)
+  if (pData && iSize > 0)
   {
-    const AVPacketSideData* sideData = av_packet_side_data_get(static_cast<AVPacketSideData*>(packet.pSideData),
-                                                               packet.iSideDataElems,
-                                                               AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW);
-
-    if (sideData && sideData->size)
+    if (packet.pSideData && packet.iSideDataElems > 0)
     {
-      if (m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
-        CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr10p data with size {}", __FUNCTION__,
-          sideData->size);
-    }
-  }
+      const AVPacketSideData* sideData = av_packet_side_data_get(static_cast<AVPacketSideData*>(packet.pSideData),
+                                                                 packet.iSideDataElems,
+                                                                 AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW);
 
-  m_last_added = m_Codec->AddData(pData, iSize, packet.dts, m_hints.ptsinvalid ? DVD_NOPTS_VALUE : packet.pts);
+      if (sideData && sideData->size)
+      {
+        if (m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
+          CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr10p data with size {}", __FUNCTION__,
+            sideData->size);
+      }
+    }
+
+    double used_dts = (m_last_dts != DVD_NOPTS_VALUE) ? m_last_dts : packet.dts;
+    m_last_dts = DVD_NOPTS_VALUE;
+    m_last_added = m_Codec->AddData(pData, iSize, used_dts, m_hints.ptsinvalid ? DVD_NOPTS_VALUE : packet.pts);
+  }
+  else
+  {
+    /* no data from DualLayerConvert (still queuing), return true to keep going */
+    m_last_added = true;
+  }
 
   return m_last_added;
 }

@@ -118,4 +118,5 @@ private:
   bool      m_last_added = true;
   uint8_t  *m_last_pData = nullptr;
   uint32_t  m_last_iSize = 0;
+  double    m_last_dts = DVD_NOPTS_VALUE;
 };

@@ -37,6 +37,7 @@
 #include <vector>
 
 #include <libbluray/bluray.h>
+#include <libbluray/clpi_data.h>
 #include <libbluray/mpls_data.h>
 #include <libbluray/log_control.h>
 
@@ -1094,6 +1095,18 @@ static bool find_stream(int pid, BLURAY_STREAM_INFO *info, int count, std::strin
     return false;
   language = reinterpret_cast<char*>(info->lang);
   return true;
+}
+
+int CDVDInputStreamBluray::GetNumStreamPid(unsigned clip_ref)
+{
+  if (!m_bd)
+    return 0;
+  struct clpi_cl *cl = bd_get_clpi(m_bd, clip_ref);
+  if (!cl)
+    return 0;
+  int ret = cl->cpi.num_stream_pid;
+  bd_free_clpi(cl);
+  return ret;
 }
 
 void CDVDInputStreamBluray::GetStreamInfo(int pid, std::string &language)

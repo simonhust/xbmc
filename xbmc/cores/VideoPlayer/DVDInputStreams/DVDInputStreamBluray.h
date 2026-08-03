@@ -132,6 +132,7 @@ public:
   bool PosTime(int ms) override;
 
   void GetStreamInfo(int pid, std::string &language);
+  int GetNumStreamPid(unsigned clip_ref = 0);
 
   int Get3dSubtitlePlane(uint16_t pid);
 

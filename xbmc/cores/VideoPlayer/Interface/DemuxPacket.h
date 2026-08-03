@@ -28,6 +28,7 @@ extern "C"
       iStreamId = -1;
       isDualStream = false;
       isELPackage = false;
+      isNoElEpMap = false;
       demuxerId = -1;
       iGroupId = -1;
       subtitlePlane = 0;
@@ -52,6 +53,8 @@ extern "C"
     bool isDualStream;
     //! @brief Indicate package is from a Dolby Vision enhancement layer.
     bool isELPackage;
+    //! @brief Indicate the EL stream has no EP_map (num_stream_pid == 1).
+    bool isNoElEpMap;
     /// @brief The 3D MVC subtitle plane
     int subtitlePlane;
   };

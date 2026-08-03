@@ -500,6 +500,14 @@ bool CBitstreamConverter::Open(enum AVCodecID codec,
               BitstreamConvertInitHEVC(m_extraData.GetData(), m_extraData.GetSize());
           return true;
         }
+        else if ((in_extradata[0] == 0 && in_extradata[1] == 0 && in_extradata[2] == 0 && in_extradata[3] == 1) ||
+                 (in_extradata[0] == 0 && in_extradata[1] == 0 && in_extradata[2] == 1))
+        {
+          CLog::Log(LOGINFO, "CBitstreamConverter::Open already in annexb, pass-through");
+          m_extraData = FFmpegExtraData(in_extradata, in_extrasize);
+          m_convert_bitstream = false;
+          return true;
+        }
         else
           CLog::Log(LOGINFO, "CBitstreamConverter::Open Invalid hvcC");
       }
