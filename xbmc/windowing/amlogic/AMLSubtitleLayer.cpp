@@ -189,8 +189,9 @@ void CAMLSubtitleLayer::UpdateHdrState(uint32_t hdrType, int drmFd)
       break;
   }
 
-  // Configure OSD1_HDR (the subtitle plane) for the selected transfer.
-  m_hdrLut.Configure(drmFd, CAMLHdrLut::MODULE_OSD1, process);
+  // Configure OSD2_HDR (the subtitle overlay plane) for the selected transfer.
+  // The overlay plane is the first OVERLAY DRM plane, typically osd1 = VPP_OSD2.
+  m_hdrLut.Configure(drmFd, CAMLHdrLut::MODULE_OSD2, process);
 
   CLog::Log(LOGDEBUG, "CAMLSubtitleLayer::{} - hdrType={} process={}", __FUNCTION__,
             hdrType, static_cast<int>(process));

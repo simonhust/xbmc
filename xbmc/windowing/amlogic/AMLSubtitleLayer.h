@@ -22,9 +22,10 @@ class CAMLGBMUtils;
 /*
  * Dedicated subtitle plane on the Amlogic display pipeline.
  *
- * The subtitle plane (osd0, primary) carries subtitle content with hardware
- * HDR2 conversion (sRGB->PQ/HLG via OSD1_HDR2 LUT), while the GUI renders
- * in SDR on the overlay plane (osd1).
+ * The GUI renders on the primary plane (osd0, VPP_OSD1) and subtitles
+ * render on an overlay plane (osd1, VPP_OSD2). The overlay plane's
+ * OSD HDR2 block converts sRGB content to PQ/HLG via the hardware LUT,
+ * keeping the GUI plane in SDR.
  *
  * Usage per frame (called from the GUI render thread, around overlay render):
  *   layer.BeginRender();   // make subtitle EGL surface current, clear

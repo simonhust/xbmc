@@ -146,7 +146,6 @@ private:
   drmModeCrtcPtr m_orig_crtc{nullptr};
   drmModePlanePtr m_plane{nullptr};
   drmModePlanePtr m_overlay_plane{nullptr};
-  bool m_overlay_attached{false};
 
   int m_inFenceFd{-1};
   int m_outFenceFd{-1};

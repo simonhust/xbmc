@@ -304,8 +304,6 @@ void CAMLDRMUtils::CleanAndClose()
     m_overlay_plane = nullptr;
   }
 
-  m_overlay_attached = false;
-
   m_connection = DRM_MODE_DISCONNECTED;
 }
 
@@ -877,8 +875,12 @@ void CAMLDRMUtils::FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id)
 
   drmModeAtomicReqPtr req = drmModeAtomicAlloc();
 
-  // Primary plane (osd0) → subtitle surface
-  set_drmProp(m_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE , subtitle_fb_id, req);
+  // Primary plane (osd0) → subtitle surface when active, otherwise GUI surface
+  // so the primary plane always has a valid buffer (kernel may reject commits
+  // where the primary plane has FB_ID=0).
+  uint32_t primary_fb_id = subtitle_fb_id ? subtitle_fb_id : fb_id;
+
+  set_drmProp(m_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE , primary_fb_id, req);
   set_drmProp(m_plane->plane_id, "CRTC_ID", DRM_MODE_OBJECT_PLANE , m_crtc->crtc_id, req);
   set_drmProp(m_plane->plane_id, "SRC_X", DRM_MODE_OBJECT_PLANE , 0, req);
   set_drmProp(m_plane->plane_id, "SRC_Y", DRM_MODE_OBJECT_PLANE , 0, req);
@@ -889,11 +891,15 @@ void CAMLDRMUtils::FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id)
   set_drmProp(m_plane->plane_id, "CRTC_W", DRM_MODE_OBJECT_PLANE , m_ScreenWidth, req);
   set_drmProp(m_plane->plane_id, "CRTC_H", DRM_MODE_OBJECT_PLANE , m_ScreenHeight, req);
 
-  // Overlay plane (osd1) → GUI surface
+  // Overlay plane (osd1) → GUI surface when subtitles are active.
+  // When no subtitles, disable the overlay plane so only the primary plane
+  // scans out (avoids redundant scanout of the same buffer on two planes).
   if (m_overlay_plane)
   {
-    set_drmProp(m_overlay_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE , fb_id, req);
-    set_drmProp(m_overlay_plane->plane_id, "CRTC_ID", DRM_MODE_OBJECT_PLANE , m_crtc->crtc_id, req);
+    set_drmProp(m_overlay_plane->plane_id, "FB_ID", DRM_MODE_OBJECT_PLANE ,
+                subtitle_fb_id ? fb_id : 0, req);
+    set_drmProp(m_overlay_plane->plane_id, "CRTC_ID", DRM_MODE_OBJECT_PLANE ,
+                subtitle_fb_id ? m_crtc->crtc_id : 0, req);
     set_drmProp(m_overlay_plane->plane_id, "SRC_X", DRM_MODE_OBJECT_PLANE , 0, req);
     set_drmProp(m_overlay_plane->plane_id, "SRC_Y", DRM_MODE_OBJECT_PLANE , 0, req);
     set_drmProp(m_overlay_plane->plane_id, "SRC_W", DRM_MODE_OBJECT_PLANE , m_width << 16, req);
@@ -910,14 +916,11 @@ void CAMLDRMUtils::FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id)
     set_drmProp(m_plane->plane_id, "IN_FENCE_FD", DRM_MODE_OBJECT_PLANE , m_inFenceFd, req);
   }
 
-  // First atomic commit with overlay plane needs ALLOW_MODESET to attach
-  // the overlay plane to the CRTC (CRTC_ID changes from 0 to valid).
+  // Use ALLOW_MODESET when the overlay plane is present so the kernel
+  // permits attaching/detaching it to/from the CRTC as needed.
   uint32_t atomic_flags = DRM_MODE_ATOMIC_NONBLOCK;
-  if (m_overlay_plane && !m_overlay_attached)
-  {
+  if (m_overlay_plane)
     atomic_flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
-    m_overlay_attached = true;
-  }
 
   if (drmModeAtomicCommit(m_fd, req, atomic_flags, NULL))
     CLog::Log(LOGDEBUG, "CAMLDRMUtils::{} - failed to make drmDevice atomic commit: {}",
