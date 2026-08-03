@@ -5,7 +5,9 @@
  *  See LICENSES/README.md for more information.
  */
 #include <drm_fourcc.h>
+#include <errno.h>
 #include <fcntl.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <amcodec/codec.h>
@@ -301,6 +303,8 @@ void CAMLDRMUtils::CleanAndClose()
     drmModeFreePlane(m_overlay_plane);
     m_overlay_plane = nullptr;
   }
+
+  m_overlay_attached = false;
 
   m_connection = DRM_MODE_DISCONNECTED;
 }
@@ -906,8 +910,18 @@ void CAMLDRMUtils::FlipPage(uint32_t fb_id, uint32_t subtitle_fb_id)
     set_drmProp(m_plane->plane_id, "IN_FENCE_FD", DRM_MODE_OBJECT_PLANE , m_inFenceFd, req);
   }
 
-  if (drmModeAtomicCommit(m_fd, req, DRM_MODE_ATOMIC_NONBLOCK, NULL))
-    CLog::Log(LOGDEBUG, "CAMLDRMUtils::{} - failed to make drmDevice atomic commit", __FUNCTION__);
+  // First atomic commit with overlay plane needs ALLOW_MODESET to attach
+  // the overlay plane to the CRTC (CRTC_ID changes from 0 to valid).
+  uint32_t atomic_flags = DRM_MODE_ATOMIC_NONBLOCK;
+  if (m_overlay_plane && !m_overlay_attached)
+  {
+    atomic_flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
+    m_overlay_attached = true;
+  }
+
+  if (drmModeAtomicCommit(m_fd, req, atomic_flags, NULL))
+    CLog::Log(LOGDEBUG, "CAMLDRMUtils::{} - failed to make drmDevice atomic commit: {}",
+              __FUNCTION__, strerror(errno));
 
   if (m_inFenceFd != -1)
   {
