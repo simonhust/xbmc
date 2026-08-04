@@ -1109,6 +1109,13 @@ int CDVDInputStreamBluray::GetNumStreamPid(unsigned clip_ref)
   return ret;
 }
 
+int CDVDInputStreamBluray::GetClipCount()
+{
+  if (!m_titleInfo)
+    return 0;
+  return m_titleInfo->clip_count;
+}
+
 void CDVDInputStreamBluray::GetStreamInfo(int pid, std::string &language)
 {
   if(!m_titleInfo || !m_clip)

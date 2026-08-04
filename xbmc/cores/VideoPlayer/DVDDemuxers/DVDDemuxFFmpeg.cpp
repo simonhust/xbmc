@@ -1774,7 +1774,10 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
   if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
   {
     CDVDInputStreamBluray *bluray = static_cast<CDVDInputStreamBluray*>(m_pInput.get());
-    if (bluray->GetNumStreamPid() < 2)
+    /* Dual queue (BL/EL state machine) only when the clip has a single stream PID
+     * AND the playlist has exactly one clip.  Multi-clip or multi-PID streams use
+     * the simpler single-queue alternating pairing instead. */
+    if (bluray->GetNumStreamPid() < 2 && bluray->GetClipCount() == 1)
       m_dv_no_el_epmap = true;
   }
 }
