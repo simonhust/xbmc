@@ -457,8 +457,7 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
   m_last_iSize = 0;
   m_last_dts = DVD_NOPTS_VALUE;
   m_ready_to_pair = false;
-  m_use_dual_queue = false;
-  m_decision_made = false;
+  m_switched_to_dual = false;
 
   if (m_bitstream) m_bitstream->ResetStartDecode();
 }
@@ -612,17 +611,23 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         bool dual_layer_queued = false;
         if (packet.isDualStream)
         {
-          if (packet.isNoElEpMap && !packet.isMultiClip && !m_decision_made)
+          if (packet.isNoElEpMap && !packet.isMultiClip)
           {
-            /* First packet with isNoElEpMap (single-clip only) after reset.
-             * If start/seek time < 1s, use single-queue for the entire
-             * session; hardware handles initial bad frames. */
-            m_decision_made = true;
-            if (packet.dts >= DVD_TIME_BASE * 1.0)
-              m_use_dual_queue = true;
+            /* Before 1s: use single-queue (hardware handles initial bad frames).
+             * At 1s: switch to dual-queue state machine for reliable pairing.
+             * The switch is one-way and seamless — drain any orphan in m_packages. */
+            if (!m_switched_to_dual && packet.dts >= DVD_TIME_BASE * 1.0)
+            {
+              m_switched_to_dual = true;
+              while (!m_packages.empty())
+              {
+                KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
+                m_packages.pop_front();
+              }
+            }
           }
 
-          if (packet.isNoElEpMap && !packet.isMultiClip && m_use_dual_queue)
+          if (packet.isNoElEpMap && !packet.isMultiClip && m_switched_to_dual)
           {
             /* EL has no EP_map: use state machine with separate BL/EL queues */
             DualLayerAccumulate(packet);

@@ -116,8 +116,7 @@ private:
   std::list<DLDemuxPacket> m_bl_packages;  /* BL queue sorted by DTS ascending */
   std::list<DLDemuxPacket> m_packages;     /* single package queue for dual layer */
   bool m_ready_to_pair{false};             /* state machine: ready to pair front of both queues */
-  bool m_use_dual_queue{false};            /* use dual-queue vs single-queue for isNoElEpMap */
-  bool m_decision_made{false};             /* mode decision made on first packet */
+  bool m_switched_to_dual{false};          /* switched from single-queue to dual-queue at 1s */
 
   bool      m_last_added = true;
   uint8_t  *m_last_pData = nullptr;
