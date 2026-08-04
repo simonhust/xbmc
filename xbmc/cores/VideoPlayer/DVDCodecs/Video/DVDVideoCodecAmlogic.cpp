@@ -456,40 +456,43 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
   m_last_pData = nullptr;
   m_last_iSize = 0;
   m_last_dts = DVD_NOPTS_VALUE;
+  m_ready_to_pair = false;
 
   if (m_bitstream) m_bitstream->ResetStartDecode();
 }
 
-bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, const DemuxPacket &packet)
+void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
 {
-  CLog::Log(LOGDEBUG, "DV: DualLayerConvert called, EL={}, dts={:.3f}, el_q={}, bl_q={}",
-    packet.isELPackage, packet.dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size());
+  CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, EL={}, dts={:.3f}, el_q={}, bl_q={}, ready={}",
+    packet.isELPackage, packet.dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size(), m_ready_to_pair);
 
   /* Insert packet into the appropriate queue (sorted by DTS ascending) */
-  {
-    auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
-    memcpy(pkt, packet.pData, packet.iSize);
-    DLDemuxPacket new_pkt(pkt, iSize, packet.isELPackage, packet.dts);
+  auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
+  memcpy(pkt, packet.pData, packet.iSize);
+  DLDemuxPacket new_pkt(pkt, packet.iSize, packet.isELPackage, packet.dts);
 
-    if (packet.isELPackage)
-    {
-      auto it = m_el_packages.begin();
-      while (it != m_el_packages.end() && std::get<3>(*it) < packet.dts)
-        ++it;
-      m_el_packages.emplace(it, std::move(new_pkt));
-    }
-    else
-    {
-      auto it = m_bl_packages.begin();
-      while (it != m_bl_packages.end() && std::get<3>(*it) < packet.dts)
-        ++it;
-      m_bl_packages.emplace(it, std::move(new_pkt));
-    }
+  if (packet.isELPackage)
+  {
+    auto it = m_el_packages.begin();
+    while (it != m_el_packages.end() && std::get<3>(*it) < packet.dts)
+      ++it;
+    m_el_packages.emplace(it, std::move(new_pkt));
+  }
+  else
+  {
+    auto it = m_bl_packages.begin();
+    while (it != m_bl_packages.end() && std::get<3>(*it) < packet.dts)
+      ++it;
+    m_bl_packages.emplace(it, std::move(new_pkt));
   }
 
-  /* Only start pairing when both queues have accumulated enough packets */
+  /* Already ready to pair — no need to re-check */
+  if (m_ready_to_pair)
+    return;
+
+  /* Need both queues to have accumulated enough packets */
   if (m_el_packages.size() <= 5 || m_bl_packages.size() <= 5)
-    return false;
+    return;
 
   /* Find overlap range: max(el_min, bl_min) <= min(el_max, bl_max) */
   double el_min = std::get<3>(m_el_packages.front());
@@ -502,8 +505,8 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
 
   if (overlap_start > overlap_end)
   {
-    /* No overlap - queues are disjoint, keep accumulating */
-    return false;
+    /* No overlap — queues are still disjoint, keep accumulating */
+    return;
   }
 
   /* Trim queues: discard packets with DTS < overlap_start (impossible to pair) */
@@ -517,38 +520,47 @@ bool CDVDVideoCodecAmlogic::DualLayerConvert(uint8_t *pData, uint32_t iSize, con
   trim_queue(m_el_packages, overlap_start);
   trim_queue(m_bl_packages, overlap_start);
 
-  /* Pair ONE BL and EL from the front of both queues (same DTS = same frame) */
-  if (!m_el_packages.empty() && !m_bl_packages.empty())
+  m_ready_to_pair = true;
+  CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate — ready to pair, el_q={}, bl_q={}",
+    m_el_packages.size(), m_bl_packages.size());
+}
+
+bool CDVDVideoCodecAmlogic::DualLayerTryPair()
+{
+  if (!m_ready_to_pair)
+    return false;
+
+  if (m_el_packages.empty() || m_bl_packages.empty())
+    return false;
+
+  double el_dts = std::get<3>(m_el_packages.front());
+  double bl_dts = std::get<3>(m_bl_packages.front());
+
+  if (std::abs(bl_dts - el_dts) > 5000.0)
+    return false;
+
+  /* Match! Convert and output one pair */
+  DLDemuxPacket bl_pkt = std::move(m_bl_packages.front());
+  m_bl_packages.pop_front();
+  DLDemuxPacket el_pkt = std::move(m_el_packages.front());
+  m_el_packages.pop_front();
+
+  uint8_t *bl_data = std::get<0>(bl_pkt);
+  uint32_t bl_size = std::get<1>(bl_pkt);
+  uint8_t *el_data = std::get<0>(el_pkt);
+  uint32_t el_size = std::get<1>(el_pkt);
+
+  bool converted = m_bitstream->Convert(bl_data, bl_size, el_data, el_size);
+  KODI::MEMORY::AlignedFree(bl_data);
+  KODI::MEMORY::AlignedFree(el_data);
+
+  if (converted)
   {
-    double el_dts = std::get<3>(m_el_packages.front());
-    double bl_dts = std::get<3>(m_bl_packages.front());
-
-    if (std::abs(bl_dts - el_dts) <= 5000.0)
-    {
-      /* Match! Convert and output one pair */
-      DLDemuxPacket bl_pkt = std::move(m_bl_packages.front());
-      m_bl_packages.pop_front();
-      DLDemuxPacket el_pkt = std::move(m_el_packages.front());
-      m_el_packages.pop_front();
-
-      uint8_t *bl_data = std::get<0>(bl_pkt);
-      uint32_t bl_size = std::get<1>(bl_pkt);
-      uint8_t *el_data = std::get<0>(el_pkt);
-      uint32_t el_size = std::get<1>(el_pkt);
-
-      bool converted = m_bitstream->Convert(bl_data, bl_size, el_data, el_size);
-      KODI::MEMORY::AlignedFree(bl_data);
-      KODI::MEMORY::AlignedFree(el_data);
-
-      if (converted)
-      {
-        m_last_pData = m_bitstream->GetConvertBuffer();
-        m_last_iSize = m_bitstream->GetConvertSize();
-        m_last_dts = bl_dts;
-        m_last_added = true;
-        return true;
-      }
-    }
+    m_last_pData = m_bitstream->GetConvertBuffer();
+    m_last_iSize = m_bitstream->GetConvertSize();
+    m_last_dts = bl_dts;
+    m_last_added = true;
+    return true;
   }
 
   return false;
@@ -595,8 +607,9 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         {
           if (packet.isNoElEpMap)
           {
-            /* EL has no EP_map: use DualLayerConvert with separate BL/EL queues */
-            if (!DualLayerConvert(pData, iSize, packet))
+            /* EL has no EP_map: use state machine with separate BL/EL queues */
+            DualLayerAccumulate(packet);
+            if (!DualLayerTryPair())
             {
               /* data queued, continue to open decoder and wait for a pair */
               dual_layer_queued = true;
@@ -645,7 +658,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
         if (dual_layer_queued)
         {
-          /* DualLayerConvert queued the data, no output buffer to send */
+          /* DualLayerAccumulate queued the data, no output buffer to send */
           pData = nullptr;
           iSize = 0;
         }
@@ -710,7 +723,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
   }
   else
   {
-    /* no data from DualLayerConvert (still queuing), return true to keep going */
+    /* no data from DualLayerAccumulate/DualLayerTryPair (still queuing), return true to keep going */
     m_last_added = true;
   }
 

@@ -85,7 +85,8 @@ protected:
   void            Close(void);
   void            FrameRateTracking(uint8_t *pData, int iSize, double dts, double pts);
 
-  bool DualLayerConvert(uint8_t *pData, uint32_t iSize, const DemuxPacket &packet);
+  void DualLayerAccumulate(const DemuxPacket &packet);
+  bool DualLayerTryPair();
   bool SingleLayerConvert(uint8_t *pData, uint32_t iSize, const DemuxPacket &packet) const;
   void ClearBitstreamCommon(void);
 
@@ -114,6 +115,7 @@ private:
   std::list<DLDemuxPacket> m_el_packages;  /* EL queue sorted by DTS ascending */
   std::list<DLDemuxPacket> m_bl_packages;  /* BL queue sorted by DTS ascending */
   std::list<DLDemuxPacket> m_packages;     /* single package queue for dual layer */
+  bool m_ready_to_pair{false};             /* state machine: ready to pair front of both queues */
 
   bool      m_last_added = true;
   uint8_t  *m_last_pData = nullptr;
