@@ -457,6 +457,8 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
   m_last_iSize = 0;
   m_last_dts = DVD_NOPTS_VALUE;
   m_ready_to_pair = false;
+  m_use_dual_queue = false;
+  m_decision_made = false;
 
   if (m_bitstream) m_bitstream->ResetStartDecode();
 }
@@ -509,16 +511,21 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
     return;
   }
 
-  /* Trim queues: discard packets with DTS < overlap_start (impossible to pair) */
-  auto trim_queue = [](std::list<DLDemuxPacket> &q, double boundary) {
-    while (!q.empty() && std::get<3>(q.front()) < boundary)
-    {
-      KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
-      q.pop_front();
-    }
-  };
-  trim_queue(m_el_packages, overlap_start);
-  trim_queue(m_bl_packages, overlap_start);
+  /* Trim queues: discard packets with DTS < overlap_start (impossible to pair).
+   * Skip trim during the first second of playback — the hardware has tolerance
+   * for initial bad frames, and trimming can cause unnecessary misalignment. */
+  if (overlap_start >= DVD_TIME_BASE * 1.0)
+  {
+    auto trim_queue = [](std::list<DLDemuxPacket> &q, double boundary) {
+      while (!q.empty() && std::get<3>(q.front()) < boundary)
+      {
+        KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
+        q.pop_front();
+      }
+    };
+    trim_queue(m_el_packages, overlap_start);
+    trim_queue(m_bl_packages, overlap_start);
+  }
 
   m_ready_to_pair = true;
   CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate — ready to pair, el_q={}, bl_q={}",
@@ -605,7 +612,17 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         bool dual_layer_queued = false;
         if (packet.isDualStream)
         {
-          if (packet.isNoElEpMap)
+          if (packet.isNoElEpMap && !m_decision_made)
+          {
+            /* First packet with isNoElEpMap after reset — decide mode.
+             * If start/seek time < 1s, use single-queue for the entire
+             * session; hardware handles initial bad frames. */
+            m_decision_made = true;
+            if (packet.dts >= DVD_TIME_BASE * 1.0)
+              m_use_dual_queue = true;
+          }
+
+          if (packet.isNoElEpMap && m_use_dual_queue)
           {
             /* EL has no EP_map: use state machine with separate BL/EL queues */
             DualLayerAccumulate(packet);
