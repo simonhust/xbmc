@@ -612,9 +612,9 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         bool dual_layer_queued = false;
         if (packet.isDualStream)
         {
-          if (packet.isNoElEpMap && !m_decision_made)
+          if (packet.isNoElEpMap && !packet.isMultiClip && !m_decision_made)
           {
-            /* First packet with isNoElEpMap after reset — decide mode.
+            /* First packet with isNoElEpMap (single-clip only) after reset.
              * If start/seek time < 1s, use single-queue for the entire
              * session; hardware handles initial bad frames. */
             m_decision_made = true;
@@ -622,7 +622,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               m_use_dual_queue = true;
           }
 
-          if (packet.isNoElEpMap && m_use_dual_queue)
+          if (packet.isNoElEpMap && !packet.isMultiClip && m_use_dual_queue)
           {
             /* EL has no EP_map: use state machine with separate BL/EL queues */
             DualLayerAccumulate(packet);

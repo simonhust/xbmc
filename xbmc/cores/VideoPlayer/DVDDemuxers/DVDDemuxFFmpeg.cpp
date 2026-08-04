@@ -1222,6 +1222,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
         pPacket->isDualStream = m_dv_dual_stream;
         pPacket->isELPackage = (stream->uniqueId > 0) ? m_dv_dual_stream : false;
         pPacket->isNoElEpMap = m_dv_no_el_epmap;
+        pPacket->isMultiClip = m_dv_multi_clip;
       }
     }
     if (stream && m_pSSIF)
@@ -1774,11 +1775,8 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
   if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
   {
     CDVDInputStreamBluray *bluray = static_cast<CDVDInputStreamBluray*>(m_pInput.get());
-    /* Dual queue (BL/EL state machine) only when the clip has a single stream PID
-     * AND the playlist has exactly one clip.  Multi-clip or multi-PID streams use
-     * the simpler single-queue alternating pairing instead. */
-    if (bluray->GetNumStreamPid() < 2 && bluray->GetClipCount() == 1)
-      m_dv_no_el_epmap = true;
+    m_dv_no_el_epmap = (bluray->GetNumStreamPid() < 2);
+    m_dv_multi_clip = (bluray->GetClipCount() > 1);
   }
 }
 

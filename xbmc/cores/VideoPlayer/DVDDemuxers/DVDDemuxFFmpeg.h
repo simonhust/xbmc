@@ -183,4 +183,5 @@ protected:
   std::vector<ChapterFFmpeg> m_chapters;
   bool m_dv_dual_stream = false;
   bool m_dv_no_el_epmap = false;
+  bool m_dv_multi_clip = false;
 };
