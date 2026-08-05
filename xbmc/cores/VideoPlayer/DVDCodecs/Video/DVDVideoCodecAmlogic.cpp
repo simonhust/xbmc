@@ -705,6 +705,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               return true;
             }
           }
+          }
           else
           {
             /* EL has EP_map: use simple single-queue pairing */
