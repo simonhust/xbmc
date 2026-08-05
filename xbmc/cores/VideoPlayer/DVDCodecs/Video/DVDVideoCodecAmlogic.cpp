@@ -864,10 +864,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       }
     }
 
-    /* If queue is still filling (first 5 pairs), push current Convert output
-     * to queue instead of sending directly to decoder. Once queue is full
-     * (m_resume_pair_count >= 5), the queue drains without replenishment. */
-    if (m_resume_pair_count < 5 && pData && iSize > 0)
+    /* While resume queue is active, push current Convert output to queue
+     * instead of sending directly to decoder. This ensures DTS order:
+     * the decoder always receives frames in queue order, never interleaved
+     * with direct frames. The queue is drained one per AddData call and
+     * an extra one per GetPicture call, so it eventually goes to 0. */
+    if (m_resume_pair_count > 0 && pData && iSize > 0)
     {
       uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
       if (buf)
