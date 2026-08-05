@@ -919,6 +919,21 @@ CDVDVideoCodec::VCReturn CDVDVideoCodecAmlogic::GetPicture(VideoPicture* pVideoP
   if (!m_Codec)
     return VC_ERROR;
 
+  /* Drain resume queue: if the decoder has no frame and the queue has
+   * accumulated data, push one frame to the decoder so it can decode. */
+  if (m_resume_pair_count >= 5 && !m_resume_buffers.empty())
+  {
+    auto &front = m_resume_buffers.front();
+    if (m_Codec->AddData(front.data, front.size, front.dts, DVD_NOPTS_VALUE))
+    {
+      KODI::MEMORY::AlignedFree(front.data);
+      m_resume_buffers.pop_front();
+      CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: drain resume queue from GetPicture ({} left)", __FUNCTION__, m_resume_buffers.size());
+      if (m_resume_buffers.empty())
+        m_resume_pair_count = 0;
+    }
+  }
+
   VCReturn retVal = m_Codec->GetPicture(&m_videobuffer);
 
   if (retVal == VC_PICTURE)
