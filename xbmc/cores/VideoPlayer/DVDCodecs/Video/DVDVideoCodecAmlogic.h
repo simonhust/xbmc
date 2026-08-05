@@ -124,4 +124,12 @@ private:
   double    m_last_dts = DVD_NOPTS_VALUE;
   bool      m_dv_seek_filter_active = false;
   double    m_dv_seek_time_seen = DVD_NOPTS_VALUE;
+
+  int m_resume_pair_count{0};
+  struct ResumeBuffer {
+    uint8_t *data;
+    uint32_t size;
+    double dts;
+  };
+  std::list<ResumeBuffer> m_resume_buffers;
 };
