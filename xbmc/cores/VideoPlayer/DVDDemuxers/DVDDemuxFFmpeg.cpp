@@ -1778,6 +1778,12 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     m_dv_no_el_epmap = (bluray->GetNumStreamPid() < 2);
     m_dv_multi_clip = (bluray->GetClipCount() > 1);
   }
+  else
+  {
+    // Non-Bluray dual-stream (e.g. standalone M2TS):
+    // force dual-queue pairing (DTS-based) to handle EL offset
+    m_dv_no_el_epmap = true;
+  }
 }
 
         if (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION)
@@ -2114,6 +2120,20 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     {
       stream->extraData =
           FFmpegExtraData(pStream->codecpar->extradata, pStream->codecpar->extradata_size);
+    }
+    // For Dolby Vision dual-stream: if EL has no extradata, copy from BL
+    // EL's VPS/SPS/PPS are shared with BL in Profile 7
+    else if (m_dv_dual_stream && stream->type == StreamType::VIDEO && streamIdx > 0)
+    {
+      CDemuxStream* bl_stream = GetStream(0);
+      if (bl_stream && bl_stream->extraData)
+      {
+        stream->extraData = bl_stream->extraData;
+        CLog::Log(LOGDEBUG,
+                  "CDVDDemuxFFmpeg::AddStream - EL extradata empty, "
+                  "copied from BL stream (size={})",
+                  bl_stream->extraData.GetSize());
+      }
     }
 
 #ifdef HAVE_LIBBLURAY
