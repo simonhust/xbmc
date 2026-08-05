@@ -845,8 +845,10 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       m_opened = true;
     }
 
-    /* Drain resume queue: one frame per AddData call, never dump all at once.
-     * The queue acts as a buffer so the decoder is never starved on resume. */
+    /* Drain resume queue: one frame per AddData call.
+     * The queue is a one-time buffer for the initial resume warm-up.
+     * Once empty, m_resume_pair_count = 0 and normal passthrough resumes.
+     * Current Convert output goes directly to decoder via the normal path below. */
     if (m_resume_pair_count >= 5 && !m_resume_buffers.empty())
     {
       auto &front = m_resume_buffers.front();
@@ -856,13 +858,17 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         m_resume_buffers.pop_front();
         CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: drain resume queue ({} left)", __FUNCTION__, m_resume_buffers.size());
         if (m_resume_buffers.empty())
+        {
           m_resume_pair_count = 0;
+          CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: resume queue drained, normal passthrough", __FUNCTION__);
+        }
       }
     }
 
-    /* If resume accumulation is active, push current Convert output to queue
-     * instead of sending directly to the decoder below. */
-    if (m_resume_pair_count > 0 && pData && iSize > 0)
+    /* If queue is still filling (first 5 pairs), push current Convert output
+     * to queue instead of sending directly to decoder. Once queue is full
+     * (m_resume_pair_count >= 5), the queue drains without replenishment. */
+    if (m_resume_pair_count < 5 && pData && iSize > 0)
     {
       uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
       if (buf)
