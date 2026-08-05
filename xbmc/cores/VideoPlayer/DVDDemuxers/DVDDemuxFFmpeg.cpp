@@ -1224,6 +1224,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
         pPacket->isNoElEpMap = m_dv_no_el_epmap;
         pPacket->isMultiClip = m_dv_multi_clip;
         pPacket->isDirectPair = m_dv_direct_pair;
+        pPacket->m_seekTime = m_dv_seek_time;
       }
     }
     if (stream && m_pSSIF)
@@ -1265,6 +1266,8 @@ bool CDVDDemuxFFmpeg::SeekTime(double time, bool backwards, double* startpts)
 
   m_pkt.result = -1;
   av_packet_unref(&m_pkt.pkt);
+
+  m_dv_seek_time = time * DVD_TIME_BASE / 1000.0;
 
   CDVDInputStream::IPosTime* ist = m_pInput->GetIPosTime();
   if (ist)

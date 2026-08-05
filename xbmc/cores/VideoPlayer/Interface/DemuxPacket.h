@@ -31,6 +31,7 @@ extern "C"
       isNoElEpMap = false;
       isMultiClip = false;
       isDirectPair = false;
+      m_seekTime = DVD_NOPTS_VALUE;
       demuxerId = -1;
       iGroupId = -1;
       subtitlePlane = 0;
@@ -61,6 +62,8 @@ extern "C"
     bool isMultiClip;
     //! @brief Indicate non-Bluray dual-stream, use direct dual-queue pairing.
     bool isDirectPair;
+    //! @brief Seek target time (DVD_TIME_BASE), used for filtering orphan frames.
+    double m_seekTime;
     /// @brief The 3D MVC subtitle plane
     int subtitlePlane;
   };

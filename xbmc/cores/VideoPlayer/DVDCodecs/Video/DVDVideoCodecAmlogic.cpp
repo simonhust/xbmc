@@ -708,6 +708,25 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           else
           {
             /* EL has EP_map: use simple single-queue pairing */
+            /* Seek-time filter for single-clip: skip orphan packets with DTS
+             * before seek target. Inactive when seek target < 1s. */
+            if (!packet.isMultiClip && packet.m_seekTime >= DVD_TIME_BASE * 1.0 &&
+                packet.dts != DVD_NOPTS_VALUE)
+            {
+              double dts_val = packet.dts;
+              if (dts_val < 0)
+                dts_val = 0;
+              if (dts_val < packet.m_seekTime)
+              {
+                CLog::Log(LOGDEBUG,
+                          "CDVDVideoCodecAmlogic::{} - skip orphan packet: "
+                          "dts={:.3f} < seekTime={:.3f}",
+                          __FUNCTION__, dts_val / DVD_TIME_BASE,
+                          packet.m_seekTime / DVD_TIME_BASE);
+                return true;
+              }
+            }
+
             bool dual_layer_converted = false;
 
             if (!m_packages.empty())

@@ -185,4 +185,5 @@ protected:
   bool m_dv_no_el_epmap = false;
   bool m_dv_multi_clip = false;
   bool m_dv_direct_pair = false;
+  double m_dv_seek_time = DVD_NOPTS_VALUE;
 };
