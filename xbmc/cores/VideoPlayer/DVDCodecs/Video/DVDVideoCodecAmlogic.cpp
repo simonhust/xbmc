@@ -7,6 +7,7 @@
  */
 
 #include <math.h>
+#include <utility>
 
 #include "DVDCodecs/DVDFactoryCodec.h"
 #include "utils/MemUtils.h"
@@ -452,6 +453,11 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
     KODI::MEMORY::AlignedFree(std::get<0>(pkt));
   m_packages.clear();
 
+  for (auto& buf : m_resume_buffers)
+    KODI::MEMORY::AlignedFree(buf.data);
+  m_resume_buffers.clear();
+  m_resume_pair_count = 0;
+
   m_last_added = true;
   m_last_pData = nullptr;
   m_last_iSize = 0;
@@ -803,6 +809,27 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
     if (!m_opened)
     {
+      if (m_resume_pair_count < 5 && pData && iSize > 0)
+      {
+        /* Accumulate 5 BL+EL pairs before opening decoder to ensure
+         * the hardware decoder buffer is never starved on resume.
+         * This avoids the kernel pre_decode_buf_level wait (200KB)
+         * that causes 5-second frame intervals on DV FEL resume. */
+        uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
+        if (buf)
+        {
+          memcpy(buf, pData, iSize);
+          m_resume_buffers.push_back({buf, iSize, packet.dts});
+        }
+        m_resume_pair_count++;
+        CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: accumulate pair {}/5 before OpenDecoder",
+                  __FUNCTION__, m_resume_pair_count);
+        pData = nullptr;
+        iSize = 0;
+        m_last_added = true;
+        return true;
+      }
+
       if (packet.pts == DVD_NOPTS_VALUE)
         m_hints.ptsinvalid = true;
 
@@ -813,8 +840,18 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       if (m_Codec && !m_Codec->OpenDecoder(m_hints, doviIsFEL))
         CLog::Log(LOGERROR, "CDVDVideoCodecAmlogic::{}: Failed to open Amlogic Codec", __FUNCTION__);
 
+      /* Drain all accumulated buffers to the decoder */
+      for (auto &buf : m_resume_buffers)
+      {
+        m_Codec->AddData(buf.data, buf.size, buf.dts, DVD_NOPTS_VALUE);
+        KODI::MEMORY::AlignedFree(buf.data);
+      }
+      m_resume_buffers.clear();
+      m_resume_pair_count = 0;
+
       m_videoBufferPool = std::shared_ptr<CAMLVideoBufferPool>(new CAMLVideoBufferPool());
 
+      /* If current data was not accumulated, it will be sent below */
       m_opened = true;
     }
   }
