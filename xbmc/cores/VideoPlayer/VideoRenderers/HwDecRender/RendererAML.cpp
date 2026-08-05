@@ -21,6 +21,7 @@
 #include "utils/AMLUtils.h"
 #include "utils/ScreenshotAML.h"
 #include "utils/log.h"
+#include "platform/linux/SysfsPath.h"
 #include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
 
@@ -34,7 +35,7 @@ CRendererAML::CRendererAML()
 CRendererAML::~CRendererAML()
 {
   Reset();
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
+  CSysfsPath("/sys/class/amvecm/osd1_hdr_mode", 0);
 }
 
 CBaseRenderer* CRendererAML::Create(CVideoBuffer *buffer)
@@ -66,7 +67,8 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // Configure GUI/OSD for HDR PQ when display is in HDR PQ mode
+  // Configure GUI/OSD for HDR when display is in HDR mode
+  // Use kernel amvecm OSD1 HDR conversion instead of PQ shader
   bool device_support_dv(aml_support_dolby_vision());
   bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
   bool dv_is_used(device_support_dv && !user_dv_disable &&
@@ -76,7 +78,8 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   CLog::Log(LOGDEBUG, "CRendererAML::Configure {}DV support, {}, DV system is {}, HDR is {}", device_support_dv ? "" : "no ",
     user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled", hdr_is_used ? "used" : "not used");
 
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(dv_is_used | hdr_is_used);
+  // Enable kernel OSD1 SDR-to-HDR conversion when HDR content is active
+  CSysfsPath("/sys/class/amvecm/osd1_hdr_mode", dv_is_used | hdr_is_used ? 1 : 0);
 
   m_bConfigured = true;
 
