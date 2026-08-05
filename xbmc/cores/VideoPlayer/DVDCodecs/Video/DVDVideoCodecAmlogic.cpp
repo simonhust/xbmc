@@ -613,14 +613,38 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         {
           if (packet.isNoElEpMap && !packet.isMultiClip)
           {
-            /* Always feed the dual-queue for synchronization.
-             * Before 1s: single-queue handles output, dual-queue accumulates.
-             * At 1s: trim dual-queues to current DTS, drain single-queue,
-             *        switch output to dual-queue — seamless transition. */
+            /* Always feed the dual-queue for synchronization. */
             DualLayerAccumulate(packet);
 
-            if (!m_switched_to_dual && packet.dts >= DVD_TIME_BASE * 1.0)
+            if (packet.isDirectPair)
             {
+              /* Non-disc: direct dual-queue pairing, no 1s delay */
+              if (!m_switched_to_dual)
+              {
+                m_switched_to_dual = true;
+
+                while (!m_packages.empty())
+                {
+                  KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
+                  m_packages.pop_front();
+                }
+
+                auto trim_to = [](std::list<DLDemuxPacket> &q, double boundary) {
+                  while (!q.empty() && std::get<3>(q.front()) < boundary)
+                  {
+                    KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
+                    q.pop_front();
+                  }
+                };
+                trim_to(m_el_packages, packet.dts);
+                trim_to(m_bl_packages, packet.dts);
+
+                m_ready_to_pair = false;
+              }
+            }
+            else if (!m_switched_to_dual && packet.dts >= DVD_TIME_BASE * 1.0)
+            {
+              /* Blu-ray: switch at 1s boundary */
               m_switched_to_dual = true;
 
               while (!m_packages.empty())

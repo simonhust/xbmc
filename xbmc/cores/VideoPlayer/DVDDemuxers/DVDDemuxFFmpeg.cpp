@@ -1223,6 +1223,7 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
         pPacket->isELPackage = (stream->uniqueId > 0) ? m_dv_dual_stream : false;
         pPacket->isNoElEpMap = m_dv_no_el_epmap;
         pPacket->isMultiClip = m_dv_multi_clip;
+        pPacket->isDirectPair = m_dv_direct_pair;
       }
     }
     if (stream && m_pSSIF)
@@ -1783,6 +1784,7 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     // Non-Bluray dual-stream (e.g. standalone M2TS):
     // force dual-queue pairing (DTS-based) to handle EL offset
     m_dv_no_el_epmap = true;
+    m_dv_direct_pair = true;
   }
 }
 

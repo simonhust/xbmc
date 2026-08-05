@@ -30,6 +30,7 @@ extern "C"
       isELPackage = false;
       isNoElEpMap = false;
       isMultiClip = false;
+      isDirectPair = false;
       demuxerId = -1;
       iGroupId = -1;
       subtitlePlane = 0;
@@ -58,6 +59,8 @@ extern "C"
     bool isNoElEpMap;
     //! @brief Indicate the Blu-ray playlist has multiple clips.
     bool isMultiClip;
+    //! @brief Indicate non-Bluray dual-stream, use direct dual-queue pairing.
+    bool isDirectPair;
     /// @brief The 3D MVC subtitle plane
     int subtitlePlane;
   };
