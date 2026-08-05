@@ -810,12 +810,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
     if (!m_opened)
     {
-      if (m_resume_pair_count < 5 && pData && iSize > 0)
+      if (packet.m_seekTime != DVD_NOPTS_VALUE && m_resume_pair_count < 5 && pData && iSize > 0)
       {
-        /* Accumulate 5 BL+EL pairs before opening decoder to ensure
-         * the hardware decoder buffer is never starved on resume.
-         * This avoids the kernel pre_decode_buf_level wait (200KB)
-         * that causes 5-second frame intervals on DV FEL resume. */
+        /* Accumulate 5 BL+EL Convert outputs before opening decoder.
+         * Only active on dual-stream DV resume (seekTime != NOPTS).
+         * After 5 pairs, OpenDecoder and drain all 5 to the decoder
+         * so the hardware buffer is never starved. */
         uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
         if (buf)
         {
@@ -823,8 +823,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           m_resume_buffers.push_back({buf, iSize, packet.dts});
         }
         m_resume_pair_count++;
-        CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: accumulate pair {}/5 before OpenDecoder",
-                  __FUNCTION__, m_resume_pair_count);
+        CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: accumulate pair {}/5 (resume)", __FUNCTION__, m_resume_pair_count);
         pData = nullptr;
         iSize = 0;
         m_last_added = true;
@@ -841,18 +840,23 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       if (m_Codec && !m_Codec->OpenDecoder(m_hints, doviIsFEL))
         CLog::Log(LOGERROR, "CDVDVideoCodecAmlogic::{}: Failed to open Amlogic Codec", __FUNCTION__);
 
-      /* Drain all accumulated buffers to the decoder */
-      for (auto &buf : m_resume_buffers)
+      /* Drain all accumulated resume buffers to the decoder.
+       * This ensures the decoder gets 5 frames at once on resume,
+       * avoiding the starvation that causes 5-second frame intervals. */
+      if (!m_resume_buffers.empty())
       {
-        m_Codec->AddData(buf.data, buf.size, buf.dts, DVD_NOPTS_VALUE);
-        KODI::MEMORY::AlignedFree(buf.data);
+        CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: drain {} resume buffers to decoder", __FUNCTION__, m_resume_buffers.size());
+        for (auto &buf : m_resume_buffers)
+        {
+          m_Codec->AddData(buf.data, buf.size, buf.dts, DVD_NOPTS_VALUE);
+          KODI::MEMORY::AlignedFree(buf.data);
+        }
+        m_resume_buffers.clear();
+        m_resume_pair_count = 0;
       }
-      m_resume_buffers.clear();
-      m_resume_pair_count = 0;
 
       m_videoBufferPool = std::shared_ptr<CAMLVideoBufferPool>(new CAMLVideoBufferPool());
 
-      /* If current data was not accumulated, it will be sent below */
       m_opened = true;
     }
   }
