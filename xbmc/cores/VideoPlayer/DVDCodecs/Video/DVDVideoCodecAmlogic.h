@@ -122,4 +122,6 @@ private:
   uint8_t  *m_last_pData = nullptr;
   uint32_t  m_last_iSize = 0;
   double    m_last_dts = DVD_NOPTS_VALUE;
+  bool      m_dv_seek_filter_active = false;
+  double    m_dv_seek_time_seen = DVD_NOPTS_VALUE;
 };
