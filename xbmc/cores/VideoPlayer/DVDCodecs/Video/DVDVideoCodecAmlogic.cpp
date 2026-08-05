@@ -814,8 +814,8 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       {
         /* Accumulate 5 BL+EL Convert outputs before opening decoder.
          * Only active on dual-stream DV resume (seekTime != NOPTS).
-         * After 5 pairs, OpenDecoder and drain all 5 to the decoder
-         * so the hardware buffer is never starved. */
+         * After 5 pairs, the valve opens: queue starts draining
+         * one frame per AddData call to the decoder. */
         uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
         if (buf)
         {
@@ -840,24 +840,39 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       if (m_Codec && !m_Codec->OpenDecoder(m_hints, doviIsFEL))
         CLog::Log(LOGERROR, "CDVDVideoCodecAmlogic::{}: Failed to open Amlogic Codec", __FUNCTION__);
 
-      /* Drain all accumulated resume buffers to the decoder.
-       * This ensures the decoder gets 5 frames at once on resume,
-       * avoiding the starvation that causes 5-second frame intervals. */
-      if (!m_resume_buffers.empty())
-      {
-        CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: drain {} resume buffers to decoder", __FUNCTION__, m_resume_buffers.size());
-        for (auto &buf : m_resume_buffers)
-        {
-          m_Codec->AddData(buf.data, buf.size, buf.dts, DVD_NOPTS_VALUE);
-          KODI::MEMORY::AlignedFree(buf.data);
-        }
-        m_resume_buffers.clear();
-        m_resume_pair_count = 0;
-      }
-
       m_videoBufferPool = std::shared_ptr<CAMLVideoBufferPool>(new CAMLVideoBufferPool());
 
       m_opened = true;
+    }
+
+    /* Drain resume queue: one frame per AddData call, never dump all at once.
+     * The queue acts as a buffer so the decoder is never starved on resume. */
+    if (m_resume_pair_count >= 5 && !m_resume_buffers.empty())
+    {
+      auto &front = m_resume_buffers.front();
+      if (m_Codec->AddData(front.data, front.size, front.dts, DVD_NOPTS_VALUE))
+      {
+        KODI::MEMORY::AlignedFree(front.data);
+        m_resume_buffers.pop_front();
+        CLog::Log(LOGDEBUG, "CDVDVideoCodecAmlogic::{}: drain resume queue ({} left)", __FUNCTION__, m_resume_buffers.size());
+        if (m_resume_buffers.empty())
+          m_resume_pair_count = 0;
+      }
+    }
+
+    /* If resume accumulation is active, push current Convert output to queue
+     * instead of sending directly to the decoder below. */
+    if (m_resume_pair_count > 0 && pData && iSize > 0)
+    {
+      uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
+      if (buf)
+      {
+        memcpy(buf, pData, iSize);
+        m_resume_buffers.push_back({buf, iSize, packet.dts});
+      }
+      pData = nullptr;
+      iSize = 0;
+      m_last_added = true;
     }
   }
 
