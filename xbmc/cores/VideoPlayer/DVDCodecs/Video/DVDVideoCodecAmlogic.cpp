@@ -709,9 +709,16 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           else
           {
             /* EL has EP_map: use simple single-queue pairing */
-            /* Seek-time filter for single-clip: skip orphan packets with DTS
-             * before seek target. Inactive when seek target < 1s. */
-            if (!packet.isMultiClip && packet.m_seekTime >= DVD_TIME_BASE * 1.0 &&
+            /* Seek-time filter: active from seek until first BL+EL pair
+             * succeeds. Skip orphan packets with DTS before seek target. */
+            if (packet.m_seekTime != m_dv_seek_time_seen)
+            {
+              m_dv_seek_time_seen = packet.m_seekTime;
+              m_dv_seek_filter_active = (packet.m_seekTime != DVD_NOPTS_VALUE);
+            }
+
+            if (!packet.isMultiClip && m_dv_seek_filter_active &&
+                packet.m_seekTime >= DVD_TIME_BASE * 1.0 &&
                 packet.dts != DVD_NOPTS_VALUE)
             {
               double dts_val = packet.dts;
@@ -750,6 +757,8 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
             {
               KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
               m_packages.pop_front();
+              /* First BL+EL pair succeeded - disable seek filter */
+              m_dv_seek_filter_active = false;
             }
             else
             {
