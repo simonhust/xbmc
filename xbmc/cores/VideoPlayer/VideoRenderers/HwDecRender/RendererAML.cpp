@@ -67,14 +67,16 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // Configure GUI/OSD for HDR when display is in HDR mode
+  // Configure GUI/OSD for HDR when source content is HDR type
   // Use kernel amvecm OSD1 HDR conversion instead of PQ shader
   bool device_support_dv(aml_support_dolby_vision());
   bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
   bool dv_is_used(device_support_dv && !user_dv_disable &&
-    picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION && aml_display_support_dv());
-  bool hdr_is_used((picture.hdrType == StreamHdrType::HDR_TYPE_HLG || picture.color_transfer == AVCOL_TRC_SMPTE2084) &&
-    CServiceBroker::GetWinSystem()->IsHDRDisplay());
+    picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+  bool hdr_is_used(picture.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                   picture.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                   picture.hdrType == StreamHdrType::HDR_TYPE_HLG ||
+                   picture.color_transfer == AVCOL_TRC_SMPTE2084);
   CLog::Log(LOGDEBUG, "CRendererAML::Configure {}DV support, {}, DV system is {}, HDR is {}", device_support_dv ? "" : "no ",
     user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled", hdr_is_used ? "used" : "not used");
 
