@@ -595,7 +595,6 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
   uint32_t iSize(packet.iSize);
   bool doviIsFEL = false;
   bool IsHdr10Plus = false;
-  int data_added = false;
 
   if (pData)
   {
@@ -704,6 +703,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
               return true;
             }
+          }
           }
           else
           {
