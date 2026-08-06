@@ -10,6 +10,7 @@
 
 #include "DVDDemux.h"
 #include "DemuxStreamSSIF.h"
+#include "Interface/TimingConstants.h"
 #include "threads/CriticalSection.h"
 #include "threads/SystemClock.h"
 #include <map>
