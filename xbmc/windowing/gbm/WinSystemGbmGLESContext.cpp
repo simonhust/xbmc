@@ -203,7 +203,7 @@ bool CWinSystemGbmGLESContext::SetGuiCompositing(int colorTransfer)
     // When the GUI is composited for HDR PQ output, prevent the Amlogic
     // kernel OSD pipeline from applying a second color transformation
     // to the GUI plane (which would corrupt the PQ-encoded output).
-    CSysfsPath("/sys/module/am_vecm/parameters/osd_pq_bypass", 1);
+    CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
 
     if (!m_compositeShader)
     {
@@ -231,7 +231,7 @@ bool CWinSystemGbmGLESContext::SetGuiCompositing(int colorTransfer)
   else
   {
     // Restore kernel OSD color processing when returning to SDR mode.
-    CSysfsPath("/sys/module/am_vecm/parameters/osd_pq_bypass", 0);
+    CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
 
     m_guiFbo.Cleanup();
     m_guiFboWidth = 0;

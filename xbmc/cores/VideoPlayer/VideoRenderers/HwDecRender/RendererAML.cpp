@@ -35,7 +35,7 @@ CRendererAML::CRendererAML()
 CRendererAML::~CRendererAML()
 {
   Reset();
-  CSysfsPath("/sys/class/amvecm/osd1_hdr_mode", 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd1_hdr_mode", 0);
 }
 
 CBaseRenderer* CRendererAML::Create(CVideoBuffer *buffer)
@@ -79,7 +79,7 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
     user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled", hdr_is_used ? "used" : "not used");
 
   // Enable kernel OSD1 SDR-to-HDR conversion when HDR content is active
-  CSysfsPath("/sys/class/amvecm/osd1_hdr_mode", dv_is_used | hdr_is_used ? 1 : 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd1_hdr_mode", dv_is_used | hdr_is_used ? 1 : 0);
 
   m_bConfigured = true;
 
