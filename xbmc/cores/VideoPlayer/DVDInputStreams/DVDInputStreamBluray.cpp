@@ -1212,6 +1212,31 @@ bool CDVDInputStreamBluray::MouseClick(const CPoint &point)
   return false;
 }
 
+bool CDVDInputStreamBluray::SetActiveAudioStream(int streamIdx)
+{
+  if (m_bd == nullptr || !m_navmode)
+    return false;
+
+  CLog::Log(LOGDEBUG,
+            "CDVDInputStreamBluray::SetActiveAudioStream - select audio stream index {}",
+            streamIdx);
+  bd_select_stream(m_bd, BLURAY_AUDIO_STREAM, streamIdx, 1);
+  return true;
+}
+
+bool CDVDInputStreamBluray::SetActiveSubtitleStream(int streamIdx, bool enable)
+{
+  if (m_bd == nullptr || !m_navmode)
+    return false;
+
+  CLog::Log(LOGDEBUG,
+            "CDVDInputStreamBluray::SetActiveSubtitleStream - select subtitle stream index {}, "
+            "enable: {}",
+            streamIdx, enable);
+  bd_select_stream(m_bd, BLURAY_PG_TEXTST_STREAM, streamIdx, enable ? 1 : 0);
+  return true;
+}
+
 bool CDVDInputStreamBluray::OnMenu()
 {
   if(m_bd == nullptr || !m_navmode)

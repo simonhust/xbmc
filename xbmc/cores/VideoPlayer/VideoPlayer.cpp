@@ -3287,6 +3287,25 @@ void CVideoPlayer::HandleMessages()
             m_messenger.Put(std::make_shared<CDVDMsgPlayerSeek>(mode));
           }
         }
+        else if (m_pInputStream && m_pInputStream->IsStreamType(DVDSTREAM_TYPE_BLURAY))
+        {
+          // Blu-ray path: notify libbluray about the selection, then switch
+          // at the demuxer level. Without the libbluray call, BD-J may
+          // override the change via BD_EVENT_AUDIO_STREAM.
+          auto pStream = std::static_pointer_cast<CDVDInputStreamBluray>(m_pInputStream);
+          pStream->SetActiveAudioStream(pMsg2->GetStreamId() + 1);
+          CloseStream(m_CurrentAudio, false);
+          OpenStream(m_CurrentAudio, st.demuxerId, st.id, st.source);
+          AdaptForcedSubtitles();
+
+          CDVDMsgPlayerSeek::CMode mode;
+          mode.time = (int)GetUpdatedTime();
+          mode.backward = true;
+          mode.accurate = true;
+          mode.trickplay = true;
+          mode.sync = true;
+          m_messenger.Put(std::make_shared<CDVDMsgPlayerSeek>(mode));
+        }
         else
         {
           CloseStream(m_CurrentAudio, false);
@@ -3354,6 +3373,31 @@ void CVideoPlayer::HandleMessages()
           {
             m_dvd.iSelectedSPUStream = -1;
             CloseStream(m_CurrentSubtitle, false);
+          }
+        }
+        else if (m_pInputStream && m_pInputStream->IsStreamType(DVDSTREAM_TYPE_BLURAY))
+        {
+          // Blu-ray path: notify libbluray about the selection, then switch
+          // at the demuxer level. Without the libbluray call, BD-J may
+          // override the change via BD_EVENT_PG_TEXTST_STREAM.
+          auto pStream = std::static_pointer_cast<CDVDInputStreamBluray>(m_pInputStream);
+          pStream->SetActiveSubtitleStream(pMsg2->GetStreamId() + 1, true);
+          CloseStream(m_CurrentSubtitle, false);
+          OpenStream(m_CurrentSubtitle, st.demuxerId, st.id, st.source);
+
+          // For embedded subtitles the demuxer is ahead of playback (AV buffers
+          // are full), so the subtitle packets for the current playback time have
+          // already been read and discarded. Seek back to the current time so they
+          // get re-read, mirroring what audio stream switching does.
+          if (STREAM_SOURCE_MASK(st.source) == STREAM_SOURCE_DEMUX)
+          {
+            CDVDMsgPlayerSeek::CMode mode;
+            mode.time = static_cast<double>(GetUpdatedTime());
+            mode.backward = true;
+            mode.accurate = true;
+            mode.trickplay = true;
+            mode.sync = true;
+            m_messenger.Put(std::make_shared<CDVDMsgPlayerSeek>(mode));
           }
         }
         else

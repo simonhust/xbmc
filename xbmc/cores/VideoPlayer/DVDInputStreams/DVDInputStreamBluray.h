@@ -117,6 +117,8 @@ public:
   void UserInput(bd_vk_key_e vk);
   bool MouseMove(const CPoint &point);
   bool MouseClick(const CPoint &point);
+  bool SetActiveAudioStream(int streamIdx);
+  bool SetActiveSubtitleStream(int streamIdx, bool enable);
 
   int GetChapter() override;
   int GetChapterCount() override;
