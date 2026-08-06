@@ -49,6 +49,7 @@ public:
 
   int GetSeekSize() const;
   bool InProgress() const;
+  void SetFixedStep(int seconds);
 
   bool HasTimeCode() const { return m_timeCodePosition > 0; }
   int GetTimeCodeSeconds() const;
@@ -66,6 +67,8 @@ private:
   int GetSeekStepSize(SeekType type, int step);
 
   int m_seekDelay = 500;
+  int m_fixedStep = 0;
+  int m_seekAccumulated = 0;
   std::map<SeekType, int> m_seekDelays;
   bool m_requireSeek = false;
   bool m_seekChanged = false;

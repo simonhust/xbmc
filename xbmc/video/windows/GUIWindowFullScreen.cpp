@@ -29,6 +29,7 @@
 #include "settings/SettingsComponent.h"
 #include "utils/StringUtils.h"
 #include "video/ViewModeSettings.h"
+#include "dialogs/GUIDialogYesNo.h"
 #include "video/dialogs/GUIDialogFullScreenInfo.h"
 #include "video/dialogs/GUIDialogSubtitleSettings.h"
 #include "windowing/WinSystem.h"
@@ -85,6 +86,11 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
   switch (action.GetID())
   {
   case ACTION_SHOW_OSD:
+    if (appPlayer->IsInMenu())
+    {
+      appPlayer->OnAction(CAction(ACTION_SHOW_VIDEOMENU));
+      return true;
+    }
     ToggleOSD();
     return true;
 
@@ -171,6 +177,32 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
         appPlayer->AddSubtitle(path);
       return true;
     }
+  case ACTION_FORWARD:
+    if (appPlayer->IsInMenu())
+    {
+      InitiateSeek(true);
+      return true;
+    }
+    break;
+
+  case ACTION_REWIND:
+    if (appPlayer->IsInMenu())
+    {
+      InitiateSeek(false);
+      return true;
+    }
+    break;
+
+  case ACTION_NAV_BACK:
+    if (appPlayer->IsInMenu())
+    {
+      if (CGUIDialogYesNo::ShowAndGetInput(CVariant{""}, CVariant{"Do you want to quit this video?"}))
+      {
+        g_application.StopPlaying();
+      }
+      return true;
+    }
+    break;
   default:
       break;
   }
@@ -453,6 +485,16 @@ void CGUIWindowFullScreen::TriggerOSD()
       pOSD->SetAutoClose(3000);
     pOSD->Open();
   }
+}
+
+void CGUIWindowFullScreen::InitiateSeek(bool forward)
+{
+  auto& components = CServiceBroker::GetAppComponents();
+  const auto appPlayer = components.GetComponent<CApplicationPlayer>();
+
+  // Limit step to 10s per press in menu mode, no step progression
+  appPlayer->GetSeekHandler().SetFixedStep(10);
+  appPlayer->GetSeekHandler().Seek(forward, 0, 0, false);
 }
 
 bool CGUIWindowFullScreen::HasVisibleControls()

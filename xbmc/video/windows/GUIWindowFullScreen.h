@@ -37,6 +37,7 @@ private:
   void ToggleOSD();
   void TriggerOSD();
   CGUIDialog *GetOSD();
+  void InitiateSeek(bool forward);
 
   bool m_viewModeChanged;
   std::chrono::time_point<std::chrono::steady_clock> m_dwShowViewModeTimeout;

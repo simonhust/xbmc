@@ -83,6 +83,8 @@ void CSeekHandler::Reset()
   m_analogSeek = false;
   m_seekStep = 0;
   m_seekSize = 0;
+  m_fixedStep = 0;
+  m_seekAccumulated = 0;
   m_timeCodePosition = 0;
 }
 
@@ -90,6 +92,9 @@ int CSeekHandler::GetSeekStepSize(SeekType type, int step)
 {
   if (step == 0)
     return 0;
+
+  if (m_fixedStep != 0)
+    return step > 0 ? m_fixedStep : -m_fixedStep;
 
   const std::vector<int>& seekSteps(step > 0 ? m_forwardSeekSteps.at(type)
                                              : m_backwardSeekSteps.at(type));
@@ -153,16 +158,24 @@ void CSeekHandler::Seek(bool forward, float amount, float duration /* = 0 */, bo
   }
   else
   {
-    m_seekStep += forward ? 1 : -1;
-    const int seekSeconds = GetSeekStepSize(type, m_seekStep);
-    if (seekSeconds != 0)
+    if (m_fixedStep != 0)
     {
-      SetSeekSize(seekSeconds);
+      m_seekAccumulated += forward ? m_fixedStep : -m_fixedStep;
+      SetSeekSize(m_seekAccumulated);
     }
     else
     {
-      // nothing to do, abort seeking
-      Reset();
+      m_seekStep += forward ? 1 : -1;
+      const int seekSeconds = GetSeekStepSize(type, m_seekStep);
+      if (seekSeconds != 0)
+      {
+        SetSeekSize(seekSeconds);
+      }
+      else
+      {
+        // nothing to do, abort seeking
+        Reset();
+      }
     }
   }
   m_seekChanged = true;
@@ -189,6 +202,11 @@ void CSeekHandler::SeekSeconds(int seconds)
 int CSeekHandler::GetSeekSize() const
 {
   return MathUtils::round_int(m_seekSize);
+}
+
+void CSeekHandler::SetFixedStep(int seconds)
+{
+  m_fixedStep = seconds;
 }
 
 void CSeekHandler::SetSeekSize(double seekSize)
