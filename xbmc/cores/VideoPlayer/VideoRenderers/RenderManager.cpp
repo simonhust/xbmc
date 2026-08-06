@@ -841,6 +841,12 @@ bool CRenderManager::IsGuiLayer()
   return false;
 }
 
+/* Render HDR PGS overlays deferred from the FBO composite pass */
+void CRenderManager::RenderDeferredPGS()
+{
+  m_overlays.RenderDeferred();
+}
+
 /* simple present method */
 void CRenderManager::PresentSingle(bool clear, DWORD flags, DWORD alpha)
 {

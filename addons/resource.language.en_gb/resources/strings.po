@@ -24739,7 +24739,49 @@ msgctxt "#39210"
 msgid "If enabled, Dolby Vision files will have level 5 (active area) metadata overridden to zero offsets. Enable if your display has issues with incorrectly cropped image in Dolby Vision playback."
 msgstr ""
 
-#empty strings from id 39211 to 39899
+#. Label for HDR subtitle settings group
+#: system/settings/settings.xml
+msgctxt "#39211"
+msgid "HDR subtitle"
+msgstr ""
+
+#. Label for setting "HDR PGS subtitle luminance" of label #39211
+#: system/settings/settings.xml
+msgctxt "#39212"
+msgid "HDR PGS subtitle luminance"
+msgstr ""
+
+#. Help text for setting "HDR PGS subtitle luminance" of label #39211
+#: system/settings/settings.xml
+msgctxt "#39213"
+msgid "Adjusts brightness for HDR-authored PGS subtitles (BT.2020/PQ). 50% keeps source luminance unchanged."
+msgstr ""
+
+#. Label for setting "HDR PGS subtitle saturation" of label #39211
+#: system/settings/settings.xml
+msgctxt "#39214"
+msgid "HDR PGS subtitle saturation"
+msgstr ""
+
+#. Help text for setting "HDR PGS subtitle saturation" of label #39211
+#: system/settings/settings.xml
+msgctxt "#39215"
+msgid "Adjusts color intensity for HDR-authored PGS subtitles (BT.2020/PQ). 50% keeps source saturation unchanged."
+msgstr ""
+
+#. Label for setting "GUI saturation in HDR mode" of label #39211
+#: system/settings/settings.xml
+msgctxt "#39216"
+msgid "GUI saturation boost in HDR PQ mode"
+msgstr ""
+
+#. Help text for setting "GUI saturation in HDR mode" of label #39211
+#: system/settings/settings.xml
+msgctxt "#39217"
+msgid "Adjusts colour saturation for SDR GUI elements while the display is in HDR PQ mode (OSD, subtitles and other graphics). Does not affect HDR-authored PGS subtitles."
+msgstr ""
+
+#empty strings from id 39218 to 39899
 
 #. List formatting: pattern used to join a list of exactly two items, e.g. "A and B"
 #. STR_LIST_AND_TWO

@@ -347,3 +347,12 @@ float CWinSystemAndroid::GetGuiSdrPeakLuminance() const
 
   return ((0.7f * guiSdrPeak + 30.0f) / 100.0f);
 }
+
+float CWinSystemAndroid::GetGuiSdrSaturation() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int guiSdrSaturation = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRSATURATION);
+
+  // 0..100 UI range where 50 is neutral. Map to 0..2 scale used by shader.
+  return (static_cast<float>(guiSdrSaturation) / 50.0f);
+}

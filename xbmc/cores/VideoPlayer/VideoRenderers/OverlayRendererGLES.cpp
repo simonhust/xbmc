@@ -23,6 +23,7 @@
 #include "utils/GLUtils.h"
 #include "utils/MathUtils.h"
 #include "utils/log.h"
+#include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
 
 #include <cmath>
@@ -33,6 +34,25 @@
 #define USE_PREMULTIPLIED_ALPHA 1
 
 using namespace OVERLAY;
+
+namespace
+{
+ShaderMethodGLES GetOverlayTextureShaderMethod(bool isHdrPqAuthored)
+{
+  if (!isHdrPqAuthored)
+    return ShaderMethodGLES::SM_TEXTURE_NOBLEND;
+
+  // Use the HDR PGS PQ output shader when the output is in the PQ domain:
+  // either per-element KODI_TRANSFER_PQ mode (IsTransferPQ) or FBO
+  // composite mode (IsHdrComposite). During composite the PGS overlay
+  // is skipped by CRenderer::Render; after CompositeGui() the backbuffer
+  // is in the PQ domain and this shader will render correctly.
+  return CServiceBroker::GetWinSystem()->GetGfxContext().IsTransferPQ() ||
+                 CServiceBroker::GetWinSystem()->IsHdrComposite()
+             ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_HDR_PGS_PQ_OUTPUT
+             : ShaderMethodGLES::SM_TEXTURE_NOBLEND;
+}
+} // namespace
 
 static void LoadTexture(GLenum target,
                         GLsizei width,
@@ -166,6 +186,11 @@ COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSour
     convert_rgba(o, m_pma, rgba);
     LoadTexture(GL_TEXTURE_2D, o.width, o.height, o.width * 4, &m_u, &m_v, false, rgba.data());
   }
+
+  // If the overlay is already authored as HDR PQ code values (e.g. UHD-BD PGS HDR subtitles),
+  // we can bypass the GUI shader's SDR->PQ transfer stage during composition.
+  // The final bypass decision is made at render time based on current output state.
+  m_isHdrPqAuthored = o.m_isHdrPq;
 
   glBindTexture(GL_TEXTURE_2D, 0);
 
@@ -459,7 +484,7 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_NOBLEND);
+  renderSystem->EnableGUIShader(GetOverlayTextureShaderMethod(m_isHdrPqAuthored));
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();
   GLint depthLoc = renderSystem->GUIShaderGetDepth();

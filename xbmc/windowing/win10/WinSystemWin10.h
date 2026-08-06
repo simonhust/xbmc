@@ -83,6 +83,7 @@ public:
   std::string GetClipboardText() override;
   bool UseLimitedColor() override;
   float GetGuiSdrPeakLuminance() const override;
+  float GetGuiSdrSaturation() const override;
   bool HasSystemSdrPeakLuminance() override;
 
   // videosync

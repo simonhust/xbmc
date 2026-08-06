@@ -4240,6 +4240,7 @@ bool CVideoPlayer::OpenStream(CCurrentStream& current, int64_t demuxerId, int iS
       }
       break;
     case StreamType::SUBTITLE:
+      hint.hdrType = m_CurrentVideo.hint.hdrType; // Set by Video Stream which is opened first
       res = OpenSubtitleStream(hint);
       break;
     case StreamType::TELETEXT:
@@ -5807,6 +5808,11 @@ void CVideoPlayer::Render(bool clear, uint32_t alpha, bool gui)
 void CVideoPlayer::FlushRenderer()
 {
   m_renderManager.Flush(true, true);
+}
+
+void CVideoPlayer::RenderDeferredPGS()
+{
+  m_renderManager.RenderDeferredPGS();
 }
 
 void CVideoPlayer::SetRenderViewMode(int mode, float zoom, float par, float shift, bool stretch)

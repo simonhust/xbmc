@@ -1014,6 +1014,17 @@ void CApplicationPlayer::RenderCaptureRelease(unsigned int captureId)
     player->RenderCaptureRelease(captureId);
 }
 
+void CApplicationPlayer::RenderDeferredPGS()
+{
+  std::shared_ptr<IPlayer> player = GetInternal();
+  if (player)
+  {
+    CVideoPlayer* vp = dynamic_cast<CVideoPlayer*>(player.get());
+    if (vp)
+      vp->RenderDeferredPGS();
+  }
+}
+
 bool CApplicationPlayer::RenderCaptureGetPixels(unsigned int captureId, unsigned int millis, uint8_t *buffer, unsigned int size)
 {
   std::shared_ptr<IPlayer> player = GetInternal();

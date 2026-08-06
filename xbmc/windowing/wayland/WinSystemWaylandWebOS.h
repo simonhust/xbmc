@@ -51,6 +51,7 @@ public:
   void UpdateResolutions() override;
 
   float GetGuiSdrPeakLuminance() const override;
+  float GetGuiSdrSaturation() const override;
   bool IsHDRDisplay() override;
 
 protected:

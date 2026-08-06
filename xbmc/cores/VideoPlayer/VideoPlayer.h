@@ -361,6 +361,12 @@ public:
   void Render(bool clear, uint32_t alpha = 255, bool gui = true) override;
   void FlushRenderer() override;
   void SetRenderViewMode(int mode, float zoom, float par, float shift, bool stretch) override;
+
+  /*!
+   * \brief Render HDR PGS overlays deferred from the FBO composite pass.
+   * The backbuffer is in the PQ domain; PGS subtitles are drawn directly.
+   */
+  void RenderDeferredPGS();
   float GetRenderAspectRatio() const override;
   void GetRects(CRect& source, CRect& dest, CRect& view) const override;
   unsigned int GetOrientation() const override;

@@ -33,11 +33,13 @@ public:
   ~COverlayTextureGLES() override;
 
   void Render(SRenderState& state) override;
+  bool IsHdrPqAuthored() const override { return m_isHdrPqAuthored; }
 
   GLuint m_texture = 0;
   float m_u;
   float m_v;
   bool m_pma; /*< is alpha in texture premultiplied in the values */
+  bool m_isHdrPqAuthored{false};
 };
 
 class COverlayGlyphGLES : public COverlay

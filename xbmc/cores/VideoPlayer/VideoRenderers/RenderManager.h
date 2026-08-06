@@ -112,6 +112,13 @@ public:
    */
   bool HasVisibleOverlay() const { return m_overlays.HasVisibleOverlay(m_presentsource); }
 
+  /*!
+   * \brief Render HDR PGS overlays that were deferred during the FBO
+   * composite pass. Must be called after CompositeGui() when the
+   * backbuffer is in the PQ domain.
+   */
+  void RenderDeferredPGS();
+
   /**
    * If player uses buffering it has to wait for a buffer before it calls
    * AddVideoPicture and AddOverlay. It waits for max 50 ms before it returns -1

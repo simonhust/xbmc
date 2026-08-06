@@ -690,6 +690,19 @@ float CWinSystemWin10::GetGuiSdrPeakLuminance() const
 }
 
 /*!
+ * \brief GUI SDR saturation boost in HDR mode.
+ * \return 0..2 scale where 1.0 is neutral (no change).
+ */
+float CWinSystemWin10::GetGuiSdrSaturation() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int guiSdrSaturation = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRSATURATION);
+
+  // 0..100 UI range where 50 is neutral. Map to 0..2 scale used by shader.
+  return (static_cast<float>(guiSdrSaturation) / 50.0f);
+}
+
+/*!
  * \brief Test support of the OS for a SDR max luminance in HDR mode setting
  * \return true when the OS supports that setting, false otherwise
 */
