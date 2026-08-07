@@ -20,11 +20,7 @@
 
 #version 100
 
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
+precision mediump float
 uniform sampler2D m_samp0;
 uniform lowp vec4 m_unicol;
 varying vec4 m_cord0;

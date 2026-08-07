@@ -20,11 +20,7 @@
 
 #version 100
 
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
+precision mediump float
 uniform lowp vec4 m_unicol;
 uniform float m_sdrPeak;
 uniform float m_sdrSaturation;
