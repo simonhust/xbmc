@@ -98,7 +98,6 @@ void CRenderer::Flush()
     Release(buffer);
 
   ReleaseCache();
-  m_deferredPGS.clear();
   Reset();
 }
 
@@ -150,10 +149,6 @@ void CRenderer::ReleaseUnused()
 void CRenderer::Render(int idx, float depth)
 {
   std::unique_lock lock(m_section);
-
-  // Clear any deferred HDR PGS overlays left over from the previous frame
-  // (e.g. when FBO compositing was toggled off mid-stream).
-  m_deferredPGS.clear();
 
   std::vector<SElement>& list = m_buffers[idx];
   for(std::vector<SElement>::iterator it = list.begin(); it != list.end(); ++it)
@@ -256,15 +251,6 @@ void CRenderer::Render(COverlay* o)
 
   state.x += GetStereoscopicDepth(o->m_pgsSubtitle, o->m_3dSubtitleDepth);
 
-  // If the overlay is HDR PQ-authored (e.g. UHD-BD PGS) and FBO compositing
-  // is active, defer rendering to after CompositeGui() so the overlay is
-  // drawn directly into the PQ backbuffer instead of the sRGB FBO.
-  if (o->IsHdrPqAuthored() && CServiceBroker::GetWinSystem()->IsHdrComposite())
-  {
-    m_deferredPGS.push_back({o, state});
-    return;
-  }
-
   o->Render(state);
 }
 
@@ -297,18 +283,6 @@ bool CRenderer::HasVisibleOverlay(int idx) const
     }
   }
   return false;
-}
-
-void CRenderer::RenderDeferred()
-{
-  std::unique_lock lock(m_section);
-
-  for (auto& d : m_deferredPGS)
-  {
-    if (d.overlay)
-      d.overlay->Render(d.state);
-  }
-  m_deferredPGS.clear();
 }
 
 void CRenderer::SetVideoRect(CRect &source, CRect &dest, CRect &view)

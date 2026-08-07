@@ -75,12 +75,6 @@ public:
   bool IsRemotePlaying() const;
 
   /*!
-   * \brief Render HDR PGS overlays that were deferred during the FBO
-   * composite pass. Must be called after CompositeGui().
-   */
-  void RenderDeferredPGS();
-
-  /*!
    * \brief Get the name of the player in use
    * \return the player name if a player is active, otherwise it returns an empty string
    */

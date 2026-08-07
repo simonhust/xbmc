@@ -121,14 +121,6 @@ namespace OVERLAY {
     virtual void Render(int idx, float depth = 0.0f);
 
     /*!
-     * \brief Render HDR PGS overlays that were deferred during the
-     * normal GUI render pass (because FBO composite was active).
-     * Must be called after CompositeGui() when the backbuffer is
-     * in the PQ domain.
-     */
-    void RenderDeferred();
-
-    /*!
      * \brief Pre-walk hook: render libass output for the present slot.
      *  Called once per frame on the GUI/main thread before the GUI walk-skip
      *  decision. Caches the ASS_Image* and detect_change flag on each
@@ -203,13 +195,6 @@ namespace OVERLAY {
     };
 
     void Render(COverlay* o);
-    // Deferred HDR PGS overlay: overlay pointer + its render state
-    struct DeferredPGS
-    {
-      COverlay* overlay;
-      SRenderState state;
-    };
-    std::vector<DeferredPGS> m_deferredPGS;
 
     std::shared_ptr<COverlay> Convert(SElement& e);
     // Build a COverlay (cached or freshly created) from the libass output

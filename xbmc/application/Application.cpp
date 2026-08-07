@@ -885,12 +885,6 @@ void CApplication::Render()
   {
     CServiceBroker::GetWinSystem()->EndGuiComposite();
     CServiceBroker::GetWinSystem()->CompositeGui();
-
-    // Render HDR PGS subtitles deferred from the FBO composite pass.
-    // After CompositeGui the backbuffer is in the PQ domain, so HDR
-    // PQ-authored subtitles can be drawn directly with the PQ shader,
-    // bypassing the sRGB→PQ conversion that would corrupt them.
-    appPlayer->RenderDeferredPGS();
   }
 
   CServiceBroker::GetRenderSystem()->EndRender();

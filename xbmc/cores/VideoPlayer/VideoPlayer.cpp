@@ -5810,11 +5810,6 @@ void CVideoPlayer::FlushRenderer()
   m_renderManager.Flush(true, true);
 }
 
-void CVideoPlayer::RenderDeferredPGS()
-{
-  m_renderManager.RenderDeferredPGS();
-}
-
 void CVideoPlayer::SetRenderViewMode(int mode, float zoom, float par, float shift, bool stretch)
 {
   m_processInfo->GetVideoSettingsLocked().SetViewMode(mode, zoom, par, shift, stretch);
