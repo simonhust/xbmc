@@ -913,15 +913,20 @@ void CVideoPlayerAudio::ConfigureLavAudioSync()
   if (!passthroughCodec)
     return;
 
-  // LAV Audio is always on in this build, but its internal-clock model is not
-  // appropriate for realtime/live streams (e.g. live PVR): those keep stock
-  // passthrough behavior.
-  const bool enable = !m_processInfo.IsRealtimeStream();
-  passthroughCodec->SetLavStyleSyncEnabled(enable);
-  if (!enable)
+  // Realtime/live streams keep NONE (stock passthrough behavior).
+  // Non-realtime streams use FULL (internal-clock retiming + jitter tracking).
+  // SB mode (seamless branch only, no internal clock) can be set via the
+  // codec's SetLavStyleSyncMode() if needed.
+  bool isRealtime = m_processInfo.IsRealtimeStream();
+  auto mode = isRealtime ? CDVDAudioCodecPassthrough::LavSyncMode::NONE
+                         : CDVDAudioCodecPassthrough::LavSyncMode::FULL;
+  passthroughCodec->SetLavStyleSyncMode(mode);
+
+  if (mode == CDVDAudioCodecPassthrough::LavSyncMode::NONE)
     return;
 
-  CLog::LogF(LOGDEBUG, "LAV Audio passthrough internal-clock retiming active");
+  CLog::LogF(LOGDEBUG, "LAV Audio passthrough sync mode: {}",
+             mode == CDVDAudioCodecPassthrough::LavSyncMode::FULL ? "FULL" : "SB");
 
   // If the codec is (re)created while playback is already in sync (e.g. a
   // display reset that flips passthrough), rebase its internal clock to the

@@ -60,11 +60,11 @@ CDVDAudioCodecPassthrough::~CDVDAudioCodecPassthrough(void)
   Dispose();
 }
 
-void CDVDAudioCodecPassthrough::SetLavStyleSyncEnabled(bool enabled)
+void CDVDAudioCodecPassthrough::SetLavStyleSyncMode(LavSyncMode mode)
 {
   // The MAT packer runs its seamless-branch handling unconditionally; this flag
-  // only gates the codec's internal-clock retiming (kept off for realtime/PVR).
-  m_lavStyleSyncEnabled = enabled;
+  // only gates the codec's PTS validation / internal-clock retiming.
+  m_lavSyncMode = mode;
 }
 
 bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
@@ -118,7 +118,7 @@ bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &op
   m_bufferSize = 0;
   m_backlogSize = 0;
 
-  if (m_lavStyleSyncEnabled)
+  if (m_lavSyncMode != LavSyncMode::NONE)
   {
     m_currentPts = LOCAL_NOPTS;
     m_nextPts = LOCAL_NOPTS;
@@ -164,7 +164,7 @@ bool CDVDAudioCodecPassthrough::AddData(const DemuxPacket &packet)
   unsigned char *pData(const_cast<uint8_t*>(packet.pData));
   int iSize(packet.iSize);
 
-  if (m_lavStyleSyncEnabled)
+  if (m_lavSyncMode != LavSyncMode::NONE)
   {
     // LAV Audio: validate PTS with the robust range check so seamless-branch
     // garbage does not poison the internal clock.
@@ -281,7 +281,7 @@ bool CDVDAudioCodecPassthrough::AddData(const DemuxPacket &packet)
     }
     else // IEC
     {
-      if (m_lavStyleSyncEnabled)
+      if (m_lavSyncMode != LavSyncMode::NONE)
       {
         if (!m_truehdPtsCacheValid && IsValidPts(m_currentPts))
         {
@@ -295,7 +295,7 @@ bool CDVDAudioCodecPassthrough::AddData(const DemuxPacket &packet)
         m_trueHDBuffer = m_packerMAT->GetOutputFrame();
         m_dataSize = TRUEHD_BUF_SIZE;
 
-        if (m_lavStyleSyncEnabled)
+        if (m_lavSyncMode != LavSyncMode::NONE)
         {
           (void)m_packerMAT->HadDiscontinuity();
 
@@ -352,15 +352,24 @@ void CDVDAudioCodecPassthrough::GetData(DVDAudioFrame &frame)
   frame.bits_per_sample = 8;
   frame.duration = DVD_MSEC_TO_TIME(frame.format.m_streamInfo.GetDuration());
 
-  if (!m_lavStyleSyncEnabled)
+  if (m_lavSyncMode == LavSyncMode::NONE)
   {
     frame.pts = m_currentPts;
     m_currentPts = DVD_NOPTS_VALUE;
     return;
   }
 
+  if (m_lavSyncMode == LavSyncMode::SB)
+  {
+    // Seamless-branch mode: stock PTS output, but with the validated
+    // LOCAL_NOPTS sentinel (no internal-clock retiming).
+    frame.pts = m_currentPts;
+    m_currentPts = LOCAL_NOPTS;
+    return;
+  }
+
   //============================================================================
-  // LAV Audio internal-clock A/V sync
+  // FULL mode: LAV Audio internal-clock A/V sync
   //
   // We maintain our own internal clock, synced to the RESYNC PTS from
   // VideoPlayer (the coordinated A/V clock). We output PTS from that clock, not
@@ -453,7 +462,7 @@ void CDVDAudioCodecPassthrough::Reset()
   m_backlogSize = 0;
   m_parser.Reset();
 
-  if (m_lavStyleSyncEnabled)
+  if (m_lavSyncMode != LavSyncMode::NONE)
   {
     m_currentPts = LOCAL_NOPTS;
     m_nextPts = LOCAL_NOPTS;
@@ -477,7 +486,7 @@ void CDVDAudioCodecPassthrough::Reset()
 
 void CDVDAudioCodecPassthrough::ResetLavSyncState()
 {
-  if (!m_lavStyleSyncEnabled)
+  if (m_lavSyncMode != LavSyncMode::FULL)
     return;
 
   m_truehdPtsCache = LOCAL_NOPTS;
@@ -491,7 +500,7 @@ void CDVDAudioCodecPassthrough::ResetLavSyncState()
 
 void CDVDAudioCodecPassthrough::SyncToResyncPts(double pts)
 {
-  if (!m_lavStyleSyncEnabled)
+  if (m_lavSyncMode != LavSyncMode::FULL)
     return;
 
   if (IsValidPts(pts))
