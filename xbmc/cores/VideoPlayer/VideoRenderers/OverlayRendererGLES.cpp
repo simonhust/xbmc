@@ -47,10 +47,14 @@ ShaderMethodGLES GetOverlayTextureShaderMethod(bool isHdrPqAuthored)
   // composite mode (IsHdrComposite). During composite the PGS overlay
   // is skipped by CRenderer::Render; after CompositeGui() the backbuffer
   // is in the PQ domain and this shader will render correctly.
-  return CServiceBroker::GetWinSystem()->GetGfxContext().IsTransferPQ() ||
-                 CServiceBroker::GetWinSystem()->IsHdrComposite()
-             ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_HDR_PGS_PQ_OUTPUT
-             : ShaderMethodGLES::SM_TEXTURE_NOBLEND;
+  if (CServiceBroker::GetWinSystem()->GetGfxContext().IsTransferPQ() ||
+      CServiceBroker::GetWinSystem()->IsHdrComposite())
+    return ShaderMethodGLES::SM_TEXTURE_NOBLEND_HDR_PGS_PQ_OUTPUT;
+
+  // SDR output: no special processing needed. libbluray PGS is already
+  // sRGB (build_rgba converts YCbCr→RGB). FFmpeg PGS raw values are
+  // directly used as sRGB — slightly dim but acceptable.
+  return ShaderMethodGLES::SM_TEXTURE_NOBLEND;
 }
 } // namespace
 
