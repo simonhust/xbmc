@@ -913,13 +913,17 @@ void CVideoPlayerAudio::ConfigureLavAudioSync()
   if (!passthroughCodec)
     return;
 
-  // Realtime/live streams keep NONE (stock passthrough behavior).
-  // Non-realtime streams use FULL (internal-clock retiming + jitter tracking).
-  // SB mode (seamless branch only, no internal clock) can be set via the
-  // codec's SetLavStyleSyncMode() if needed.
-  bool isRealtime = m_processInfo.IsRealtimeStream();
-  auto mode = isRealtime ? CDVDAudioCodecPassthrough::LavSyncMode::NONE
-                         : CDVDAudioCodecPassthrough::LavSyncMode::FULL;
+  // Realtime/live streams always use NONE (stock passthrough behavior).
+  // Non-realtime streams use the user-selected mode from
+  // Settings -> System -> Audio -> A/V sync passthrough mode.
+  auto mode = CDVDAudioCodecPassthrough::LavSyncMode::NONE;
+  if (!m_processInfo.IsRealtimeStream())
+  {
+    int setting = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+        CSettings::SETTING_AUDIOOUTPUT_AVSYNCPASSTHROUGH);
+    mode = static_cast<CDVDAudioCodecPassthrough::LavSyncMode>(
+        std::clamp(setting, 0, static_cast<int>(CDVDAudioCodecPassthrough::LavSyncMode::FULL)));
+  }
   passthroughCodec->SetLavStyleSyncMode(mode);
 
   if (mode == CDVDAudioCodecPassthrough::LavSyncMode::NONE)

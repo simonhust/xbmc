@@ -3332,6 +3332,18 @@
           <default>true</default>
           <control type="toggle" />
         </setting>
+        <setting id="audiooutput.avsyncpassthrough" type="integer" label="40803" help="40804">
+          <level>2</level>
+          <default>2</default>
+          <constraints>
+            <options>
+              <option label="231">0</option> <!-- NONE -->
+              <option label="40805">1</option> <!-- SB -->
+              <option label="40806">2</option> <!-- FULL -->
+            </options>
+          </constraints>
+          <control type="list" format="string" />
+        </setting>
         <setting id="audiooutput.boostcenter" type="integer" label="38007" help="38008">
           <level>2</level>
           <default>0</default>

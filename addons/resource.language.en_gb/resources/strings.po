@@ -25321,3 +25321,27 @@ msgstr ""
 msgctxt "#40802"
 msgid "If enabled, a confirmation dialog will be displayed when files shall be deleted. If disabled, files will be deleted without user confirmation."
 msgstr ""
+
+#. Label for A/V sync passthrough mode setting
+#: system/settings/settings.xml
+msgctxt "#40803"
+msgid "A/V sync passthrough mode"
+msgstr ""
+
+#. Description of setting with label #40803 "A/V sync passthrough mode"
+#: system/settings/settings.xml
+msgctxt "#40804"
+msgid "Select the audio/video sync mode for passthrough audio. NONE: stock Kodi passthrough. SB: seamless branch handling only (PTS validation). FULL: internal-clock retiming with jitter tracking (recommended)."
+msgstr ""
+
+#. Option label for #40803 "A/V sync passthrough mode" - SB mode
+#: system/settings/settings.xml
+msgctxt "#40805"
+msgid "Seamless branch"
+msgstr ""
+
+#. Option label for #40803 "A/V sync passthrough mode" - FULL mode
+#: system/settings/settings.xml
+msgctxt "#40806"
+msgid "Full sync"
+msgstr ""
