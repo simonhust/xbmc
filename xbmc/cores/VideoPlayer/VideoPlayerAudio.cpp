@@ -338,7 +338,8 @@ void CVideoPlayerAudio::Process()
                 pts / DVD_TIME_BASE, delay / DVD_TIME_BASE, m_audioPacketBuffer.size());
 
       /* Trim buffered audio packets: drop packets with PTS < video PTS.
-       * This ensures audio starts from the same position as video. */
+       * This ensures audio starts from the same position as video.
+       * Only for single-clip (buffer was populated when isMultiClip=false). */
       if (!m_audioPacketBuffer.empty())
       {
         int dropped = 0;
@@ -483,8 +484,11 @@ void CVideoPlayerAudio::Process()
 
       /* Buffer audio packets until video PTS is known (GENERAL_RESYNC).
        * This allows trimming packets with PTS < video PTS to avoid
-       * audio playing ahead of the first decoded video frame. */
-      if (!m_videoPtsKnown)
+       * audio playing ahead of the first decoded video frame.
+       * Only for single-clip Blu-ray (isMultiClip=false).
+       * Multi-clip (seamless branch) may have PTS wrapping between
+       * clips, so trimming by PTS would drop the wrong packets. */
+      if (!m_videoPtsKnown && !pPacket->isMultiClip)
       {
         m_audioPacketBuffer.push_back(pMsg);
         continue;
