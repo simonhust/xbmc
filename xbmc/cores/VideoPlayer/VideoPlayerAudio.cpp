@@ -330,22 +330,50 @@ void CVideoPlayerAudio::Process()
     { //player asked us to set internal clock
       double pts = std::static_pointer_cast<CDVDMsgDouble>(pMsg)->m_value;
       double delay = m_audioSink.GetDelay();
-      double audioPts = m_audioSink.GetPlayingPts();
 
-      CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - CDVDMsg::GENERAL_RESYNC({:.3f} delay:{:.3f} audioPts:{:.3f}",
-                pts / DVD_TIME_BASE, delay / DVD_TIME_BASE,
-                audioPts != DVD_NOPTS_VALUE ? audioPts / DVD_TIME_BASE : -1.0);
+      m_videoPts = pts;
+      m_videoPtsKnown = true;
 
-      /* Set audio clock to max(videoPts, audioPts) + delay.
-       * - If audio is ahead (audioPts < pts): clock = pts + delay,
-       *   audio frames will play late (caught up to video).
-       * - If video is ahead (audioPts > pts): clock = audioPts + delay,
-       *   audio frames play at their natural PTS timing.
-       * No flush needed - AE engine handles late frames automatically. */
-      double refPts = pts;
-      if (audioPts != DVD_NOPTS_VALUE && audioPts > pts)
-        refPts = audioPts;
-      m_audioClock = refPts + delay;
+      CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - CDVDMsg::GENERAL_RESYNC({:.3f} delay:{:.3f} buffer:{}",
+                pts / DVD_TIME_BASE, delay / DVD_TIME_BASE, m_audioPacketBuffer.size());
+
+      /* Trim buffered audio packets: drop packets with PTS < video PTS.
+       * This ensures audio starts from the same position as video. */
+      if (!m_audioPacketBuffer.empty())
+      {
+        int dropped = 0;
+        auto it = m_audioPacketBuffer.begin();
+        while (it != m_audioPacketBuffer.end())
+        {
+          DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
+          if (pkt->dts < pts)
+          {
+            it = m_audioPacketBuffer.erase(it);
+            dropped++;
+          }
+          else
+            ++it;
+        }
+        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - trim audio buffer: dropped {} packets, {} remaining",
+                  dropped, m_audioPacketBuffer.size());
+
+        /* Decode and output the remaining buffered packets now that video PTS is known. */
+        for (auto &bufMsg : m_audioPacketBuffer)
+        {
+          DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();
+          if (m_pAudioCodec->AddData(*pkt))
+          {
+            m_audioStats.AddSampleBytes(pkt->iSize);
+            UpdatePlayerInfo();
+            ProcessDecoderOutput(audioframe);
+          }
+        }
+        m_audioPacketBuffer.clear();
+      }
+
+      /* Set audio clock to video PTS + delay. Audio frames with PTS < video PTS
+       * have already been dropped. Remaining frames start at or after video PTS. */
+      m_audioClock = pts + delay;
 
       if (m_speed != DVD_PLAYSPEED_PAUSE)
         m_audioSink.Resume();
@@ -354,6 +382,9 @@ void CVideoPlayerAudio::Process()
     }
     else if (pMsg->IsType(CDVDMsg::GENERAL_RESET))
     {
+      m_audioPacketBuffer.clear();
+      m_videoPtsKnown = false;
+      m_videoPts = DVD_NOPTS_VALUE;
       if (m_pAudioCodec)
         m_pAudioCodec->Reset();
       m_audioSink.Flush();
@@ -365,6 +396,9 @@ void CVideoPlayerAudio::Process()
     else if (pMsg->IsType(CDVDMsg::GENERAL_FLUSH))
     {
       bool sync = std::static_pointer_cast<CDVDMsgBool>(pMsg)->m_value;
+      m_audioPacketBuffer.clear();
+      m_videoPtsKnown = false;
+      m_videoPts = DVD_NOPTS_VALUE;
       m_audioSink.Flush();
       m_stalled = true;
       m_audioClock = 0;
@@ -444,6 +478,15 @@ void CVideoPlayerAudio::Process()
       if (!m_processInfo.IsTempoAllowed(static_cast<float>(m_speed) / DVD_PLAYSPEED_NORMAL) &&
           m_syncState == IDVDStreamPlayer::SYNC_INSYNC)
       {
+        continue;
+      }
+
+      /* Buffer audio packets until video PTS is known (GENERAL_RESYNC).
+       * This allows trimming packets with PTS < video PTS to avoid
+       * audio playing ahead of the first decoded video frame. */
+      if (!m_videoPtsKnown)
+      {
+        m_audioPacketBuffer.push_back(pMsg);
         continue;
       }
 
