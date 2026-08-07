@@ -81,6 +81,14 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   // Enable kernel OSD1 HDR conversion when HDR display and HDR content are active
   CSysfsPath("/sys/module/aml_media/parameters/osd1_hdr_mode", dv_is_used | hdr_is_used ? 1 : 0);
 
+  // When DV content is played on any display, set osd_pq_bypass to ensure the
+  // kernel's OSD1 HDR pipeline sets the RGB_OSD flag for proper RGB→YUV matrix
+  // conversion. Without this flag, the blender misinterprets OSD RGB data as YUV
+  // and produces green/magenta color corruption. osd_pq_bypass only affects the
+  // matrix flag and LUT bypass — it does NOT change the OSD brightness curve.
+  bool dv_active = (picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", dv_active ? 1 : 0);
+
   m_bConfigured = true;
 
   return true;
