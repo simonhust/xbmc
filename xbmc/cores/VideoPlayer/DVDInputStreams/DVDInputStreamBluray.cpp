@@ -1097,23 +1097,18 @@ static bool find_stream(int pid, BLURAY_STREAM_INFO *info, int count, std::strin
   return true;
 }
 
-int CDVDInputStreamBluray::GetNumStreamPid(unsigned clip_ref)
-{
-  if (!m_bd)
-    return 0;
-  struct clpi_cl *cl = bd_get_clpi(m_bd, clip_ref);
-  if (!cl)
-    return 0;
-  int ret = cl->cpi.num_stream_pid;
-  bd_free_clpi(cl);
-  return ret;
-}
-
 int CDVDInputStreamBluray::GetClipCount()
 {
   if (!m_titleInfo)
     return 0;
   return m_titleInfo->clip_count;
+}
+
+bool CDVDInputStreamBluray::GetDVElHasEpmap()
+{
+  if (!m_bd)
+    return false;
+  return bd_dv_el_has_ep_map(m_bd) != 0;
 }
 
 void CDVDInputStreamBluray::GetStreamInfo(int pid, std::string &language)
