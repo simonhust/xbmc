@@ -1677,7 +1677,9 @@ void CVideoPlayer::Prepare()
                   starttime.count());
     }
 
-    m_clock.Discontinuity(DVD_MSEC_TO_TIME(starttime.count()));
+    /* Clock will be set by the first video packet's DTS (line 1952).
+     * Delaying Discontinuity here prevents the time bar and audio
+     * from advancing before the first video frame is decoded. */
   }
 
   UpdatePlayState(0);
