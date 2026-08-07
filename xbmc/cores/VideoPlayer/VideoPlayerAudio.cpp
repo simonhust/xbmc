@@ -422,7 +422,7 @@ void CVideoPlayerAudio::Process()
       if (m_pAudioCodec && m_pAudioCodec->NeedPassthrough())
       {
         auto* passthroughCodec = dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
-        if (passthroughCodec && passthroughCodec->IsLavStyleSyncEnabled())
+        if (passthroughCodec && passthroughCodec->GetLavStyleSyncMode() == CDVDAudioCodecPassthrough::LavSyncMode::FULL)
         {
           passthroughCodec->ResetLavSyncState();
           passthroughCodec->SyncToResyncPts(pts + delay);
