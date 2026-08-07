@@ -20,7 +20,7 @@
 
 #version 100
 
-precision mediump float
+precision mediump float;
 uniform sampler2D m_samp0;
 uniform sampler2D m_samp1;
 varying vec4 m_cord0;

@@ -20,7 +20,7 @@
 
 #version 100
 
-precision mediump float
+precision mediump float;
 uniform lowp vec4 m_unicol;
 uniform float m_sdrPeak;
 uniform float m_sdrSaturation;
