@@ -329,15 +329,36 @@ void CVideoPlayerAudio::Process()
     else if (pMsg->IsType(CDVDMsg::GENERAL_RESYNC))
     { //player asked us to set internal clock
       double pts = std::static_pointer_cast<CDVDMsgDouble>(pMsg)->m_value;
-      CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - CDVDMsg::GENERAL_RESYNC({:.3f} level: {:d} cache:{:.3f}",
-                pts / DVD_TIME_BASE, m_messageQueue.GetLevel(), m_audioSink.GetDelay() / DVD_TIME_BASE);
-
       double delay = m_audioSink.GetDelay();
-      if (pts > m_audioClock - delay + 0.5 * DVD_TIME_BASE)
+      double audioPts = m_audioSink.GetPlayingPts();
+
+      CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - CDVDMsg::GENERAL_RESYNC({:.3f} delay:{:.3f} audioPts:{:.3f}",
+                pts / DVD_TIME_BASE, delay / DVD_TIME_BASE,
+                audioPts != DVD_NOPTS_VALUE ? audioPts / DVD_TIME_BASE : -1.0);
+
+      if (audioPts != DVD_NOPTS_VALUE && audioPts < pts)
       {
+        /* Audio ahead of video: drop audio frames before video PTS,
+         * then set audio clock to video PTS + delay. This ensures
+         * video is always ahead of audio for stable A/V sync. */
+        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - audio ahead, flush frames before video pts");
         m_audioSink.Flush();
+        delay = m_audioSink.GetDelay();
+        m_audioClock = pts + delay;
       }
-      m_audioClock = pts + delay;
+      else if (audioPts != DVD_NOPTS_VALUE && audioPts > pts)
+      {
+        /* Video ahead of audio: delay audio by (audioPts - pts).
+         * Set audio clock to audioPts + delay so audio plays later. */
+        double audioOffset = audioPts - pts;
+        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - video ahead, audioOffset:{:.3f}", audioOffset / DVD_TIME_BASE);
+        m_audioClock = pts + delay + audioOffset;
+      }
+      else
+      {
+        m_audioClock = pts + delay;
+      }
+
       if (m_speed != DVD_PLAYSPEED_PAUSE)
         m_audioSink.Resume();
       m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
