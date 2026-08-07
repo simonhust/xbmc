@@ -342,6 +342,8 @@ void CDVDAudioCodecPassthrough::GetData(DVDAudioFrame &frame)
 {
   frame.nb_frames = GetData(frame.data);
   frame.framesOut = 0;
+  frame.hasDiscontinuity = false;
+  frame.discontinuityCorrection = 0.0;
 
   if (frame.nb_frames == 0)
     return;
@@ -414,6 +416,10 @@ void CDVDAudioCodecPassthrough::GetData(DVDAudioFrame &frame)
     {
       m_internalClock -= absMinJitter;
       m_jitterTracker.OffsetValues(-absMinJitter);
+
+      // Signal discontinuity to downstream
+      frame.hasDiscontinuity = true;
+      frame.discontinuityCorrection = absMinJitter;
 
       CLog::LogF(LOGDEBUG, "jitter correction {:.2f}ms (threshold {:.0f}ms)", absMinJitter / 1000.0,
                  m_jitterThreshold / 1000.0);

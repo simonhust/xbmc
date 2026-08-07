@@ -623,6 +623,10 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
     // handling and may adjust audioframe.pts. Derived from LAV Filters.
     if (m_lavStylePcmSyncEnabled && !audioframe.passthrough && audioframe.hasTimestamp)
     {
+      // Initialize discontinuity fields
+      audioframe.hasDiscontinuity = false;
+      audioframe.discontinuityCorrection = 0.0;
+
       double inputPts = audioframe.pts;
       bool inputPtsValid = IsValidPts(inputPts);
 
@@ -672,6 +676,11 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
         {
           m_pcmOutputClock -= absMinJitter;
           m_pcmJitterTracker.OffsetValues(-absMinJitter);
+
+          // Signal discontinuity to downstream
+          audioframe.hasDiscontinuity = true;
+          audioframe.discontinuityCorrection = absMinJitter;
+
           CLog::Log(LOGDEBUG,
                     "CVideoPlayerAudio::ProcessDecoderOutput: LAV PCM jitter correction {:.2f}ms",
                     absMinJitter / DVD_TIME_BASE * 1000.0);

@@ -2396,6 +2396,17 @@ void CVideoPlayer::HandlePlaySpeed()
     }
     else if (video && audio)
     {
+      // LAV FULL sync: wait for video to have a valid PTS before syncing.
+      // Without this, the clock may be set from audio-only timing, causing
+      // A/V desync when the passthrough codec's internal clock is active.
+      if (m_CurrentVideo.id >= 0 && m_CurrentVideo.starttime == DVD_NOPTS_VALUE)
+      {
+        int lavMode = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+            CSettings::SETTING_AUDIOOUTPUT_AVSYNCPASSTHROUGH);
+        if (lavMode == 2) // FULL mode
+          return;
+      }
+
       double clock = 0;
       if (m_CurrentAudio.syncState == IDVDStreamPlayer::SYNC_WAITSYNC)
         CLog::Log(LOGDEBUG, "VideoPlayer::Sync - Audio - pts: {:.3f}, cache: {:.3f}, totalcache: {:.3f}, packets:{:d} level:{:d}",
