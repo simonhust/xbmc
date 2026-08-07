@@ -2378,18 +2378,11 @@ void CVideoPlayer::HandlePlaySpeed()
         (m_CurrentAudio.avsync == CCurrentStream::AV_SYNC_CONT ||
          m_CurrentVideo.syncState == IDVDStreamPlayer::SYNC_INSYNC))
     {
-      double clock = m_clock.GetClock();
-      /* Adjust audio clock by the offset between first video PTS and first audio PTS.
-       * This compensates for variable audio frame durations and ensures A/V sync. */
-      double audioOffset = 0;
-      if (m_CurrentVideo.starttime != DVD_NOPTS_VALUE && m_CurrentAudio.starttime != DVD_NOPTS_VALUE)
-        audioOffset = m_CurrentVideo.starttime - m_CurrentAudio.starttime;
-      CLog::Log(LOGDEBUG, LOGAUDIO, "VideoPlayer::Sync - Audio - Waiting, clock: {:.3f} offset:{:.3f}",
-                clock / DVD_TIME_BASE, audioOffset / DVD_TIME_BASE);
+      CLog::Log(LOGDEBUG, LOGAUDIO, "VideoPlayer::Sync - Audio - Waiting, clock: {:.3f}", m_clock.GetClock());
       m_CurrentAudio.syncState = IDVDStreamPlayer::SYNC_INSYNC;
       m_CurrentAudio.avsync = CCurrentStream::AV_SYNC_NONE;
       m_VideoPlayerAudio->SendMessage(
-          std::make_shared<CDVDMsgDouble>(CDVDMsg::GENERAL_RESYNC, clock + audioOffset), 1);
+          std::make_shared<CDVDMsgDouble>(CDVDMsg::GENERAL_RESYNC, m_clock.GetClock()), 1);
     }
     else if (m_CurrentVideo.syncState == IDVDStreamPlayer::SYNC_WAITSYNC &&
              (m_CurrentVideo.avsync == CCurrentStream::AV_SYNC_CONT ||
