@@ -490,8 +490,17 @@ void CVideoPlayerAudio::Process()
        * clips, so trimming by PTS would drop the wrong packets. */
       if (!m_videoPtsKnown && !pPacket->isMultiClip)
       {
-        m_audioPacketBuffer.push_back(pMsg);
-        continue;
+        if (m_audioPacketBuffer.size() < MAX_AUDIO_BUFFER_PACKETS)
+        {
+          m_audioPacketBuffer.push_back(pMsg);
+          continue;
+        }
+        else
+        {
+          CLog::Log(LOGWARNING,
+                    "CVideoPlayerAudio - audio buffer overflow ({}), falling back to direct decode",
+                    m_audioPacketBuffer.size());
+        }
       }
 
       if (!m_pAudioCodec->AddData(*pPacket))
