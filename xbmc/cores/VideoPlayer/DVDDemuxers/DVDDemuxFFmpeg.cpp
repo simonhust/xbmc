@@ -1216,16 +1216,17 @@ DemuxPacket* CDVDDemuxFFmpeg::ReadInternal(bool keep)
         pPacket->recoveryPoint = m_seekToKeyFrame;
       m_seekToKeyFrame = false;
 
-      if (m_pFormatContext->streams[pPacket->iStreamId]->codecpar &&
-          m_pFormatContext->streams[pPacket->iStreamId]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+if (m_pFormatContext->streams[pPacket->iStreamId]->codecpar &&
+           m_pFormatContext->streams[pPacket->iStreamId]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
       {
         pPacket->isDualStream = m_dv_dual_stream;
         pPacket->isELPackage = (stream->uniqueId > 0) ? m_dv_dual_stream : false;
         pPacket->isNoElEpMap = m_dv_no_el_epmap;
-        pPacket->isMultiClip = m_dv_multi_clip;
-        pPacket->isDirectPair = m_dv_direct_pair;
-        pPacket->m_seekTime = m_dv_seek_time;
       }
+      /* Non-video-specific flags: set for all packet types (audio, subtitle, etc.) */
+      pPacket->isMultiClip = m_dv_multi_clip;
+      pPacket->isDirectPair = m_dv_direct_pair;
+      pPacket->m_seekTime = m_dv_seek_time;
     }
     if (stream && m_pSSIF)
     {
