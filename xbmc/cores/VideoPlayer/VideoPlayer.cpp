@@ -2422,33 +2422,30 @@ void CVideoPlayer::HandlePlaySpeed()
       }
       else if (m_CurrentAudio.starttime != DVD_NOPTS_VALUE && m_CurrentAudio.packets > 0)
       {
-        if (m_pInputStream->IsRealtime())
-          clock = m_CurrentAudio.starttime - m_CurrentAudio.cachetime - DVD_MSEC_TO_TIME(1000);
-        else
-          clock = m_CurrentAudio.starttime - m_CurrentAudio.cachetime;
-
-        if (m_CurrentVideo.starttime != DVD_NOPTS_VALUE && (m_CurrentVideo.packets > 0))
+        // Non-realtime with a valid video PTS: use the video PTS as the
+        // authoritative clock reference. The audio thread's queue trim
+        // (VideoPlayerAudio.cpp GENERAL_RESYNC handler) drops packets with
+        // PTS < video PTS, ensuring audio starts at or after video. This avoids
+        // the negative clock problem (audio_starttime - audio_cachetime < 0),
+        // which is triggered by audio cache filling ahead of the video start
+        // (worst with passthrough / BL-EL alignment on seeks to the beginning).
+        // Live streams (and audio that has no video PTS) keep the original logic.
+        if (m_CurrentVideo.starttime != DVD_NOPTS_VALUE && m_CurrentVideo.packets > 0 &&
+            !m_pInputStream->IsRealtime())
         {
-          if (m_CurrentVideo.starttime - m_CurrentVideo.cachetotal < clock)
-          {
-            clock = m_CurrentVideo.starttime - m_CurrentVideo.cachetotal;
-          }
-          else if (m_CurrentVideo.starttime > m_CurrentAudio.starttime &&
-                   !m_pInputStream->IsRealtime())
-          {
-            const int audioLevel = m_VideoPlayerAudio->GetLevel();
-            const double audioTimeMs = m_messageQueueTimeSize * 1000.0 * audioLevel / 100.0;
-            const double maxAudioTime = clock + DVD_MSEC_TO_TIME(audioTimeMs);
-            if ((m_CurrentVideo.starttime - m_CurrentVideo.cachetotal) > maxAudioTime)
-              clock = maxAudioTime;
-            else
-              clock = m_CurrentVideo.starttime - m_CurrentVideo.cachetotal;
-          }
+          clock = m_CurrentVideo.starttime;
+        }
+        else
+        {
+          if (m_pInputStream->IsRealtime())
+            clock = m_CurrentAudio.starttime - m_CurrentAudio.cachetime - DVD_MSEC_TO_TIME(1000);
+          else
+            clock = m_CurrentAudio.starttime - m_CurrentAudio.cachetime;
         }
       }
       else if (m_CurrentVideo.starttime != DVD_NOPTS_VALUE && m_CurrentVideo.packets > 0)
       {
-        clock = m_CurrentVideo.starttime - m_CurrentVideo.cachetotal;
+        clock = m_CurrentVideo.starttime;
       }
 
       m_clock.Discontinuity(clock);
