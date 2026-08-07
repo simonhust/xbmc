@@ -1949,9 +1949,11 @@ void CVideoPlayer::Process()
         if (pPacket->pts != DVD_NOPTS_VALUE && pPacket->pts > correction)
           pPacket->pts -= correction;
       }
+      /* Clock is set by the first decoded frame in OutputPicture,
+       * not by the first packet. This ensures the clock is set to the
+       * first displayable frame's PTS, not an orphan packet's DTS. */
       if (m_dvd.syncClock)
       {
-        m_clock.Discontinuity(pPacket->dts);
         m_dvd.syncClock = false;
       }
     }

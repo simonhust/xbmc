@@ -518,6 +518,7 @@ void CVideoPlayerVideo::Process()
       m_packets.clear();
       pts = 0;
       m_rewindStalled = false;
+      m_bClockSet = false;
 
       m_ptsTracker.Flush();
       //we need to recalculate the framerate
@@ -1016,6 +1017,14 @@ CVideoPlayerVideo::EOutputState CVideoPlayerVideo::OutputPicture(const VideoPict
   m_ptsTracker.Add(pPicture->pts);
   if (!m_stalled)
     CalcFrameRate();
+
+  // Set clock to the first decoded frame's PTS (not the first packet's DTS).
+  // This prevents orphan packets from setting the clock to a wrong position.
+  if (!m_bClockSet && pPicture->pts != DVD_NOPTS_VALUE)
+  {
+    m_pClock->Discontinuity(pPicture->pts);
+    m_bClockSet = true;
+  }
 
   // signal to clock what our framerate is, it may want to adjust it's
   // speed to better match with our video renderer's output speed

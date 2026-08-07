@@ -150,4 +150,5 @@ protected:
   VideoPicture m_picture;
 
   EOutputState m_outputSate{OUTPUT_NORMAL};
+  bool m_bClockSet{false};
 };
