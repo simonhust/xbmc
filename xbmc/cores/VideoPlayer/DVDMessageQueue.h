@@ -93,7 +93,11 @@ public:
   void SetMaxDataSize(int iMaxDataSize) { m_iMaxDataSize = iMaxDataSize; }
   void SetMaxTimeSize(double sec) { m_TimeSize = 1.0 / sec; }
   int GetMaxDataSize() const { return m_iMaxDataSize; }
-  double GetMaxTimeSize() const { return m_TimeSize; }
+  double GetMaxTimeSize() const
+  {
+    std::unique_lock lock(m_section);
+    return m_TimeSize;
+  }
   bool IsInited() const { return m_bInitialized; }
   bool IsDataBased() const;
 

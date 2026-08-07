@@ -9,6 +9,7 @@
 #include "VideoPlayerAudio.h"
 
 #include "DVDCodecs/Audio/DVDAudioCodec.h"
+#include "DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
 #include "ServiceBroker.h"
 #include "cores/AudioEngine/Interfaces/AE.h"
@@ -25,11 +26,25 @@
 #include "platform/linux/RBP.h"
 #endif
 
-#include <sstream>
+#include <algorithm>
+#include <cmath>
 #include <iomanip>
 #include <math.h>
+#include <sstream>
 
 using namespace std::chrono_literals;
+
+namespace
+{
+// A valid PTS is >= 0 and within a sane range; rejects DVD_NOPTS_VALUE
+// (~1.8e19 as a double) and other garbage without rejecting real timestamps.
+constexpr double LOCAL_NOPTS = -1.0;
+constexpr double MAX_REASONABLE_PTS = 86400.0 * DVD_TIME_BASE; // 24 hours
+inline bool IsValidPts(double pts)
+{
+  return (pts >= 0.0) && (pts <= MAX_REASONABLE_PTS);
+}
+} // namespace
 
 class CDVDMsgAudioCodecChange : public CDVDMsg
 {
@@ -128,6 +143,15 @@ void CVideoPlayerAudio::OpenStream(CDVDStreamInfo& hints, std::unique_ptr<CDVDAu
   if (hints.samplerate != m_streaminfo.samplerate)
     SwitchCodecIfNeeded();
 
+  // LAV Audio: configure the passthrough codec's internal-clock retiming
+  ConfigureLavAudioSync();
+
+  // LAV PCM sync: for non-passthrough (decoded) audio, enable the internal
+  // jitter tracker. Always on except realtime/PVR (passthrough is handled by
+  // ConfigureLavAudioSync above).
+  m_lavStylePcmSyncEnabled =
+      m_pAudioCodec && !m_pAudioCodec->NeedPassthrough() && !m_processInfo.IsRealtimeStream();
+
   m_audioClock = 0;
   m_stalled = m_messageQueue.GetPacketCount(CDVDMsg::DEMUXER_PACKET) == 0;
 
@@ -145,6 +169,14 @@ void CVideoPlayerAudio::OpenStream(CDVDStreamInfo& hints, std::unique_ptr<CDVDAu
 
   m_messageParent.Put(std::make_shared<CDVDMsg>(CDVDMsg::PLAYER_AVCHANGE));
   m_syncState = IDVDStreamPlayer::SYNC_STARTING;
+
+  // LAV PCM: reset jitter tracking on stream open
+  if (m_lavStylePcmSyncEnabled)
+  {
+    m_pcmJitterTracker.Reset();
+    m_pcmOutputClock = LOCAL_NOPTS;
+    m_pcmResyncTimestamp = true;
+  }
 }
 
 void CVideoPlayerAudio::CloseStream(bool bWaitForBuffers)
@@ -376,10 +408,32 @@ void CVideoPlayerAudio::Process()
        * have already been dropped. Remaining frames start at or after video PTS. */
       m_audioClock = pts + delay;
 
+      // LAV PCM: reset jitter tracking on resync
+      if (m_lavStylePcmSyncEnabled)
+      {
+        m_pcmJitterTracker.Reset();
+        m_pcmOutputClock = LOCAL_NOPTS;
+        m_pcmResyncTimestamp = true;
+      }
+
+      // LAV Audio: rebase the passthrough codec's internal clock to the
+      // coordinated A/V clock (pts + delay). ResetLavSyncState() must run first
+      // to clear the jitter tracker before adopting the new baseline.
+      if (m_pAudioCodec && m_pAudioCodec->NeedPassthrough())
+      {
+        auto* passthroughCodec = dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
+        if (passthroughCodec && passthroughCodec->IsLavStyleSyncEnabled())
+        {
+          passthroughCodec->ResetLavSyncState();
+          passthroughCodec->SyncToResyncPts(pts + delay);
+        }
+      }
+
       if (m_speed != DVD_PLAYSPEED_PAUSE)
         m_audioSink.Resume();
       m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
       m_syncTimer.Set(3000ms);
+      m_disconSettleTimer.Set(6000ms);
     }
     else if (pMsg->IsType(CDVDMsg::GENERAL_RESET))
     {
@@ -393,6 +447,14 @@ void CVideoPlayerAudio::Process()
       m_audioClock = 0;
       audioframe.nb_frames = 0;
       m_syncState = IDVDStreamPlayer::SYNC_STARTING;
+
+      // LAV PCM: reset jitter tracking on reset
+      if (m_lavStylePcmSyncEnabled)
+      {
+        m_pcmJitterTracker.Reset();
+        m_pcmOutputClock = LOCAL_NOPTS;
+        m_pcmResyncTimestamp = true;
+      }
     }
     else if (pMsg->IsType(CDVDMsg::GENERAL_FLUSH))
     {
@@ -404,6 +466,14 @@ void CVideoPlayerAudio::Process()
       m_stalled = true;
       m_audioClock = 0;
       audioframe.nb_frames = 0;
+
+      // LAV PCM: reset jitter tracking on flush
+      if (m_lavStylePcmSyncEnabled)
+      {
+        m_pcmJitterTracker.Reset();
+        m_pcmOutputClock = LOCAL_NOPTS;
+        m_pcmResyncTimestamp = true;
+      }
 
       if (sync)
       {
@@ -549,6 +619,68 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
       m_audioClock = audioframe.pts;
     }
 
+    // LAV PCM jitter tracking (non-passthrough only). Runs after baseline PTS
+    // handling and may adjust audioframe.pts. Derived from LAV Filters.
+    if (m_lavStylePcmSyncEnabled && !audioframe.passthrough && audioframe.hasTimestamp)
+    {
+      double inputPts = audioframe.pts;
+      bool inputPtsValid = IsValidPts(inputPts);
+
+      if (m_pcmResyncTimestamp && inputPtsValid)
+      {
+        m_pcmOutputClock = inputPts;
+        m_pcmResyncTimestamp = false;
+        m_pcmJitterTracker.Reset();
+        m_pcmStepRun = 0;
+      }
+      else if (IsValidPts(m_pcmOutputClock) && inputPtsValid)
+      {
+        double jitter = m_pcmOutputClock - inputPts;
+        m_pcmJitterTracker.Sample(jitter);
+        double absMinJitter = m_pcmJitterTracker.AbsMinimum();
+        double thresholdDvdTime = PCM_JITTER_THRESHOLD * DVD_TIME_BASE / 1000000.0;
+
+        const bool stepCandidate = std::abs(jitter) > 8.0 * thresholdDvdTime &&
+                                   std::abs(jitter) <= DVD_TIME_BASE;
+        if (stepCandidate && (m_pcmStepRun == 0 || (jitter > 0) == m_pcmStepPositive))
+        {
+          m_pcmStepPositive = jitter > 0;
+          ++m_pcmStepRun;
+        }
+        else
+          m_pcmStepRun = 0;
+
+        if (std::abs(jitter) > DVD_TIME_BASE)
+        {
+          m_pcmOutputClock = inputPts;
+          m_pcmJitterTracker.Reset();
+          m_pcmStepRun = 0;
+          CLog::Log(LOGDEBUG,
+                    "CVideoPlayerAudio::ProcessDecoderOutput: LAV PCM resync, large jump ({:.2f}s)",
+                    jitter / DVD_TIME_BASE);
+        }
+        else if (m_pcmStepRun >= 8)
+        {
+          m_pcmOutputClock = inputPts;
+          m_pcmJitterTracker.Reset();
+          m_pcmStepRun = 0;
+          CLog::Log(LOGDEBUG,
+                    "CVideoPlayerAudio::ProcessDecoderOutput: LAV PCM resync, sustained pts "
+                    "step ({:.1f}ms)", jitter / DVD_TIME_BASE * 1000.0);
+        }
+        else if (std::abs(absMinJitter) > thresholdDvdTime)
+        {
+          m_pcmOutputClock -= absMinJitter;
+          m_pcmJitterTracker.OffsetValues(-absMinJitter);
+          CLog::Log(LOGDEBUG,
+                    "CVideoPlayerAudio::ProcessDecoderOutput: LAV PCM jitter correction {:.2f}ms",
+                    absMinJitter / DVD_TIME_BASE * 1000.0);
+        }
+
+        audioframe.pts = m_pcmOutputClock;
+      }
+    }
+
     if (audioframe.format.m_sampleRate && m_streaminfo.samplerate != (int) audioframe.format.m_sampleRate)
     {
       // The sample rate has changed or we just got it for the first time
@@ -592,6 +724,14 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
 
       if (m_syncState == IDVDStreamPlayer::SYNC_INSYNC)
         m_audioSink.Resume();
+
+      // a sink rebuild reproduces the start-sync transient (skip/insert +
+      // swinging delay estimate) the settle window exists for - re-arm it,
+      // or a mid-stream format change takes an ErrorAdjust on garbage
+      // immediately (review finding)
+      m_disconSettleTimer.Set(6000ms);
+      CLog::Log(LOGDEBUG, LOGAUDIO,
+                "CVideoPlayerAudio::ProcessDecoderOutput - sink rebuilt, DISCON settle re-armed");
     }
 
     m_audioSink.SetDynamicRangeCompression(
@@ -606,7 +746,13 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
     audioframe.hasDownmix = true;
   }
 
-  if (m_synctype == SYNC_DISCON)
+  // Hold clock corrections until the post-resync settle window
+  // (m_disconSettleTimer, armed at SYNC_INSYNC) has passed: right after a
+  // stream (re)open the AE start-sync is still skipping/inserting frames and
+  // the sink delay estimate swings tens of ms per second, so an ErrorAdjust
+  // taken now acts on garbage and parks the shared A/V clock a whole video
+  // frame off for the rest of the stream.
+  if (m_synctype == SYNC_DISCON && m_disconSettleTimer.IsTimePast())
   {
     double syncerror = m_audioSink.GetSyncError();
 
@@ -628,6 +774,14 @@ bool CVideoPlayerAudio::ProcessDecoderOutput(DVDAudioFrame &audioframe)
 
   // guess next pts
   m_audioClock += audioframe.duration * ((double)framesOutput / audioframe.nb_frames);
+
+  // LAV PCM: advance the output clock by the actual duration output
+  if (m_lavStylePcmSyncEnabled && !audioframe.passthrough && IsValidPts(m_pcmOutputClock))
+  {
+    double durationOutput =
+        audioframe.duration * (static_cast<double>(framesOutput) / audioframe.nb_frames);
+    m_pcmOutputClock += durationOutput;
+  }
 
   audioframe.framesOut += framesOutput;
 
@@ -744,7 +898,36 @@ bool CVideoPlayerAudio::SwitchCodecIfNeeded()
 
   m_pAudioCodec = std::move(codec);
 
+  // LAV Audio: configure sync on the freshly created codec (passthrough only)
+  ConfigureLavAudioSync();
+
   return true;
+}
+
+void CVideoPlayerAudio::ConfigureLavAudioSync()
+{
+  if (!m_pAudioCodec || !m_pAudioCodec->NeedPassthrough())
+    return;
+
+  auto* passthroughCodec = dynamic_cast<CDVDAudioCodecPassthrough*>(m_pAudioCodec.get());
+  if (!passthroughCodec)
+    return;
+
+  // LAV Audio is always on in this build, but its internal-clock model is not
+  // appropriate for realtime/live streams (e.g. live PVR): those keep stock
+  // passthrough behavior.
+  const bool enable = !m_processInfo.IsRealtimeStream();
+  passthroughCodec->SetLavStyleSyncEnabled(enable);
+  if (!enable)
+    return;
+
+  CLog::LogF(LOGDEBUG, "LAV Audio passthrough internal-clock retiming active");
+
+  // If the codec is (re)created while playback is already in sync (e.g. a
+  // display reset that flips passthrough), rebase its internal clock to the
+  // master clock now so it does not latch onto a stale demuxer PTS.
+  if (m_syncState == IDVDStreamPlayer::SYNC_INSYNC && m_pClock)
+    passthroughCodec->SyncToResyncPts(m_pClock->GetClock() + m_audioSink.GetDelay());
 }
 
 std::string CVideoPlayerAudio::GetPlayerInfo()

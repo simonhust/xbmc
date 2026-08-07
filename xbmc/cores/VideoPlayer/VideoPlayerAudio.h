@@ -10,6 +10,7 @@
 
 #include "AudioSinkAE.h"
 #include "DVDClock.h"
+#include "DVDCodecs/Audio/FloatingAverage.h"
 #include "DVDMessageQueue.h"
 #include "DVDStreamInfo.h"
 #include "IVideoPlayer.h"
@@ -70,6 +71,7 @@ public:
 
   int  GetDataLevel() const { return m_messageQueue.GetLevel(true); }
   void SetMaxDataSize(int iMaxDataSize) { m_messageQueue.SetMaxDataSize(iMaxDataSize); }
+  void SetMaxTimeSize(double sec) { m_messageQueue.SetMaxTimeSize(sec); }
   int GetMaxDataSize() const { return m_messageQueue.GetMaxDataSize(); }
 
 protected:
@@ -85,6 +87,15 @@ protected:
   //! codec changes, in which case we may want to switch passthrough on/off.
   bool SwitchCodecIfNeeded();
   void SetSyncType(bool passthrough);
+  /*!
+   * \brief Enable LAV-style A/V sync on the current codec if it is a passthrough
+   * codec, rebasing its internal clock when already in sync.
+   *
+   * Always on for normal passthrough playback; a no-op for decoded audio and
+   * realtime/live streams. The passthrough A/V sync model is derived from
+   * LAV Filters by Hendrik Leppkes (Nevcairiel).
+   */
+  void ConfigureLavAudioSync();
 
   CDVDMessageQueue m_messageQueue;
   CDVDMessageQueue& m_messageParent;
@@ -104,6 +115,11 @@ protected:
   bool m_paused;
   IDVDStreamPlayer::ESyncState m_syncState;
   XbmcThreads::EndTime<> m_syncTimer;
+  // Longer settle for the SYNC_DISCON correction gate: post-resync sink
+  // transients can still measure 40-80ms at the 3s stall-timer mark (BD wrap
+  // churn with per-playitem display resets); corrections taken on them walk
+  // the clock a whole video frame at a time.
+  XbmcThreads::EndTime<> m_disconSettleTimer;
 
   int m_synctype;
   int m_prevsynctype;
@@ -129,5 +145,19 @@ protected:
   double m_videoPts{DVD_NOPTS_VALUE};
   static constexpr int MAX_AUDIO_BUFFER_PACKETS{500};
   std::list<std::shared_ptr<CDVDMsg>> m_audioPacketBuffer;
-};
 
+  //============================================================================
+  // LAV jitter tracking for PCM / decoded (non-passthrough) audio. Always on
+  // except realtime/PVR. Derived from LAV Filters by Hendrik Leppkes (Nevcairiel).
+  //============================================================================
+  bool m_lavStylePcmSyncEnabled{false};
+  static constexpr size_t PCM_JITTER_WINDOW_SIZE = 64;
+  static constexpr double PCM_JITTER_THRESHOLD = 10000.0; // 10 ms in DVD_TIME_BASE units
+  CFloatingAverage<double, PCM_JITTER_WINDOW_SIZE> m_pcmJitterTracker;
+  double m_pcmOutputClock{0.0}; // running output timestamp (LAV's m_rtStart)
+  bool m_pcmResyncTimestamp{true}; // resync on next valid PTS (LAV's m_bResyncTimestamp)
+  // sustained same-sign over-threshold run = a genuine mid-size pts step
+  // (100-900ms discontinuity) -> resync instead of window-chasing it
+  int m_pcmStepRun{0};
+  bool m_pcmStepPositive{false};
+};
