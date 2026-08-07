@@ -336,28 +336,16 @@ void CVideoPlayerAudio::Process()
                 pts / DVD_TIME_BASE, delay / DVD_TIME_BASE,
                 audioPts != DVD_NOPTS_VALUE ? audioPts / DVD_TIME_BASE : -1.0);
 
-      if (audioPts != DVD_NOPTS_VALUE && audioPts < pts)
-      {
-        /* Audio ahead of video: drop audio frames before video PTS,
-         * then set audio clock to video PTS + delay. This ensures
-         * video is always ahead of audio for stable A/V sync. */
-        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - audio ahead, flush frames before video pts");
-        m_audioSink.Flush();
-        delay = m_audioSink.GetDelay();
-        m_audioClock = pts + delay;
-      }
-      else if (audioPts != DVD_NOPTS_VALUE && audioPts > pts)
-      {
-        /* Video ahead of audio: delay audio by (audioPts - pts).
-         * Set audio clock to audioPts + delay so audio plays later. */
-        double audioOffset = audioPts - pts;
-        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - video ahead, audioOffset:{:.3f}", audioOffset / DVD_TIME_BASE);
-        m_audioClock = pts + delay + audioOffset;
-      }
-      else
-      {
-        m_audioClock = pts + delay;
-      }
+      /* Set audio clock to max(videoPts, audioPts) + delay.
+       * - If audio is ahead (audioPts < pts): clock = pts + delay,
+       *   audio frames will play late (caught up to video).
+       * - If video is ahead (audioPts > pts): clock = audioPts + delay,
+       *   audio frames play at their natural PTS timing.
+       * No flush needed - AE engine handles late frames automatically. */
+      double refPts = pts;
+      if (audioPts != DVD_NOPTS_VALUE && audioPts > pts)
+        refPts = audioPts;
+      m_audioClock = refPts + delay;
 
       if (m_speed != DVD_PLAYSPEED_PAUSE)
         m_audioSink.Resume();
