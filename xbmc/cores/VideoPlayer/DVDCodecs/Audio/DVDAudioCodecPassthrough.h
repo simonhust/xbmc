@@ -46,9 +46,17 @@ public:
   // Based on LAV Filters by Hendrik Leppkes (Nevcairiel).
   //============================================================================
 
+  // LAV Audio sync mode
+  enum class LavSyncMode
+  {
+    NONE, // Stock Kodi passthrough, no LAV sync
+    SB,   // Seamless branch handling only (PTS validation + TrueHD MAT caching)
+    FULL  // Full internal-clock retiming + jitter tracking
+  };
+
   // Enable/disable the LAV Audio internal-clock + jitter sync path.
-  void SetLavStyleSyncEnabled(bool enabled);
-  bool IsLavStyleSyncEnabled() const { return m_lavStyleSyncEnabled; }
+  void SetLavStyleSyncMode(LavSyncMode mode);
+  LavSyncMode GetLavStyleSyncMode() const { return m_lavSyncMode; }
 
   // Reset LAV sync state (for GENERAL_RESYNC without a full codec reset).
   void ResetLavSyncState();
@@ -81,18 +89,20 @@ private:
   bool m_deviceIsRAW{false};
 
   //============================================================================
-  // LAV Audio A/V Sync state (only used when m_lavStyleSyncEnabled == true)
+  // LAV Audio A/V Sync state
   //============================================================================
   // Based on LAV Filters by Hendrik Leppkes (Nevcairiel).
   //
-  // We maintain our own internal clock (m_internalClock) that:
+  // We maintain our own internal clock (m_internalClock) in FULL mode that:
   //  - syncs to the RESYNC PTS from VideoPlayer (the coordinated A/V clock),
   //  - outputs PTS from our clock, not the demuxer,
   //  - continuously corrects any timing jitter/drift against the demuxer PTS
   //    that exceeds the threshold (not only at seamless branch points).
   // This isolates us from demuxer PTS chaos, including during seamless branching.
+  // In SB mode only the PTS validation and TrueHD MAT timestamp caching are
+  // active; the internal clock retiming is skipped.
   //============================================================================
-  bool m_lavStyleSyncEnabled{false};
+  LavSyncMode m_lavSyncMode{LavSyncMode::NONE};
 
   // Sentinel for "no valid PTS": we use -1.0 rather than DVD_NOPTS_VALUE, which
   // when cast to double becomes ~1.8e19 — the exact garbage value the demuxer
