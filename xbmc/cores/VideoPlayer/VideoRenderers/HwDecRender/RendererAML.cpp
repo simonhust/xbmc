@@ -89,6 +89,12 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   bool dv_active = (picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", dv_active ? 1 : 0);
 
+  // Prevent the Dolby Vision core from processing the OSD plane. When the DV
+  // core applies its own EOTF/matrix to the OSD, SDR OSD data is treated as PQ
+  // and saturation is driven to zero. Bypass the DV core and let the amvecm
+  // HDR2 pipeline handle all OSD processing uniformly.
+  CSysfsPath("/sys/module/amdolby_vision/parameters/osd_bypass_enable", dv_active ? 1 : 0);
+
   m_bConfigured = true;
 
   return true;
