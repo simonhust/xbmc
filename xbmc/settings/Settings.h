@@ -421,6 +421,7 @@ public:
   static constexpr auto SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK = "audiooutput.dtshdcorefallback";
   static constexpr auto SETTING_AUDIOOUTPUT_VOLUMESTEPS = "audiooutput.volumesteps";
   static constexpr auto SETTING_AUDIOOUTPUT_LOWLATENCY = "audiooutput.lowlatency";
+  static constexpr auto SETTING_AUDIOOUTPUT_AVSYNCPASSTHROUGH = "audiooutput.avsyncpassthrough";
   static constexpr auto SETTING_INPUT_PERIPHERALS = "input.peripherals";
   static constexpr auto SETTING_INPUT_PERIPHERALLIBRARIES = "input.peripherallibraries";
   static constexpr auto SETTING_INPUT_ENABLEMOUSE = "input.enablemouse";
