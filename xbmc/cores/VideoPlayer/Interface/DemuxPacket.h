@@ -56,7 +56,7 @@ extern "C"
     bool isDualStream;
     //! @brief Indicate package is from a Dolby Vision enhancement layer.
     bool isELPackage;
-    //! @brief Indicate the EL stream has no EP_map (num_stream_pid == 1).
+    //! @brief Indicate the EL stream has no EP_map (no entry points for the DV EL PID).
     bool isNoElEpMap;
     //! @brief Indicate the Blu-ray playlist has multiple clips.
     bool isMultiClip;

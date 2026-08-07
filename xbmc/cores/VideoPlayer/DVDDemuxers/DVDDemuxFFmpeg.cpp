@@ -1780,7 +1780,7 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
   if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
   {
     CDVDInputStreamBluray *bluray = static_cast<CDVDInputStreamBluray*>(m_pInput.get());
-    m_dv_no_el_epmap = (bluray->GetNumStreamPid() < 2);
+    m_dv_no_el_epmap = !bluray->GetDVElHasEpmap();
     m_dv_multi_clip = (bluray->GetClipCount() > 1);
   }
   else
