@@ -369,40 +369,13 @@ void CVideoPlayerAudio::Process()
       CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - CDVDMsg::GENERAL_RESYNC({:.3f} delay:{:.3f} buffer:{}",
                 pts / DVD_TIME_BASE, delay / DVD_TIME_BASE, m_audioPacketBuffer.size());
 
-      /* Trim buffered audio packets: drop packets with PTS < video PTS.
-       * This ensures audio starts from the same position as video.
-       * Only for single-clip (buffer was populated when isMultiClip=false). */
-      if (!m_audioPacketBuffer.empty())
-      {
-        int dropped = 0;
-        auto it = m_audioPacketBuffer.begin();
-        while (it != m_audioPacketBuffer.end())
-        {
-          DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
-          if (pkt->dts < pts)
-          {
-            it = m_audioPacketBuffer.erase(it);
-            dropped++;
-          }
-          else
-            ++it;
-        }
-        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - trim audio buffer: dropped {} packets, {} remaining",
-                  dropped, m_audioPacketBuffer.size());
-
-        /* Decode and output the remaining buffered packets now that video PTS is known. */
-        for (auto &bufMsg : m_audioPacketBuffer)
-        {
-          DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();
-          if (m_pAudioCodec->AddData(*pkt))
-          {
-            m_audioStats.AddSampleBytes(pkt->iSize);
-            UpdatePlayerInfo();
-            ProcessDecoderOutput(audioframe);
-          }
-        }
-        m_audioPacketBuffer.clear();
-      }
+      /* Resume the sink BEFORE decoding buffered packets.  The sink was paused
+       * by the seek's GENERAL_FLUSH; while it stays paused AddPackets blocks
+       * for the full timeout window on every frame, so the decode loop below
+       * (and the Resume that used to follow it) would never complete, leaving
+       * the sink paused forever and audio silent after a seek. */
+      if (m_speed != DVD_PLAYSPEED_PAUSE)
+        m_audioSink.Resume();
 
       /* Set audio clock to video PTS + delay. Audio frames with PTS < video PTS
        * have already been dropped. Remaining frames start at or after video PTS. */
@@ -429,8 +402,48 @@ void CVideoPlayerAudio::Process()
         }
       }
 
-      if (m_speed != DVD_PLAYSPEED_PAUSE)
-        m_audioSink.Resume();
+      /* Trim buffered audio packets: drop packets with PTS < video PTS.
+       * This ensures audio starts from the same position as video.
+       * Only for single-clip (buffer was populated when isMultiClip=false).
+       * After an audio stream switch the fresh stream may not have accumulated
+       * enough packets for the trim to be meaningful, so it is skipped and the
+       * A/V error adjustment corrects any offset instead. */
+      if (!m_audioPacketBuffer.empty())
+      {
+        if (!m_skipResyncTrim)
+        {
+          int dropped = 0;
+          auto it = m_audioPacketBuffer.begin();
+          while (it != m_audioPacketBuffer.end())
+          {
+            DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
+            if (pkt->dts < pts)
+            {
+              it = m_audioPacketBuffer.erase(it);
+              dropped++;
+            }
+            else
+              ++it;
+          }
+          CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - trim audio buffer: dropped {} packets, {} remaining",
+                    dropped, m_audioPacketBuffer.size());
+        }
+
+        /* Decode and output the remaining buffered packets now that video PTS is known. */
+        for (auto &bufMsg : m_audioPacketBuffer)
+        {
+          DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();
+          if (m_pAudioCodec->AddData(*pkt))
+          {
+            m_audioStats.AddSampleBytes(pkt->iSize);
+            UpdatePlayerInfo();
+            ProcessDecoderOutput(audioframe);
+          }
+        }
+        m_audioPacketBuffer.clear();
+      }
+      m_skipResyncTrim = false;
+
       m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
       m_syncTimer.Set(3000ms);
       m_disconSettleTimer.Set(6000ms);
