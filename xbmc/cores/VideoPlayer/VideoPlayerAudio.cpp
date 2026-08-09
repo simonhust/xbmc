@@ -190,6 +190,11 @@ void CVideoPlayerAudio::CloseStream(bool bWaitForBuffers)
   // send abort message to the audio queue
   m_messageQueue.Abort();
 
+  // interrupt any in-flight AddPackets so the audio thread can exit promptly
+  // instead of blocking on the paused/full AE stream for the whole timeout
+  // window (which delayed stop by seconds)
+  m_audioSink.AbortAddPackets();
+
   CLog::Log(LOGINFO, "Waiting for audio thread to exit");
 
   // shut down the adio_decode thread and wait for it
