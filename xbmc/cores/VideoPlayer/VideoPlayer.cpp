@@ -3324,12 +3324,6 @@ void CVideoPlayer::HandleMessages()
           OpenStream(m_CurrentAudio, st.demuxerId, st.id, st.source);
           AdaptForcedSubtitles();
 
-          // Fresh audio stream: skip the PTS trim on the next resync so the
-          // buffered packets of the new track are decoded as-is and any A/V
-          // offset is corrected by the error adjustment instead.
-          if (auto* audioPlayer = static_cast<IDVDStreamPlayerAudio*>(GetStreamPlayer(m_CurrentAudio.player)))
-            audioPlayer->SetSkipResyncTrim(true);
-
           CDVDMsgPlayerSeek::CMode mode;
           mode.time = (int)GetUpdatedTime();
           mode.backward = true;
