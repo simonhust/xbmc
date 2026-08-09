@@ -405,6 +405,15 @@ void CVideoPlayerAudio::Process()
         }
       }
 
+      /* Mark the stream in sync BEFORE decoding the buffered packets: a format
+       * change during the decode rebuilds the sink, and that rebuild only
+       * resumes the new sink when m_syncState is SYNC_INSYNC. Leaving it as
+       * SYNC_STARTING left the recreated AE stream paused, so AddData stalled
+       * and audio went silent after seek/resume. Re-arm the settle window too
+       * so the decode does not take an ErrorAdjust on the start-sync transient. */
+      m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
+      m_disconSettleTimer.Set(6000ms);
+
       /* Trim buffered audio packets: drop packets with PTS < video PTS.
        * This ensures audio starts from the same position as video.
        * Only for single-clip (buffer was populated when isMultiClip=false).
@@ -447,9 +456,7 @@ void CVideoPlayerAudio::Process()
       }
       m_skipResyncTrim = false;
 
-      m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
       m_syncTimer.Set(3000ms);
-      m_disconSettleTimer.Set(6000ms);
     }
     else if (pMsg->IsType(CDVDMsg::GENERAL_RESET))
     {
