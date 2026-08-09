@@ -121,6 +121,8 @@ public:
   void CloseStream(bool bWaitForBuffers) override = 0;
   virtual void SetSpeed(int speed) = 0;
   virtual void Flush(bool sync) = 0;
+  //! @brief Skip the PTS-based queue trim on the next GENERAL_RESYNC (audio stream switch).
+  virtual void SetSkipResyncTrim(bool skip) {}
   bool AcceptsData() const override = 0;
   virtual bool HasData() const = 0;
   virtual int  GetLevel() const = 0;
