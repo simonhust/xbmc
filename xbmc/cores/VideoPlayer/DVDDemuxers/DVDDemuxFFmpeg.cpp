@@ -473,7 +473,8 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
     av_opt_set_int(m_pFormatContext, "analyzeduration", 500000, 0);
 
   bool skipCreateStreams = false;
-  bool isBluray = pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY);
+  m_isBluray = pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY);
+  bool isBluray = m_isBluray;
 
   // increase probesize for mpegts streams only
   if (iformat && strcmp(iformat->name, "mpegts") == 0)
@@ -1225,6 +1226,7 @@ if (m_pFormatContext->streams[pPacket->iStreamId]->codecpar &&
       }
       /* Non-video-specific flags: set for all packet types (audio, subtitle, etc.) */
       pPacket->isMultiClip = m_dv_multi_clip;
+      pPacket->isBluray = m_isBluray;
       pPacket->isDirectPair = m_dv_direct_pair;
       pPacket->m_seekTime = m_dv_seek_time;
     }

@@ -600,14 +600,16 @@ void CVideoPlayerAudio::Process()
       /* Buffer audio packets until video PTS is known (GENERAL_RESYNC).
        * This allows trimming packets with PTS < video PTS to avoid
        * audio playing ahead of the first decoded video frame.
-       * Only for single-clip Blu-ray (isMultiClip=false).
-       * Multi-clip (seamless branch) may have PTS wrapping between
-       * clips, so trimming by PTS would drop the wrong packets.
+       * Only for single-clip Blu-ray (isBluray && !isMultiClip).
+       * Multi-clip (seamless branch) may have PTS wrapping between clips, so
+       * trimming by PTS would drop the wrong packets. All other inputs
+       * (non-Blu-ray files/streams) and audio switches skip the buffer and use
+       * the plain starttime-cachetime path instead.
        * When the buffer reaches MAX_AUDIO_BUFFER_PACKETS, apply back-pressure:
        * push the packet back into the message queue instead of decoding or
        * dropping it. The full queue blocks the demuxer, pausing the audio read
        * without losing data, until the GENERAL_RESYNC unblocks us. */
-      if (!m_videoPtsKnown && !pPacket->isMultiClip)
+      if (!m_videoPtsKnown && !m_skipResyncTrim && pPacket->isBluray && !pPacket->isMultiClip)
       {
         if (m_audioPacketBuffer.size() < MAX_AUDIO_BUFFER_PACKETS)
         {

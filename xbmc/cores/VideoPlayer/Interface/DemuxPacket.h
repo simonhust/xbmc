@@ -30,6 +30,7 @@ extern "C"
       isELPackage = false;
       isNoElEpMap = false;
       isMultiClip = false;
+      isBluray = false;
       isDirectPair = false;
       m_seekTime = DVD_NOPTS_VALUE;
       demuxerId = -1;
@@ -60,6 +61,8 @@ extern "C"
     bool isNoElEpMap;
     //! @brief Indicate the Blu-ray playlist has multiple clips.
     bool isMultiClip;
+    //! @brief Indicate the packet comes from a Blu-ray input.
+    bool isBluray;
     //! @brief Indicate non-Bluray dual-stream, use direct dual-queue pairing.
     bool isDirectPair;
     //! @brief Seek target time (DVD_TIME_BASE), used for filtering orphan frames.
