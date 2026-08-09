@@ -144,7 +144,6 @@ protected:
 
   bool m_videoPtsKnown{false};
   double m_videoPts{DVD_NOPTS_VALUE};
-  static constexpr int MAX_AUDIO_BUFFER_PACKETS{500};
   std::list<std::shared_ptr<CDVDMsg>> m_audioPacketBuffer;
   //! @brief Skip the PTS trim of m_audioPacketBuffer on the next GENERAL_RESYNC.
   //! Set after an audio stream switch: the buffered packets come from a fresh
