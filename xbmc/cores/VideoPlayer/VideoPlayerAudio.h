@@ -42,7 +42,6 @@ public:
 
   void SetSpeed(int speed) override;
   void Flush(bool sync) override;
-  void SetSkipResyncTrim(bool skip) override { m_skipResyncTrim = skip; }
 
   // waits until all available data has been rendered
   bool AcceptsData() const override;
@@ -145,11 +144,6 @@ protected:
   bool m_videoPtsKnown{false};
   double m_videoPts{DVD_NOPTS_VALUE};
   std::list<std::shared_ptr<CDVDMsg>> m_audioPacketBuffer;
-  //! @brief Skip the PTS trim of m_audioPacketBuffer on the next GENERAL_RESYNC.
-  //! Set after an audio stream switch: the buffered packets come from a fresh
-  //! stream and may not have accumulated enough for the trim to be meaningful,
-  //! so let the A/V error adjustment correct any offset instead.
-  bool m_skipResyncTrim{false};
 
   //============================================================================
   // LAV jitter tracking for PCM / decoded (non-passthrough) audio. Always on

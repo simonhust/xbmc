@@ -408,29 +408,26 @@ void CVideoPlayerAudio::Process()
       /* Trim buffered audio packets: drop packets with PTS < video PTS.
        * This ensures audio starts from the same position as video.
        * Only for single-clip (buffer was populated when isMultiClip=false).
-       * After an audio stream switch the fresh stream may not have accumulated
-       * enough packets for the trim to be meaningful, so it is skipped and the
-       * A/V error adjustment corrects any offset instead. */
+       * Skipping the trim here would start the (switched) audio from the
+       * buffer's first packet, which can be seconds before the video PTS, and
+       * the resulting large A/V error stalls the sink. */
       if (!m_audioPacketBuffer.empty())
       {
-        if (!m_skipResyncTrim)
+        int dropped = 0;
+        auto it = m_audioPacketBuffer.begin();
+        while (it != m_audioPacketBuffer.end())
         {
-          int dropped = 0;
-          auto it = m_audioPacketBuffer.begin();
-          while (it != m_audioPacketBuffer.end())
+          DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
+          if (pkt->dts < pts)
           {
-            DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
-            if (pkt->dts < pts)
-            {
-              it = m_audioPacketBuffer.erase(it);
-              dropped++;
-            }
-            else
-              ++it;
+            it = m_audioPacketBuffer.erase(it);
+            dropped++;
           }
-          CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - trim audio buffer: dropped {} packets, {} remaining",
-                    dropped, m_audioPacketBuffer.size());
+          else
+            ++it;
         }
+        CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - trim audio buffer: dropped {} packets, {} remaining",
+                  dropped, m_audioPacketBuffer.size());
 
         /* Decode and output the remaining buffered packets now that video PTS is known. */
         for (auto &bufMsg : m_audioPacketBuffer)
@@ -445,7 +442,6 @@ void CVideoPlayerAudio::Process()
         }
         m_audioPacketBuffer.clear();
       }
-      m_skipResyncTrim = false;
 
       m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
       m_syncTimer.Set(3000ms);
