@@ -429,6 +429,23 @@ void CVideoPlayerAudio::Process()
       {
         if (!m_skipResyncTrim)
         {
+          /* SEEKTEST: log video PTS vs buffered audio PTS range and trim result */
+          double firstPts = DVD_NOPTS_VALUE;
+          double lastPts = DVD_NOPTS_VALUE;
+          for (auto& bufMsg : m_audioPacketBuffer)
+          {
+            DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();
+            if (pkt->dts == DVD_NOPTS_VALUE)
+              continue;
+            if (firstPts == DVD_NOPTS_VALUE || pkt->dts < firstPts)
+              firstPts = pkt->dts;
+            if (lastPts == DVD_NOPTS_VALUE || pkt->dts > lastPts)
+              lastPts = pkt->dts;
+          }
+          CLog::Log(LOGINFO, "SEEKTEST resyncPts={:.3f} bufFirst={:.3f} bufLast={:.3f} bufSize={}",
+                    pts / DVD_TIME_BASE, firstPts / DVD_TIME_BASE, lastPts / DVD_TIME_BASE,
+                    m_audioPacketBuffer.size());
+
           int dropped = 0;
           auto it = m_audioPacketBuffer.begin();
           while (it != m_audioPacketBuffer.end())
@@ -586,14 +603,25 @@ void CVideoPlayerAudio::Process()
        * Only for single-clip Blu-ray (isMultiClip=false).
        * Multi-clip (seamless branch) may have PTS wrapping between
        * clips, so trimming by PTS would drop the wrong packets.
-       * No size cap: the buffer is bounded by the resync (it is cleared in the
-       * GENERAL_RESYNC handler when m_videoPtsKnown becomes true). Decoding
-       * overflow packets here would output audio ahead of the video clock and
-       * cause a large A/V desync after seeks. */
+       * When the buffer reaches MAX_AUDIO_BUFFER_PACKETS, apply back-pressure:
+       * push the packet back into the message queue instead of decoding or
+       * dropping it. The full queue blocks the demuxer, pausing the audio read
+       * without losing data, until the GENERAL_RESYNC unblocks us. */
       if (!m_videoPtsKnown && !pPacket->isMultiClip)
       {
-        m_audioPacketBuffer.push_back(pMsg);
-        continue;
+        if (m_audioPacketBuffer.size() < MAX_AUDIO_BUFFER_PACKETS)
+        {
+          m_audioPacketBuffer.push_back(pMsg);
+          continue;
+        }
+        else
+        {
+          m_messageQueue.PutBack(pMsg);
+          onlyPrioMsgs = true;
+          // throttle the back-pressure spin while waiting for the resync
+          CThread::Sleep(1ms);
+          continue;
+        }
       }
 
       if (!m_pAudioCodec->AddData(*pPacket))
