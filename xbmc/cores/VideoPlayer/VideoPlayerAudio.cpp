@@ -373,8 +373,11 @@ void CVideoPlayerAudio::Process()
        * by the seek's GENERAL_FLUSH; while it stays paused AddPackets blocks
        * for the full timeout window on every frame, so the decode loop below
        * (and the Resume that used to follow it) would never complete, leaving
-       * the sink paused forever and audio silent after a seek. */
-      if (m_speed != DVD_PLAYSPEED_PAUSE)
+       * the sink paused forever and audio silent after a seek.
+       * Use the user-pause flag, not m_speed: during caching (seek/resume)
+       * SetCaching() forces the player speed to PAUSE, so gating on m_speed
+       * would skip the resume and deadlock. */
+      if (!m_paused)
         m_audioSink.Resume();
 
       /* Set audio clock to video PTS + delay. Audio frames with PTS < video PTS
