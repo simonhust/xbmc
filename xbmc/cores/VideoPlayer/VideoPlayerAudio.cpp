@@ -573,20 +573,15 @@ void CVideoPlayerAudio::Process()
        * audio playing ahead of the first decoded video frame.
        * Only for single-clip Blu-ray (isMultiClip=false).
        * Multi-clip (seamless branch) may have PTS wrapping between
-       * clips, so trimming by PTS would drop the wrong packets. */
+       * clips, so trimming by PTS would drop the wrong packets.
+       * No size cap: the buffer is bounded by the resync (it is cleared in the
+       * GENERAL_RESYNC handler when m_videoPtsKnown becomes true). Decoding
+       * overflow packets here would output audio ahead of the video clock and
+       * cause a large A/V desync after seeks. */
       if (!m_videoPtsKnown && !pPacket->isMultiClip)
       {
-        if (m_audioPacketBuffer.size() < MAX_AUDIO_BUFFER_PACKETS)
-        {
-          m_audioPacketBuffer.push_back(pMsg);
-          continue;
-        }
-        else
-        {
-          CLog::Log(LOGWARNING,
-                    "CVideoPlayerAudio - audio buffer overflow ({}), falling back to direct decode",
-                    m_audioPacketBuffer.size());
-        }
+        m_audioPacketBuffer.push_back(pMsg);
+        continue;
       }
 
       if (!m_pAudioCodec->AddData(*pPacket))
