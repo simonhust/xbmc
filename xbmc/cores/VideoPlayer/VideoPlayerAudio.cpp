@@ -435,12 +435,12 @@ void CVideoPlayerAudio::Process()
           for (auto& bufMsg : m_audioPacketBuffer)
           {
             DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();
-            if (pkt->dts == DVD_NOPTS_VALUE)
+            if (pkt->pts == DVD_NOPTS_VALUE)
               continue;
-            if (firstPts == DVD_NOPTS_VALUE || pkt->dts < firstPts)
-              firstPts = pkt->dts;
-            if (lastPts == DVD_NOPTS_VALUE || pkt->dts > lastPts)
-              lastPts = pkt->dts;
+            if (firstPts == DVD_NOPTS_VALUE || pkt->pts < firstPts)
+              firstPts = pkt->pts;
+            if (lastPts == DVD_NOPTS_VALUE || pkt->pts > lastPts)
+              lastPts = pkt->pts;
           }
           CLog::Log(LOGINFO, "SEEKTEST resyncPts={:.3f} bufFirst={:.3f} bufLast={:.3f} bufSize={}",
                     pts / DVD_TIME_BASE, firstPts / DVD_TIME_BASE, lastPts / DVD_TIME_BASE,
@@ -451,7 +451,7 @@ void CVideoPlayerAudio::Process()
           while (it != m_audioPacketBuffer.end())
           {
             DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
-            if (pkt->dts < pts)
+            if (pkt->pts < pts)
             {
               it = m_audioPacketBuffer.erase(it);
               dropped++;
