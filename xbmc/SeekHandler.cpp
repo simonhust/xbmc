@@ -159,9 +159,9 @@ void CSeekHandler::Seek(bool forward, float amount, float duration /* = 0 */, bo
   {
     if (m_fixedStep != 0)
     {
-      // Fixed-step mode: lock the step size to a constant value, no progression
-      // on repeated presses (e.g. Blu-ray menu mode seeks by exactly ±10s).
-      SetSeekSize(forward ? m_fixedStep : -m_fixedStep);
+      // Fixed-step mode: accumulate the fixed step on repeated presses
+      // (e.g. Blu-ray menu mode seeks by exactly ±10s per press).
+      SetSeekSize(m_seekSize + (forward ? m_fixedStep : -m_fixedStep));
     }
     else
     {
