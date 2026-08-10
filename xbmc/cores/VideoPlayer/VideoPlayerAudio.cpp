@@ -419,39 +419,29 @@ void CVideoPlayerAudio::Process()
       m_syncState = IDVDStreamPlayer::SYNC_INSYNC;
       m_disconSettleTimer.Set(6000ms);
 
-      /* Trim buffered audio packets: drop packets with PTS < video PTS.
-       * This ensures audio starts from the same position as video.
-       * Only for single-clip (buffer was populated when isMultiClip=false).
-       * After an audio stream switch the fresh stream may not have accumulated
-       * enough packets for the trim to be meaningful, so it is skipped and the
-       * A/V error adjustment corrects any offset instead. */
+      /* Align audio to video by trimming packets that precede the video PTS.
+       * Two cases:
+       *  - audio first PTS < video PTS: drop those earlier packets so the
+       *    remaining stream starts at/after the video position (timer-based
+       *    alignment, AE clock sync handles the residual offset).
+       *  - audio first PTS >= video PTS: keep all packets; the AE clock sync
+       *    delays audio until its PTS matches the master (video) clock.
+       * Audio frame PTS values are never modified. */
       if (!m_audioPacketBuffer.empty())
       {
         if (!m_skipResyncTrim)
         {
-          /* SEEKTEST: log video PTS vs buffered audio PTS range and trim result */
-          double firstPts = DVD_NOPTS_VALUE;
-          double lastPts = DVD_NOPTS_VALUE;
-          for (auto& bufMsg : m_audioPacketBuffer)
-          {
-            DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();
-            if (pkt->pts == DVD_NOPTS_VALUE)
-              continue;
-            if (firstPts == DVD_NOPTS_VALUE || pkt->pts < firstPts)
-              firstPts = pkt->pts;
-            if (lastPts == DVD_NOPTS_VALUE || pkt->pts > lastPts)
-              lastPts = pkt->pts;
-          }
-          CLog::Log(LOGINFO, "SEEKTEST resyncPts={:.3f} bufFirst={:.3f} bufLast={:.3f} bufSize={}",
-                    pts / DVD_TIME_BASE, firstPts / DVD_TIME_BASE, lastPts / DVD_TIME_BASE,
-                    m_audioPacketBuffer.size());
-
+          double firstAudioPts = DVD_NOPTS_VALUE;
           int dropped = 0;
           auto it = m_audioPacketBuffer.begin();
           while (it != m_audioPacketBuffer.end())
           {
             DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(*it)->GetPacket();
-            if (pkt->pts < pts)
+            if (pkt->pts != DVD_NOPTS_VALUE &&
+                (firstAudioPts == DVD_NOPTS_VALUE || pkt->pts < firstAudioPts))
+              firstAudioPts = pkt->pts;
+
+            if (pkt->pts != DVD_NOPTS_VALUE && pkt->pts < pts)
             {
               it = m_audioPacketBuffer.erase(it);
               dropped++;
@@ -459,11 +449,13 @@ void CVideoPlayerAudio::Process()
             else
               ++it;
           }
-          CLog::Log(LOGDEBUG, LOGAUDIO, "CVideoPlayerAudio - trim audio buffer: dropped {} packets, {} remaining",
-                    dropped, m_audioPacketBuffer.size());
+          CLog::Log(LOGINFO,
+                    "SEEKTEST resyncPts={:.3f} audioFirst={:.3f} dropped={} bufSize={}",
+                    pts / DVD_TIME_BASE, firstAudioPts / DVD_TIME_BASE, dropped,
+                    m_audioPacketBuffer.size());
         }
 
-        /* Decode and output the remaining buffered packets now that video PTS is known. */
+        /* Decode and output the buffered packets now that video PTS is known. */
         for (auto &bufMsg : m_audioPacketBuffer)
         {
           DemuxPacket* pkt = std::static_pointer_cast<CDVDMsgDemuxerPacket>(bufMsg)->GetPacket();

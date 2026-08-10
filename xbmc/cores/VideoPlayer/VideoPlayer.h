@@ -528,7 +528,6 @@ protected:
   bool m_bCloseRequest;
 
   ECacheState  m_caching;
-  XbmcThreads::EndTime<> m_cachingTimer;
 
   std::unique_ptr<CProcessInfo> m_processInfo;
 

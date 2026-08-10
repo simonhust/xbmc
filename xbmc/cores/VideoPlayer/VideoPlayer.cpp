@@ -2268,15 +2268,6 @@ void CVideoPlayer::HandlePlaySpeed()
     // if all enabled video streams have been inited we are done
     if (m_CurrentVideo.id < 0 || m_CurrentVideo.syncState != IDVDStreamPlayer::SYNC_STARTING)
       SetCaching(CACHESTATE_PLAY);
-
-    // handle exceptions
-    if (m_CurrentVideo.id >= 0)
-    {
-      if (!m_VideoPlayerVideo->AcceptsData() && m_cachingTimer.IsTimePast())
-      {
-        SetCaching(CACHESTATE_DONE);
-      }
-    }
   }
 
   if (m_caching == CACHESTATE_PLAY)
@@ -3684,8 +3675,6 @@ void CVideoPlayer::SetCaching(ECacheState state)
     m_VideoPlayerAudio->SetSpeed(DVD_PLAYSPEED_PAUSE);
     m_VideoPlayerVideo->SetSpeed(DVD_PLAYSPEED_PAUSE);
     m_streamPlayerSpeed = DVD_PLAYSPEED_PAUSE;
-
-    m_cachingTimer.Set(5000ms);
   }
 
   if (state == CACHESTATE_PLAY ||
