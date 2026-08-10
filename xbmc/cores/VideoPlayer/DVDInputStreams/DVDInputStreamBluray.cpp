@@ -606,6 +606,11 @@ void CDVDInputStreamBluray::ProcessEvent() {
     m_player->OnDiscNavResult(&m_event.param, BD_EVENT_MENU);
     break;
 
+  case BD_EVENT_POPUP:
+    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_POPUP {}", m_event.param);
+    m_popupAvailable = (m_event.param != 0);
+    break;
+
   case BD_EVENT_IDLE:
     KODI::TIME::Sleep(100ms);
     break;
@@ -1240,25 +1245,32 @@ bool CDVDInputStreamBluray::OnMenu()
     return false;
   }
 
-  // we can not use this event to track a possible popup menu state since bd-j blu-rays can
-  // toggle the popup menu on their own without firing this event, and if they do this, our
-  // internal tracking state would be wrong. So just process and return.
-  if(bd_user_input(m_bd, -1, BD_VK_POPUP) >= 0)
+  // Level 1: popup menu. Only attempt if libbluray reports it is available
+  // (BD_EVENT_POPUP). Some DIY Blu-rays do not have a popup menu; calling
+  // BD_VK_POPUP on them can cause undefined behavior or crash.
+  if (m_popupAvailable)
   {
-    return true;
+    if (bd_user_input(m_bd, -1, BD_VK_POPUP) >= 0)
+    {
+      return true;
+    }
+  }
+  else
+  {
+    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::OnMenu - popup not available");
   }
 
-  CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::OnMenu - popup failed, trying root");
-
+  // Level 2: root menu. Fallback when popup is unavailable or fails.
   if (bd_user_input(m_bd, -1, BD_VK_ROOT_MENU) >= 0)
   {
     return true;
   }
 
+  // Level 3: explicit menu call. Last resort fallback.
   CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::OnMenu - root failed, trying explicit");
   if (bd_menu_call(m_bd, -1) <= 0)
   {
-    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::OnMenu - root failed");
+    CLog::Log(LOGDEBUG, "CDVDInputStreamBluray::OnMenu - explicit failed");
     return false;
   }
   return true;

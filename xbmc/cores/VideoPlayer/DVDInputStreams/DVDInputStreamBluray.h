@@ -180,6 +180,7 @@ protected:
   BLURAY_CLIP_INFO* m_clip = nullptr;
   uint32_t m_angle = 0;
   bool m_menu = false;
+  bool m_popupAvailable = false;
   bool m_isInMainMenu = false;
   bool m_hasOverlay = false;
   bool m_navmode = false;
