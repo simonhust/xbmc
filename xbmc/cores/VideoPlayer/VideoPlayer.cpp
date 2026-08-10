@@ -862,6 +862,13 @@ bool CVideoPlayer::CloseFile(bool reopen)
 
   m_renderManager.UnInit();
 
+  // immediately flush audio and video queues on stop,
+  // so any buffered or pending data is discarded before threads exit.
+  if (m_VideoPlayerAudio)
+    m_VideoPlayerAudio->FlushMessages();
+  if (m_VideoPlayerVideo)
+    m_VideoPlayerVideo->FlushMessages();
+
   CLog::Log(LOGINFO, "VideoPlayer: waiting for threads to exit");
 
   // wait for the main thread to finish up
@@ -2258,10 +2265,8 @@ void CVideoPlayer::HandlePlaySpeed()
 
   if (m_caching == CACHESTATE_INIT)
   {
-    // if all enabled streams have been inited we are done
-    if ((m_CurrentVideo.id >= 0 || m_CurrentAudio.id >= 0) &&
-        (m_CurrentVideo.id < 0 || m_CurrentVideo.syncState != IDVDStreamPlayer::SYNC_STARTING) &&
-        (m_CurrentAudio.id < 0 || m_CurrentAudio.syncState != IDVDStreamPlayer::SYNC_STARTING))
+    // if all enabled video streams have been inited we are done
+    if (m_CurrentVideo.id < 0 || m_CurrentVideo.syncState != IDVDStreamPlayer::SYNC_STARTING)
       SetCaching(CACHESTATE_PLAY);
 
     // handle exceptions
