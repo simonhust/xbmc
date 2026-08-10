@@ -201,7 +201,7 @@
       <teletext>ActivateWindow(Teletext)</teletext>
       <subtitle>DialogSelectSubtitle</subtitle>
       <star>NextSubtitle</star>
-      <language>DialogSelectAudio</language>
+      <a>DialogSelectAudio</a>
       <playlist>Playlist</playlist>
       <hash>AudioNextLanguage</hash>
       <pageplus>SkipNext</pageplus>
