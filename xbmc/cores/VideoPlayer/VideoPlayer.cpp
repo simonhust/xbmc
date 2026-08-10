@@ -2265,7 +2265,7 @@ void CVideoPlayer::HandlePlaySpeed()
       SetCaching(CACHESTATE_PLAY);
 
     // handle exceptions
-    if (m_CurrentAudio.id >= 0 && m_CurrentVideo.id >= 0)
+    if (m_CurrentVideo.id >= 0)
     {
       if (!m_VideoPlayerVideo->AcceptsData() && m_cachingTimer.IsTimePast())
       {
