@@ -84,7 +84,6 @@ void CSeekHandler::Reset()
   m_seekStep = 0;
   m_seekSize = 0;
   m_fixedStep = 0;
-  m_seekAccumulated = 0;
   m_timeCodePosition = 0;
 }
 
@@ -160,8 +159,9 @@ void CSeekHandler::Seek(bool forward, float amount, float duration /* = 0 */, bo
   {
     if (m_fixedStep != 0)
     {
-      m_seekAccumulated += forward ? m_fixedStep : -m_fixedStep;
-      SetSeekSize(m_seekAccumulated);
+      // Fixed-step mode: lock the step size to a constant value, no progression
+      // on repeated presses (e.g. Blu-ray menu mode seeks by exactly ±10s).
+      SetSeekSize(forward ? m_fixedStep : -m_fixedStep);
     }
     else
     {
