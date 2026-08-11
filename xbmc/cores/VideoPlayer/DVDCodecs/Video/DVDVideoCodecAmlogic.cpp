@@ -898,6 +898,17 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr10p data with size {}", __FUNCTION__,
             sideData->size);
       }
+
+      sideData = av_packet_side_data_get(static_cast<AVPacketSideData*>(packet.pSideData),
+                                         packet.iSideDataElems,
+                                         AV_PKT_DATA_DYNAMIC_HDR_VIVID_RAW);
+      if (sideData && sideData->size)
+      {
+        m_processInfo.SetIsHdrVivid(true);
+        if (m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
+          CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr vivid data with size {}", __FUNCTION__,
+            sideData->size);
+      }
     }
 
     double used_dts = (m_last_dts != DVD_NOPTS_VALUE) ? m_last_dts : packet.dts;
