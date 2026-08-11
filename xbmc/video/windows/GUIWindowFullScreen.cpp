@@ -177,7 +177,7 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
         appPlayer->AddSubtitle(path);
       return true;
     }
-  case ACTION_FORWARD:
+  case ACTION_PLAYER_FORWARD:
     if (appPlayer->IsInMenu())
     {
       InitiateSeek(true);
@@ -185,7 +185,7 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
     }
     break;
 
-  case ACTION_REWIND:
+  case ACTION_PLAYER_REWIND:
     if (appPlayer->IsInMenu())
     {
       InitiateSeek(false);
