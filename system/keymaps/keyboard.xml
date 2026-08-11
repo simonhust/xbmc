@@ -442,9 +442,8 @@
       <down mod="longpress">NextSubtitle</down>
       <left mod="alt">PlayerControl(tempodown)</left>
       <right mod="alt">PlayerControl(tempoup)</right>
-      <a>AudioDelay</a>
-      <a mod="ctrl">DialogSelectAudio</a>
-      <leftquote>DialogSelectAudio</leftquote>
+      <a>DialogSelectAudio</a>
+      <leftquote>AudioDelay</leftquote>
       <escape>Fullscreen</escape>
       <c>Playlist</c>
       <v>ActivateWindow(Teletext)</v>
