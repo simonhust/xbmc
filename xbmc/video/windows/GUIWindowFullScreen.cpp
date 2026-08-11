@@ -86,7 +86,7 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
   switch (action.GetID())
   {
   case ACTION_SHOW_OSD:
-    if (appPlayer->IsInMenu())
+    if (appPlayer->GetSupportedMenuType() == MenuType::NATIVE)
     {
       appPlayer->OnAction(CAction(ACTION_SHOW_VIDEOMENU));
       return true;
