@@ -186,7 +186,7 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
     return true;
 
   case ACTION_NAV_BACK:
-    if (appPlayer->IsInMenu())
+    if (appPlayer->GetSupportedMenuType() == MenuType::NATIVE)
     {
       if (CGUIDialogYesNo::ShowAndGetInput(CVariant{""}, CVariant{"Do you want to quit this video?"}))
       {
