@@ -186,11 +186,15 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
     return true;
 
   case ACTION_NAV_BACK:
-    if (CGUIDialogYesNo::ShowAndGetInput(CVariant{""}, CVariant{"Do you want to quit this video?"}))
+    if (appPlayer->IsInMenu())
     {
-      g_application.StopPlaying();
+      if (CGUIDialogYesNo::ShowAndGetInput(CVariant{""}, CVariant{"Do you want to quit this video?"}))
+      {
+        g_application.StopPlaying();
+      }
+      return true;
     }
-    return true;
+    break;
   default:
       break;
   }
