@@ -814,6 +814,7 @@
 	<variable name="VideoHDRTypeVar">
 		<value condition="String.IsEqual(ListItem.HdrType,dolbyvision) | [Window.IsActive(fullscreenvideo) + String.IsEqual(VideoPlayer.HdrType,dolbyvision)]">Dolby Vision</value>
 		<value condition="String.IsEqual(ListItem.HdrType,hdr10plus) | [Window.IsActive(fullscreenvideo) + String.IsEqual(VideoPlayer.HdrType,hdr10plus)]">HDR10+</value>
+		<value condition="String.IsEqual(ListItem.HdrType,hdrvivid) | [Window.IsActive(fullscreenvideo) + String.IsEqual(VideoPlayer.HdrType,hdrvivid)]">HDR Vivid</value>
 		<value condition="String.IsEqual(ListItem.HdrType,hdr10) | [Window.IsActive(fullscreenvideo) + String.IsEqual(VideoPlayer.HdrType,hdr10)]">HDR10</value>
 		<value condition="String.IsEqual(ListItem.HdrType,hlg) | [Window.IsActive(fullscreenvideo) + String.IsEqual(VideoPlayer.HdrType,hlg)]">HLG</value>
 		<value condition="Window.IsActive(fullscreenvideo)">$INFO[VideoPlayer.HdrType]</value>
@@ -822,6 +823,7 @@
 	<variable name="VideoHDRType1Var">
 		<value condition="String.IsEqual(ListItem.Property(HdrType.1),dolbyvision)">Dolby Vision</value>
 		<value condition="String.IsEqual(ListItem.Property(HdrType.1),hdr10plus)">HDR10+</value>
+		<value condition="String.IsEqual(ListItem.Property(HdrType.1),hdrvivid)">HDR Vivid</value>
 		<value condition="String.IsEqual(ListItem.Property(HdrType.1),hdr10)">HDR10</value>
 		<value condition="String.IsEqual(ListItem.Property(HdrType.1),hlg)">HLG</value>
 		<value>$INFO[ListItem.Property(HdrType.1)]</value>
@@ -829,6 +831,7 @@
 	<variable name="VideoHDRType2Var">
 		<value condition="!String.IsEqual(ListItem.Property(HdrType.1),dolbyvision) + String.IsEqual(ListItem.Property(HdrType.2),dolbyvision)">Dolby Vision</value>
 		<value condition="!String.IsEqual(ListItem.Property(HdrType.1),hdr10plus) + String.IsEqual(ListItem.Property(HdrType.2),hdr10plus)">HDR10+</value>
+		<value condition="!String.IsEqual(ListItem.Property(HdrType.1),hdrvivid) + String.IsEqual(ListItem.Property(HdrType.2),hdrvivid)">HDR Vivid</value>
 		<value condition="!String.IsEqual(ListItem.Property(HdrType.1),hdr10) + String.IsEqual(ListItem.Property(HdrType.2),hdr10)">HDR10</value>
 		<value condition="!String.IsEqual(ListItem.Property(HdrType.1),hlg) + String.IsEqual(ListItem.Property(HdrType.2),hlg)">HLG</value>
 		<value>$INFO[ListItem.Property(HdrType.2)]</value>
@@ -1048,6 +1051,7 @@
 	<variable name="StreamHDRTypeVar">
 		<value condition="String.IsEqual(ListItem.Property(stream.hdrtype),dolbyvision)">Dolby Vision</value>
 		<value condition="String.IsEqual(ListItem.Property(stream.hdrtype),hdr10plus)">HDR10+</value>
+		<value condition="String.IsEqual(ListItem.Property(stream.hdrtype),hdrvivid)">HDR Vivid</value>
 		<value condition="String.IsEqual(ListItem.Property(stream.hdrtype),hdr10)">HDR10</value>
 		<value condition="String.IsEqual(ListItem.Property(stream.hdrtype),hlg)">HLG</value>
 		<value>$INFO[ListItem.Property(stream.hdrtype)]</value>
@@ -2532,6 +2536,7 @@
 	<variable name="HDRcodectypeVar">
 		<value condition="String.Contains(VideoPlayer.HdrType,dolbyvision)">Dolby Vision</value>
 		<value condition="String.IsEqual(VideoPlayer.HdrType,hdr10plus)">HDR10+</value>
+		<value condition="String.IsEqual(VideoPlayer.HdrType,hdrvivid)">HDR Vivid</value>
 		<value condition="String.Contains(VideoPlayer.HdrType,hdr10)">HDR10</value>
 		<value condition="String.Contains(VideoPlayer.HdrType,hlg)">HLG</value>
 		<value condition="String.IsEmpty(VideoPlayer.HdrType)">SDR</value>

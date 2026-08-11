@@ -904,10 +904,11 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
                                          AV_PKT_DATA_DYNAMIC_HDR_VIVID_RAW);
       if (sideData && sideData->size)
       {
+        /* The CUVA HDR Vivid metadata stays in the video bitstream (SEI) and
+         * is parsed by the Amlogic decoder firmware / amvecm, so there is no
+         * user-space passthrough needed here. Only mark the stream type so the
+         * player can report/display HDR Vivid correctly. */
         m_processInfo.SetIsHdrVivid(true);
-        if (m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
-          CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr vivid data with size {}", __FUNCTION__,
-            sideData->size);
       }
     }
 
