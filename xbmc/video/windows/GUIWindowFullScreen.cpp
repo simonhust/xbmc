@@ -178,31 +178,19 @@ bool CGUIWindowFullScreen::OnAction(const CAction &action)
       return true;
     }
   case ACTION_PLAYER_FORWARD:
-    if (appPlayer->IsInMenu())
-    {
-      InitiateSeek(true);
-      return true;
-    }
-    break;
+    InitiateSeek(true);
+    return true;
 
   case ACTION_PLAYER_REWIND:
-    if (appPlayer->IsInMenu())
-    {
-      InitiateSeek(false);
-      return true;
-    }
-    break;
+    InitiateSeek(false);
+    return true;
 
   case ACTION_NAV_BACK:
-    if (appPlayer->IsInMenu())
+    if (CGUIDialogYesNo::ShowAndGetInput(CVariant{""}, CVariant{"Do you want to quit this video?"}))
     {
-      if (CGUIDialogYesNo::ShowAndGetInput(CVariant{""}, CVariant{"Do you want to quit this video?"}))
-      {
-        g_application.StopPlaying();
-      }
-      return true;
+      g_application.StopPlaying();
     }
-    break;
+    return true;
   default:
       break;
   }
