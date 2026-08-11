@@ -206,6 +206,8 @@
       <hash>AudioNextLanguage</hash>
       <pageplus>SkipNext</pageplus>
       <pageminus>SkipPrevious</pageminus>
+      <channel_up>SubtitleShiftUp</channel_up>
+      <channel_down>SubtitleShiftDown</channel_down>
     </remote>
   </FullscreenVideo>
   <FullscreenGame>
