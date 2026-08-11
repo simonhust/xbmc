@@ -641,6 +641,13 @@ void CSelectionStreams::Update(const std::shared_ptr<CDVDInputStream>& input,
       /* skip streams with no type */
       if (stream->type == StreamType::NONE)
         continue;
+
+      /* Skip Dolby Vision Enhancement Layer (EL) stream (0x1015) as an
+       * independent video candidate. The EL is paired with the Base Layer
+       * (BL, 0x1011) in the video decoder and must not be opened as a
+       * standalone video stream. */
+      if (stream->type == StreamType::VIDEO && stream->dvdNavId == 0x1015)
+        continue;
       /* make sure stream is marked with right source */
       stream->source = source;
 
