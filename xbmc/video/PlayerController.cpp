@@ -418,15 +418,16 @@ bool CPlayerController::OnAction(const CAction &action)
         {
           maxPos =
               resInfo.Overscan.bottom + static_cast<int>(static_cast<float>(resInfo.iHeight) / 100 *
-                                                         settings->GetVerticalMarginPerc());
+                                                          settings->GetVerticalMarginPerc());
         }
 
         vs.m_subtitleVerticalPosition -=
             static_cast<int>(m_movingSpeed.GetUpdatedDistance(ACTION_SUBTITLE_VSHIFT_UP));
         if (vs.m_subtitleVerticalPosition < resInfo.Overscan.top)
           vs.m_subtitleVerticalPosition = resInfo.Overscan.top;
-        appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition,
-                                               action.GetText() == "save");
+        // Always save to the calibration value (resInfo.iSubtitles)
+        // so the change persists and is bound to the screen calibration parameter
+        appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition, true);
 
         ShowSlider(action.GetID(), 277, static_cast<float>(vs.m_subtitleVerticalPosition),
                    static_cast<float>(resInfo.Overscan.top), 1.0f, static_cast<float>(maxPos));
@@ -453,15 +454,16 @@ bool CPlayerController::OnAction(const CAction &action)
           // caused by Libass see "displacement compensation" on OverlayRenderer
           maxPos =
               resInfo.Overscan.bottom + static_cast<int>(static_cast<float>(resInfo.iHeight) / 100 *
-                                                         settings->GetVerticalMarginPerc());
+                                                          settings->GetVerticalMarginPerc());
         }
 
         vs.m_subtitleVerticalPosition +=
             static_cast<int>(m_movingSpeed.GetUpdatedDistance(ACTION_SUBTITLE_VSHIFT_DOWN));
         if (vs.m_subtitleVerticalPosition > maxPos)
           vs.m_subtitleVerticalPosition = maxPos;
-        appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition,
-                                               action.GetText() == "save");
+        // Always save to the calibration value (resInfo.iSubtitles)
+        // so the change persists and is bound to the screen calibration parameter
+        appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition, true);
 
         ShowSlider(action.GetID(), 277, static_cast<float>(vs.m_subtitleVerticalPosition),
                    static_cast<float>(resInfo.Overscan.top), 1.0f, static_cast<float>(maxPos));

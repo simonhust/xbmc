@@ -226,7 +226,12 @@ void CRenderer::Render(COverlay* o)
       {
         RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
         state.x += m_rv.x1 + m_rv.Width() * 0.5f;
-        state.y += m_rv.y1 + (resInfo.iSubtitles - resInfo.Overscan.top);
+        // 字幕校准值只影响屏幕底部 20% 区域（从上往下高度 80% 以上）
+        // 0-80% 区域的字幕（如顶部注释）不受校准值影响
+        if (state.y > m_rv.Height() * 0.8)
+          state.y += m_rv.y1 + (resInfo.iSubtitles - resInfo.Overscan.top);
+        else
+          state.y += m_rv.y1;
       }
       else
       {
@@ -538,7 +543,9 @@ void CRenderer::PrepareOverlays(int idx)
                              (static_cast<double>(assPlayResY) / 720);
       double vertMarginScaled = assVertMargin / assPlayResY * frameHeight;
       double pos = posPx / (frameHeight - vertMarginScaled);
-      rOpts.position = 100 - pos * 100;
+      // 字幕校准值只影响屏幕底部 20% 区域（从上往下高度 80% 以上）
+      // 上方 0-80% 区域不受校准值影响
+      rOpts.position = std::min(20.0, 100 - pos * 100);
     }
     else if (m_subtitleAlign == SUBTITLES::Align::BOTTOM_OUTSIDE)
     {
@@ -546,7 +553,9 @@ void CRenderer::PrepareOverlays(int idx)
       // we avoid apply the displacement compensation
       double posPx =
           static_cast<double>(m_subtitlePosition + m_subtitleVerticalMargin - resInfo.Overscan.top);
-      rOpts.position = 100 - posPx / static_cast<double>(rOpts.frameHeight) * 100;
+      // 字幕校准值只影响屏幕底部 20% 区域（从上往下高度 80% 以上）
+      // 上方 0-80% 区域不受校准值影响
+      rOpts.position = std::min(20.0, 100 - posPx / static_cast<double>(rOpts.frameHeight) * 100);
     }
     else if (m_subtitleAlign == SUBTITLES::Align::BOTTOM_INSIDE ||
              m_subtitleAlign == SUBTITLES::Align::TOP_INSIDE)
