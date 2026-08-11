@@ -9088,6 +9088,31 @@ msgid "Choose TV-Led (RGB 4:4:4) or Player-Led (YCbCr 4:2:2) mode for Dolby Visi
 msgstr ""
 
 #: system/settings/settings.xml
+msgctxt "#14428"
+msgid "HDR Vivid mode"
+msgstr ""
+
+#: system/settings/settings.xml
+msgctxt "#14429"
+msgid "Select HDR Vivid passthrough delivery mode. Auto follows the display EDID; VSIF and EMDS force a specific HDMI metadata packet type."
+msgstr ""
+
+#: xbmc/windowing/amlogic/WinSystemAmlogic.cpp
+msgctxt "#14430"
+msgid "Auto"
+msgstr ""
+
+#: xbmc/windowing/amlogic/WinSystemAmlogic.cpp
+msgctxt "#14431"
+msgid "VSIF"
+msgstr ""
+
+#: xbmc/windowing/amlogic/WinSystemAmlogic.cpp
+msgctxt "#14432"
+msgid "EMDS"
+msgstr ""
+
+#: system/settings/settings.xml
 msgctxt "#14426"
 msgid "TV-Led"
 msgstr ""

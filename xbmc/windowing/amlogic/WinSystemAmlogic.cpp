@@ -96,6 +96,15 @@ void CWinSystemAmlogic::SettingOptionsComponentsFiller(const SettingConstPtr& se
                       AML_DV_PLAYER_LED);
 }
 
+void CWinSystemAmlogic::SettingOptionsHdrVividFiller(const SettingConstPtr& setting,
+                                                     std::vector<IntegerSettingOption>& list,
+                                                     int& current)
+{
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14430), 0); // Auto
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14431), 1); // VSIF
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14432), 2); // EMDS
+}
+
 void CWinSystemAmlogic::MonitorStart()
 {
   int err;
@@ -294,6 +303,10 @@ bool CWinSystemAmlogic::InitWindowSystem()
     if (new_value != old_value)
       settings->SetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED, new_value);
   }
+
+  /* HDR Vivid passthrough mode (0 auto, 1 VSIF, 2 EMDS) - always available */
+  CServiceBroker::GetSettingsComponent()->GetSettings()->
+    GetSettingsManager()->RegisterSettingOptionsFiller("hdrvivid_modes", SettingOptionsHdrVividFiller);
 
   m_nativeDisplay = EGL_DEFAULT_DISPLAY;
 

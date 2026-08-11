@@ -50,6 +50,10 @@ public:
                                              std::vector<IntegerSettingOption>& list,
                                              int& current);
 
+  static void SettingOptionsHdrVividFiller(const std::shared_ptr<const CSetting>& setting,
+                                           std::vector<IntegerSettingOption>& list,
+                                           int& current);
+
   void MonitorStart();
   void MonitorStop();
 protected:
