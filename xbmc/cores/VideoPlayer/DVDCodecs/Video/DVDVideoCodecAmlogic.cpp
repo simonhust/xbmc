@@ -716,11 +716,16 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           {
             /* EL has EP_map: use simple single-queue pairing */
             /* Seek-time filter: active from seek until first BL+EL pair
-             * succeeds. Skip orphan packets with DTS before seek target. */
+             * succeeds. Skip orphan packets with DTS before the first
+             * post-seek packet (the EP-map entry point).  Using the first
+             * packet's DTS instead of seekTime avoids discarding the
+             * entry-point frames that legitimately fall before the seek
+             * target. */
             if (packet.m_seekTime != m_dv_seek_time_seen)
             {
               m_dv_seek_time_seen = packet.m_seekTime;
               m_dv_seek_filter_active = (packet.m_seekTime != DVD_NOPTS_VALUE);
+              m_dv_seek_first_dts = DVD_NOPTS_VALUE;
             }
 
             if (!packet.isMultiClip && m_dv_seek_filter_active &&
@@ -730,13 +735,17 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               double dts_val = packet.dts;
               if (dts_val < 0)
                 dts_val = 0;
-              if (dts_val < packet.m_seekTime)
+
+              if (m_dv_seek_first_dts == DVD_NOPTS_VALUE)
+                m_dv_seek_first_dts = dts_val;
+
+              if (dts_val < m_dv_seek_first_dts)
               {
                 CLog::Log(LOGDEBUG,
                           "CDVDVideoCodecAmlogic::{} - skip orphan packet: "
-                          "dts={:.3f} < seekTime={:.3f}",
+                          "dts={:.3f} < first_dts={:.3f}",
                           __FUNCTION__, dts_val / DVD_TIME_BASE,
-                          packet.m_seekTime / DVD_TIME_BASE);
+                          m_dv_seek_first_dts / DVD_TIME_BASE);
                 return true;
               }
             }
