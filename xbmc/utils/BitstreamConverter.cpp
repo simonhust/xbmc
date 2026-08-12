@@ -1349,6 +1349,7 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
 #endif
 
   std::vector<uint8_t> finalPrefixSeiNalu;
+  std::vector<uint8_t> fixedCuvaSeiNalu;
 
   switch (m_codec)
   {
@@ -1450,8 +1451,9 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         auto fixedNalu = CHevcSei::FixCuvaSeiNalu(buf_to_write, final_nal_size);
         if (fixedNalu)
         {
-          buf_to_write = fixedNalu->data();
-          final_nal_size = fixedNalu->size();
+          fixedCuvaSeiNalu = std::move(*fixedNalu);
+          buf_to_write = fixedCuvaSeiNalu.data();
+          final_nal_size = fixedCuvaSeiNalu.size();
         }
       }
 
