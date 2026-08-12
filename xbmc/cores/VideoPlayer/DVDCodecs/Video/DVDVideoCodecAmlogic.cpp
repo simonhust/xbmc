@@ -838,6 +838,14 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       m_processInfo.SetIsHdr10Plus(IsHdr10Plus);
       m_processInfo.SetIsHdrVivid(IsHdrVivid);
 
+      // Update hints hdrType so the decoder (AMLCodec::OpenDecoder)
+      // sees the correct HDR type for sysfs configuration.
+      if (IsHdrVivid)
+        m_hints.hdrType = StreamHdrType::HDR_TYPE_HDRVIVID;
+      else if (IsHdr10Plus)
+        m_hints.hdrType = StreamHdrType::HDR_TYPE_HDR10PLUS;
+      m_videobuffer.hdrType = m_hints.hdrType;
+
       CLog::Log(LOGINFO, "CDVDVideoCodecAmlogic::{}: Open decoder: fps:{:d}/{:d}", __FUNCTION__, m_hints.fpsrate, m_hints.fpsscale);
       if (m_Codec && !m_Codec->OpenDecoder(m_hints, doviIsFEL))
         CLog::Log(LOGERROR, "CDVDVideoCodecAmlogic::{}: Failed to open Amlogic Codec", __FUNCTION__);
