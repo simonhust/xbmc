@@ -245,6 +245,9 @@ public:
   virtual CHDRCapabilities GetDisplayHDRCapabilities() const { return {}; }
   static const char* SETTING_WINSYSTEM_IS_HDR_DISPLAY;
   virtual float GetGuiSdrPeakLuminance() const { return .0f; }
+  // GUI saturation factor used by the 709->2020 GUI shader transfer path;
+  // 1.0 is neutral. Platforms without a setting keep the GUI fully saturated.
+  virtual float GetGuiSdrSaturation() const { return 1.0f; }
   virtual bool HasSystemSdrPeakLuminance() { return false; }
 
   /*!

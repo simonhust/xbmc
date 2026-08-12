@@ -25,6 +25,7 @@ uniform sampler2D m_samp0;
 varying vec4 m_cord0;
 varying lowp vec4 m_colour;
 uniform float m_sdrPeak;
+uniform float m_sdrSaturation;
 
 void main ()
 {
@@ -39,7 +40,13 @@ void main ()
 #endif
 
 #if defined(KODI_TRANSFER_PQ)
-  rgb.rgb *= m_sdrPeak;
+  // BT.709 -> BT.2020 gamut conversion in the sRGB-encoded domain. The transfer
+  // function (sRGB -> linear -> PQ) is applied later by the OSD HDR core.
+  const mat3 bt709_to_bt2020 = mat3(0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.0880,
+                                    0.0433, 0.0114, 0.8956);
+  rgb.rgb = bt709_to_bt2020 * rgb.rgb;
+  const vec3 luma = vec3(dot(rgb.rgb, vec3(0.2627, 0.6780, 0.0593)));
+  rgb.rgb = mix(luma, rgb.rgb, m_sdrSaturation);
 #endif
 
   gl_FragColor = rgb;

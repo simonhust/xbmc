@@ -487,6 +487,15 @@ float CWinSystemAmlogic::GetGuiSdrPeakLuminance() const
   return ((0.7f * guiSdrPeak + 30.0f) / 100.0f);
 }
 
+float CWinSystemAmlogic::GetGuiSdrSaturation() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int saturation = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRSATURATION);
+
+  // UI 0-100, neutral at 50 -> 1.0.
+  return saturation / 50.0f;
+}
+
 HDR_STATUS CWinSystemAmlogic::GetOSHDRStatus()
 {
   return (IsHDRDisplay() ? HDR_STATUS::HDR_ON : HDR_STATUS::HDR_UNSUPPORTED);
