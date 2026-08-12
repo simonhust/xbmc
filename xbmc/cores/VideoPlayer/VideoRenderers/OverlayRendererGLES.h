@@ -38,6 +38,7 @@ public:
   float m_u;
   float m_v;
   bool m_pma; /*< is alpha in texture premultiplied in the values */
+  bool m_isHdrPqAuthored{false}; /*< HDR-authored PGS, pre-baked to BT.2020 sRGB */
 };
 
 class COverlayGlyphGLES : public COverlay

@@ -8,6 +8,9 @@
 
 #include "OverlayRendererUtil.h"
 
+#include <algorithm>
+#include <cmath>
+
 #include "ServiceBroker.h"
 #include "cores/VideoPlayer/DVDCodecs/Overlay/DVDOverlayImage.h"
 #include "cores/VideoPlayer/DVDCodecs/Overlay/DVDOverlaySSA.h"
@@ -47,15 +50,101 @@ static uint32_t build_rgba(const int yuv[3], int alpha, bool mergealpha)
 
 void convert_rgba(const CDVDOverlayImage& o, bool mergealpha, std::vector<uint32_t>& rgba)
 {
+  convert_rgba(o, o.palette, mergealpha, rgba);
+}
+
+void convert_rgba(const CDVDOverlayImage& o,
+                  const std::vector<uint32_t>& paletteIn,
+                  bool mergealpha,
+                  std::vector<uint32_t>& rgba)
+{
   uint32_t palette[256] = {};
-  for (size_t i = 0; i < o.palette.size(); i++)
+  for (size_t i = 0; i < paletteIn.size() && i < 256; i++)
     palette[i] = build_rgba(
-        (o.palette[i] >> PIXEL_ASHIFT) & 0xff, (o.palette[i] >> PIXEL_RSHIFT) & 0xff,
-        (o.palette[i] >> PIXEL_GSHIFT) & 0xff, (o.palette[i] >> PIXEL_BSHIFT) & 0xff, mergealpha);
+        (paletteIn[i] >> PIXEL_ASHIFT) & 0xff, (paletteIn[i] >> PIXEL_RSHIFT) & 0xff,
+        (paletteIn[i] >> PIXEL_GSHIFT) & 0xff, (paletteIn[i] >> PIXEL_BSHIFT) & 0xff, mergealpha);
 
   for (int row = 0; row < o.height; row++)
     for (int col = 0; col < o.width; col++)
       rgba[row * o.width + col] = palette[o.pixels[row * o.linesize + col]];
+}
+
+namespace
+{
+// ST.2084 (PQ) constants and helpers.
+constexpr float ST2084_m1 = 0.1593017578125f; // 2610/16384
+constexpr float ST2084_m2 = 78.84375f;        // 2523/4096 * 128
+constexpr float ST2084_c1 = 0.8359375f;       // 3424/4096
+constexpr float ST2084_c2 = 18.8515625f;      // 2413/4096 * 32
+constexpr float ST2084_c3 = 18.6875f;         // 2392/4096 * 32
+
+// PQ EOTF: normalized code (0..1 = 0..10000 nits) -> linear light.
+float DecodePQ(float pq)
+{
+  float p = std::pow(pq, 1.0f / ST2084_m2);
+  return std::pow(std::max(p - ST2084_c1, 0.0f) / (ST2084_c2 - ST2084_c3 * p),
+                  1.0f / ST2084_m1);
+}
+
+// IEC 61966-2-1 sRGB OETF: linear light -> sRGB code.
+float EncodeSRGB(float l)
+{
+  return l <= 0.0031308f ? 12.92f * l : 1.055f * std::pow(l, 1.0f / 2.4f) - 0.055f;
+}
+
+// BT.709 -> BT.2020 gamut matrix (row-major, applied in linear light). The
+// FFmpeg PGS decoder converts the stream YCbCr palette with a hardcoded BT.709
+// matrix; UHD-BD PGS is BT.2020, so the result is translated back here.
+constexpr float k709To2020[9] = {0.6274f, 0.3293f, 0.0433f, 0.0691f, 0.9195f,
+                                 0.0114f, 0.0164f, 0.0880f, 0.8956f};
+} // namespace
+
+std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palette,
+                                              float peakScale,
+                                              float saturation)
+{
+  std::vector<uint32_t> out = palette;
+
+  for (auto& entry : out)
+  {
+    uint32_t a = (entry >> PIXEL_ASHIFT) & 0xff;
+    float rgb[3] = {(entry >> PIXEL_RSHIFT) & 0xff, (entry >> PIXEL_GSHIFT) & 0xff,
+                    (entry >> PIXEL_BSHIFT) & 0xff};
+
+    // PQ -> linear (display-referred, 0..1 = 0..10000 nits).
+    for (int i = 0; i < 3; i++)
+      rgb[i] = DecodePQ(rgb[i] / 255.0f);
+
+    // BT.709 -> BT.2020 (linear domain).
+    float lin[3];
+    for (int i = 0; i < 3; i++)
+      lin[i] = k709To2020[i * 3] * rgb[0] + k709To2020[i * 3 + 1] * rgb[1] +
+               k709To2020[i * 3 + 2] * rgb[2];
+
+    // Saturation mix in linear BT.2020 (BT.2020 luma coefficients).
+    if (saturation != 1.0f)
+    {
+      float luma = 0.2627f * lin[0] + 0.6780f * lin[1] + 0.0593f * lin[2];
+      for (int i = 0; i < 3; i++)
+        lin[i] = luma + (lin[i] - luma) * saturation;
+    }
+
+    // Peak scale (SDR_SCALE semantics: 203 nits reference white -> 1.0) then
+    // sRGB encode, clamped so values stay in the sRGB code range.
+    for (int i = 0; i < 3; i++)
+      lin[i] = std::max(lin[i] * peakScale, 0.0f);
+
+    float srgb[3];
+    for (int i = 0; i < 3; i++)
+      srgb[i] = std::min(EncodeSRGB(lin[i]), 1.0f);
+
+    entry = (a << PIXEL_ASHIFT) | (static_cast<uint32_t>(srgb[0] * 255.0f + 0.5f)
+                                   << PIXEL_RSHIFT) |
+            (static_cast<uint32_t>(srgb[1] * 255.0f + 0.5f) << PIXEL_GSHIFT) |
+            (static_cast<uint32_t>(srgb[2] * 255.0f + 0.5f) << PIXEL_BSHIFT);
+  }
+
+  return out;
 }
 
 void convert_rgba(const CDVDOverlaySpu& o,

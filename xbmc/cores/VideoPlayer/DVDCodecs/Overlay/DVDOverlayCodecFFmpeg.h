@@ -38,4 +38,8 @@ private:
 
   int             m_width;
   int             m_height;
+
+  // Set when the subtitle stream is HDR-authored PGS (UHD-BD, BT.2020/PQ).
+  // Decided at Open() time from the video stream hdrType, not at render time.
+  bool m_pgsIsPqAuthored{false};
 };

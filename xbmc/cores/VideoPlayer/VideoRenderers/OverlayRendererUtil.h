@@ -37,6 +37,10 @@ struct SQuads
 };
 
 void convert_rgba(const CDVDOverlayImage& o, bool mergealpha, std::vector<uint32_t>& rgba);
+void convert_rgba(const CDVDOverlayImage& o,
+                  const std::vector<uint32_t>& palette,
+                  bool mergealpha,
+                  std::vector<uint32_t>& rgba);
 void convert_rgba(const CDVDOverlaySpu& o,
                   bool mergealpha,
                   int& min_x,
@@ -46,5 +50,13 @@ void convert_rgba(const CDVDOverlaySpu& o,
                   std::vector<uint32_t>& rgba);
 bool convert_quad(ASS_Image* images, SQuads& quads, int max_x);
 int GetStereoscopicDepth(bool isPgs, int subtitleDepth);
+
+// Pre-bakes an HDR-authored PGS palette (PQ-encoded BT.2020 RGB as produced by
+// the FFmpeg PGS decoder with its hardcoded BT.709 matrix) into sRGB-encoded
+// BT.2020. Runs once per subtitle texture at creation time (256 entries, no
+// per-pixel cost). Returns a palette with RGB replaced, alpha preserved.
+std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palette,
+                                              float peakScale,
+                                              float saturation);
 
 } // namespace OVERLAY

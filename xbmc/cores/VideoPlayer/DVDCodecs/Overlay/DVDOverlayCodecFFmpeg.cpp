@@ -30,6 +30,28 @@ CDVDOverlayCodecFFmpeg::CDVDOverlayCodecFFmpeg() : CDVDOverlayCodec("FFmpeg Subt
   memset(&m_Subtitle, 0, sizeof(m_Subtitle));
 }
 
+namespace
+{
+// UHD-BD HDR PGS is BT.2020/PQ authored; SDR PGS is SDR BT.709 (or SDR BT.2020).
+// Only the HDMV PGS codec carries PQ semantics; DVB/other palette subtitles
+// remain SDR even when the video stream is HDR.
+bool PgsIsPqAuthored(const CDVDStreamInfo& hints)
+{
+  if (hints.codec != AV_CODEC_ID_HDMV_PGS_SUBTITLE)
+    return false;
+
+  switch (hints.hdrType)
+  {
+    case StreamHdrType::HDR_TYPE_HDR10:
+    case StreamHdrType::HDR_TYPE_HDR10PLUS:
+    case StreamHdrType::HDR_TYPE_DOLBYVISION:
+      return true;
+    default:
+      return false;
+  }
+}
+} // namespace
+
 CDVDOverlayCodecFFmpeg::~CDVDOverlayCodecFFmpeg()
 {
   avsubtitle_free(&m_Subtitle);
@@ -116,6 +138,11 @@ bool CDVDOverlayCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &optio
 
   if (pCodec->name != nullptr)
     SetName("ff-" + std::string(pCodec->name));
+
+  // Mark HDR-authored PGS at decode time. The FFmpeg PGS decoder converts the
+  // stream YCbCr palette to RGB with a hardcoded BT.709 matrix; for UHD-BD the
+  // color space is BT.2020, which is compensated at texture build time.
+  m_pgsIsPqAuthored = PgsIsPqAuthored(hints);
 
   return true;
 }
@@ -270,6 +297,7 @@ std::shared_ptr<CDVDOverlay> CDVDOverlayCodecFFmpeg::GetOverlay()
     overlay->iPTSStartTime = m_StartTime;
     overlay->iPTSStopTime = m_StopTime;
     overlay->replace = true;
+    overlay->m_isHdrPq = m_pgsIsPqAuthored;
     overlay->linesize = rect.w;
     overlay->pixels.resize(rect.w * rect.h);
     overlay->palette.resize(rect.nb_colors);

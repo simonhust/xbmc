@@ -20,6 +20,8 @@
 #include "rendering/GLExtensions.h"
 #include "rendering/MatrixGL.h"
 #include "rendering/gles/RenderSystemGLES.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/GLUtils.h"
 #include "utils/MathUtils.h"
 #include "utils/log.h"
@@ -145,6 +147,7 @@ std::shared_ptr<COverlay> COverlay::Create(const CDVDOverlayImage& o, CRect& rSo
 
 COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSource)
 {
+  m_isHdrPqAuthored = o.m_isHdrPq;
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
 
@@ -163,7 +166,26 @@ COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSour
   {
     std::vector<uint32_t> rgba(o.width * o.height);
     m_pma = !!USE_PREMULTIPLIED_ALPHA;
-    convert_rgba(o, m_pma, rgba);
+
+    if (o.m_isHdrPq)
+    {
+      // HDR-authored PGS: pre-bake the palette from PQ-encoded BT.2020 to
+      // sRGB-encoded BT.2020 once at texture creation (256 entries only).
+      // Peak scale maps 203-nit reference white to sRGB 1.0; the HDR subtitle
+      // settings scale it (50 = neutral) and control saturation.
+      const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+      const float peakSetting =
+          settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSPEAKLUMINANCE) / 50.0f;
+      const float satSetting =
+          settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSSATURATION) / 50.0f;
+      const float peakScale = (10000.0f / 203.0f) * peakSetting;
+      const auto bakedPalette =
+          OVERLAY::prebake_hdr_pgs_palette(o.palette, peakScale, satSetting);
+      OVERLAY::convert_rgba(o, bakedPalette, m_pma, rgba);
+    }
+    else
+      OVERLAY::convert_rgba(o, m_pma, rgba);
+
     LoadTexture(GL_TEXTURE_2D, o.width, o.height, o.width * 4, &m_u, &m_v, false, rgba.data());
   }
 
@@ -459,7 +481,12 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_NOBLEND);
+  // HDR-authored PGS textures are pre-baked to sRGB-encoded BT.2020 at creation;
+  // render them with the no-PQ variant so the 709->2020 transfer path is not
+  // applied a second time. SDR overlays keep the regular method.
+  const auto method = m_isHdrPqAuthored ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ
+                                        : ShaderMethodGLES::SM_TEXTURE_NOBLEND;
+  renderSystem->EnableGUIShader(method);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();
   GLint depthLoc = renderSystem->GUIShaderGetDepth();
