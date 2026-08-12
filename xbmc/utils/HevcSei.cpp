@@ -150,6 +150,29 @@ std::optional<const CHevcSei*> CHevcSei::FindHdr10PlusSeiMessage(
   return {};
 }
 
+std::optional<const CHevcSei*> CHevcSei::FindCuvaSeiMessage(
+    const std::vector<uint8_t>& buf, const std::vector<CHevcSei>& messages)
+{
+  for (const CHevcSei& sei : messages)
+  {
+    // User Data Registered ITU-T T.35
+    if (sei.m_payloadType == 4 && sei.m_payloadSize >= 5)
+    {
+      CBitstreamReader br(buf.data() + sei.m_payloadOffset, sei.m_payloadSize);
+      const auto itu_t_t35_country_code = br.ReadBits(8);
+      const auto itu_t_t35_terminal_provider_code = br.ReadBits(16);
+      const auto itu_t_t35_terminal_provider_oriented_code = br.ReadBits(16);
+
+      // China, CUVA (Union of Ultra HD Video Industry), UWA 005.1 HDR Vivid
+      if (itu_t_t35_country_code == 0x26 && itu_t_t35_terminal_provider_code == 0x0004 &&
+          itu_t_t35_terminal_provider_oriented_code == 0x0005)
+        return &sei;
+    }
+  }
+
+  return {};
+}
+
 std::optional<std::tuple<std::vector<uint8_t>, std::vector<CHevcSei>, const CHevcSei*>>
 CHevcSei::FindHdr10Plus(const uint8_t* inData, const size_t inDataLen)
 {
@@ -166,6 +189,52 @@ CHevcSei::FindHdr10Plus(const uint8_t* inData, const size_t inDataLen)
 bool CHevcSei::ContainsHdr10Plus(const uint8_t* inData, const size_t inDataLen)
 {
   return CHevcSei::FindHdr10Plus(inData, inDataLen).has_value();
+}
+
+bool CHevcSei::ContainsCuva(const uint8_t* inData, const size_t inDataLen)
+{
+  std::vector<uint8_t> buf;
+  std::vector<CHevcSei> messages = CHevcSei::ParseSeiRbspUnclearedEmulation(inData, inDataLen, buf);
+
+  return CHevcSei::FindCuvaSeiMessage(buf, messages).has_value();
+}
+
+std::optional<std::vector<uint8_t>> CHevcSei::FixCuvaSeiNalu(
+    const uint8_t* inData, const size_t inDataLen)
+{
+  std::vector<uint8_t> buf;
+  std::vector<CHevcSei> messages = CHevcSei::ParseSeiRbspUnclearedEmulation(inData, inDataLen, buf);
+
+  if (messages.empty() || !CHevcSei::FindCuvaSeiMessage(buf, messages))
+    return {};
+
+  // The last SEI message ends the NALU with rbsp trailing bits (a 1 bit
+  // followed by zero padding). Any bytes beyond that are garbage that some
+  // encoders append, inflating the NALU length and breaking NALU alignment.
+  const CHevcSei& last = messages.back();
+  size_t validLen = last.m_payloadOffset + last.m_payloadSize;
+
+  // Skip the rbsp trailing bits: stop bit (1) then alignment zeros.
+  while (validLen < buf.size())
+  {
+    const uint8_t byte = buf[validLen];
+    if (byte != 0x00 && byte != 0x80)
+      break;
+    if (byte == 0x80)
+    {
+      validLen++;
+      break;
+    }
+    validLen++;
+  }
+
+  if (validLen >= buf.size())
+    return {};
+
+  std::vector<uint8_t> fixed(buf.begin(), std::next(buf.begin(), validLen));
+  HevcAddStartCodeEmulationPrevention3Byte(fixed);
+
+  return fixed;
 }
 
 std::vector<uint8_t> CHevcSei::RemoveHdr10PlusFromSeiNalu(

@@ -53,6 +53,21 @@ public:
   static bool ContainsHdr10Plus(
       const uint8_t* inData, const size_t inDataLen);
 
+  // Returns a CUVA HDR Vivid SEI message if present in the list
+  static std::optional<const CHevcSei*> FindCuvaSeiMessage(
+      const std::vector<uint8_t>& buf, const std::vector<CHevcSei>& messages);
+
+  // Returns true if NALU SEI payload contains a CUVA HDR Vivid SEI message.
+  static bool ContainsCuva(
+      const uint8_t* inData, const size_t inDataLen);
+
+  // Repairs a CUVA HDR Vivid SEI NALU that carries trailing garbage bytes
+  // after the rbsp trailing bits (some encoders inflate the NALU length).
+  // Returns the corrected NALU bytes when a fix was applied, or an empty
+  // optional when the NALU is already well-formed.
+  static std::optional<std::vector<uint8_t>> FixCuvaSeiNalu(
+      const uint8_t* inData, const size_t inDataLen);
+
   // Returns a vector of bytes:
   //      When not empty: the new NALU containing all but the HDR10+ SEI message.
   //      Otherwise: the NALU contained only one HDR10+ SEI and can be discarded.

@@ -1436,6 +1436,25 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         }
       }
 
+      // Detect CUVA HDR Vivid after the HDR10+ detection logic
+      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 &&
+          !m_HdrVividTested && !m_IsHdrVivid)
+      {
+        m_IsHdrVivid = CHevcSei::ContainsCuva(buf_to_write, final_nal_size);
+      }
+
+      // Some encoders append garbage bytes after the CUVA SEI rbsp trailing
+      // bits, inflating the NALU length and breaking NALU alignment. Repair it.
+      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 && m_IsHdrVivid)
+      {
+        auto fixedNalu = CHevcSei::FixCuvaSeiNalu(buf_to_write, final_nal_size);
+        if (fixedNalu)
+        {
+          buf_to_write = fixedNalu->data();
+          final_nal_size = fixedNalu->size();
+        }
+      }
+
       if (write_buf)
       {
         if (unit_type == HEVC_NAL_UNSPEC62)
@@ -1478,6 +1497,7 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
   } while (cumul_size < buf_size);
 
   m_Hdr10PlusTested = true;
+  m_HdrVividTested = true;
 
   return true;
 
