@@ -451,8 +451,6 @@
       <text>ActivateWindow(Teletext)</text>
       <up mod="ctrl">SubtitleShiftUp</up>
       <down mod="ctrl">SubtitleShiftDown</down>
-      <w>SubtitleShiftUp</w>
-      <s>SubtitleShiftDown</s>
       <pageup>SkipNext</pageup>
       <pagedown>SkipPrevious</pagedown>
       <channel_up>SubtitleShiftUp</channel_up>
