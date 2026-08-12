@@ -228,7 +228,7 @@ void CRenderer::Render(COverlay* o)
         state.x += m_rv.x1 + m_rv.Width() * 0.5f;
         // 字幕校准值只影响屏幕底部 20% 区域（从上往下高度 80% 以上）
         // 0-80% 区域的字幕（如顶部注释）不受校准值影响
-        if (state.y > m_rv.Height() * 0.8)
+        if (state.y > m_rv.Height() * 0.8f)
           state.y += m_rv.y1 + (resInfo.iSubtitles - resInfo.Overscan.top);
         else
           state.y += m_rv.y1;
