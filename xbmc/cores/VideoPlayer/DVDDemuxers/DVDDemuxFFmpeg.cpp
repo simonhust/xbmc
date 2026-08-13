@@ -1776,7 +1776,12 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
         const AVPacketSideData* sideData = nullptr;
 
 if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
-    (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY) && pStream->id == 0x1015)))
+    (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY) && pStream->id == 0x1015) ||
+    // Non-BluRay dual-track DV (e.g. MKV/MP4 DTDL, standalone M2TS):
+    // a second HEVC video stream is the DV enhancement layer
+    (!(m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY)) &&
+     pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
+     pStream->codecpar->codec_id == AV_CODEC_ID_HEVC)))
 {
   m_dv_dual_stream = true;
   if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
@@ -1787,10 +1792,39 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
   }
   else
   {
-    // Non-Bluray dual-stream (e.g. standalone M2TS):
+    // Non-Bluray dual-stream (e.g. standalone M2TS, MKV, MP4):
     // force dual-queue pairing (DTS-based) to handle EL offset
     m_dv_no_el_epmap = true;
     m_dv_direct_pair = true;
+
+    // Force dovi configuration on the BL stream (stream 0).
+    // The BL stream was already processed before the EL stream
+    // set m_dv_dual_stream, so its dovi info was not configured.
+    CDemuxStream* bl_stream = GetStream(0);
+    if (bl_stream)
+    {
+      CDemuxStreamVideo* bl_video = static_cast<CDemuxStreamVideo*>(bl_stream);
+      bl_video->hdr_type = StreamHdrType::HDR_TYPE_DOLBYVISION;
+      // Use DOVI_CONF from the EL stream if available
+      const AVPacketSideData* elSideData =
+          av_packet_side_data_get(pStream->codecpar->coded_side_data,
+                                  pStream->codecpar->nb_coded_side_data,
+                                  AV_PKT_DATA_DOVI_CONF);
+      if (elSideData && elSideData->size)
+        bl_video->dovi = *reinterpret_cast<const AVDOVIDecoderConfigurationRecord*>(elSideData->data);
+      else
+      {
+        // Manual P7 config (typical for Blu-ray remux)
+        bl_video->dovi.dv_version_major = 1;
+        bl_video->dovi.dv_version_minor = 0;
+        bl_video->dovi.dv_profile = 7;
+        bl_video->dovi.dv_level = 6;
+        bl_video->dovi.rpu_present_flag = 1;
+        bl_video->dovi.el_present_flag = 1;
+        bl_video->dovi.bl_present_flag = 1;
+        bl_video->dovi.dv_bl_signal_compatibility_id = 6;
+      }
+    }
   }
 }
 
