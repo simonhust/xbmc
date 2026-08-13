@@ -330,9 +330,10 @@ public:
 
   /*!
    * \brief Check for mixed HDR streams and show selection dialog.
-   * Called after video stream is opened.
+   * \return true if user made a selection (stored in m_selectedHdrType)
    */
-  void CheckMixedHdrStream();
+  bool CheckMixedHdrStream();
+  StreamHdrType m_selectedHdrType{StreamHdrType::HDR_TYPE_NONE};
   void SetVideoStream(int iStream) override;
 
   int GetPrograms(std::vector<ProgramInfo>& programs) override;
