@@ -218,7 +218,7 @@ std::optional<std::vector<uint8_t>> CHevcSei::FixCuvaSeiNalu(
   // because the SEI parser may have created phantom messages from
   // trailing garbage bytes, making messages.back() point past the
   // rbsp trailing boundary.
-  const CHevcSei& cuva = *cuvaFound;
+  const CHevcSei& cuva = **cuvaFound;
   size_t validLen = cuva.m_payloadOffset + cuva.m_payloadSize;
 
   // Skip the rbsp trailing bits: stop bit (1) then alignment zeros.
