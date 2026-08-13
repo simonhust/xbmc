@@ -316,6 +316,69 @@ bool aml_convert_to_dv_by_vs_engine(StreamHdrType hdrType)
   return ((convert_to_dv && !!user_convert_to_dv && !!dv_user_enabled) == 1);
 }
 
+void aml_set_hdr_gate(StreamHdrType hdrType)
+{
+  CLog::Log(LOGINFO, "AMLUtils::{} - Setting HDR gate for type: {}",
+            __FUNCTION__, static_cast<int>(hdrType));
+
+  switch (hdrType)
+  {
+    case StreamHdrType::HDR_TYPE_DOLBYVISION:
+      // DV: AMLCodec already enabled DV, ensure HDR10+ policy is correct.
+      // HDR10+ is NOT absorbed (bit 2 clear), goes to VPP HDR2 core.
+      // HDR_BY_DV_F_SRC(0x02) | HLG_BY_DV_F_SRC(0x10) | SDR_BY_DV_F_SRC(0x40)
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_hdr10_policy", 0x52);
+      break;
+
+    case StreamHdrType::HDR_TYPE_HDR10PLUS:
+    {
+      // Check if user wants HDR10+ to be converted to DV via VS-Engine.
+      const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+      bool dv_user_enabled = !settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE);
+      bool hdr10plus2dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV);
+      bool device_support_dv = aml_support_dolby_vision() && aml_display_support_dv();
+
+      if (dv_user_enabled && hdr10plus2dv && device_support_dv)
+      {
+        // hdr10plus2dv enabled: let DV absorb HDR10+.
+        static constexpr unsigned int HDRP_BY_DV = 0x4;
+        static constexpr unsigned int DV_HDR10_POLICY_DEFAULT = 0x52;
+        CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 1);
+        CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_hdr10_policy",
+                   static_cast<int>(DV_HDR10_POLICY_DEFAULT | HDRP_BY_DV));
+        CLog::Log(LOGINFO, "AMLUtils::{} - HDR10+ will be converted to DV (VS-Engine)",
+                  __FUNCTION__);
+      }
+      else
+      {
+        // hdr10plus2dv disabled: let HDR10+ go to VPP HDR2 core.
+        CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
+        CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
+      }
+      break;
+    }
+
+    case StreamHdrType::HDR_TYPE_HDRVIVID:
+      // CUVA HDR Vivid: Goes through VPP HDR2 core.
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
+      break;
+
+    case StreamHdrType::HDR_TYPE_HDR10:
+      // HDR10: Standard HDR10 via VPP HDR2 core.
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
+      break;
+
+    case StreamHdrType::HDR_TYPE_HLG:
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
+      break;
+
+    case StreamHdrType::HDR_TYPE_NONE:
+    default:
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
+      break;
+  }
+}
+
 bool aml_video_started()
 {
   CSysfsPath videostarted{"/sys/class/tsync/videostarted"};

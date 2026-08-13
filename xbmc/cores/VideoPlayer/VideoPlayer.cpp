@@ -6226,15 +6226,8 @@ void CVideoPlayer::CheckMixedHdrStream()
       CLog::Log(LOGINFO, "CVideoPlayer::{} - User selected HDR type: {}",
                 __FUNCTION__, static_cast<int>(selectedType));
 
-      // For non-DV streams, ensure DV is disabled
-      if (selectedType != StreamHdrType::HDR_TYPE_DOLBYVISION)
-      {
-        // Disable DV and remove DV RPU from bitstream
-        CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
-        // HDR10+ goes to VPP HDR2 core
-        if (selectedType == StreamHdrType::HDR_TYPE_HDR10PLUS)
-          CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
-      }
+      // Configure kernel HDR gate and DV enable/disable based on selection
+      aml_set_hdr_gate(selectedType);
 
       // Set SEI stripping flags based on user selection
       // (the bitstream converter handles the actual stripping)
