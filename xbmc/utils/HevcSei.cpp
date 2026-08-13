@@ -199,6 +199,19 @@ bool CHevcSei::ContainsCuva(const uint8_t* inData, const size_t inDataLen)
   return CHevcSei::FindCuvaSeiMessage(buf, messages).has_value();
 }
 
+std::optional<std::tuple<std::vector<uint8_t>, std::vector<CHevcSei>, const CHevcSei*>>
+CHevcSei::FindCuva(const uint8_t* inData, const size_t inDataLen)
+{
+  std::vector<uint8_t> buf;
+  std::vector<CHevcSei> messages = CHevcSei::ParseSeiRbspUnclearedEmulation(inData, inDataLen, buf);
+
+  const auto found = CHevcSei::FindCuvaSeiMessage(buf, messages);
+  if (!found)
+    return {};
+
+  return std::make_tuple(std::move(buf), std::move(messages), *found);
+}
+
 std::optional<std::vector<uint8_t>> CHevcSei::FixCuvaSeiNalu(
     const uint8_t* inData, const size_t inDataLen)
 {
@@ -242,6 +255,31 @@ std::optional<std::vector<uint8_t>> CHevcSei::FixCuvaSeiNalu(
   HevcAddStartCodeEmulationPrevention3Byte(fixed);
 
   return fixed;
+}
+
+std::vector<uint8_t> CHevcSei::RemoveCuvaFromSeiNalu(
+    const uint8_t* inData, const size_t inDataLen)
+{
+  auto res = CHevcSei::FindCuva(inData, inDataLen);
+  if (!res)
+    return {};
+
+  auto& [buf, messages, msg] = *res;
+
+  if (messages.size() > 1)
+  {
+    // Multiple SEI messages in NALU, remove only the CUVA one
+    buf.erase(std::next(buf.begin(), msg->m_msgOffset),
+              std::next(buf.begin(), msg->m_payloadOffset + msg->m_payloadSize));
+    HevcAddStartCodeEmulationPrevention3Byte(buf);
+  }
+  else
+  {
+    // Single SEI message in NALU
+    buf.clear();
+  }
+
+  return std::move(buf);
 }
 
 std::vector<uint8_t> CHevcSei::RemoveHdr10PlusFromSeiNalu(

@@ -1459,6 +1459,22 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         }
       }
 
+      // Remove CUVA SEI if user selected a different HDR format
+      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 && m_removeCuva)
+      {
+        auto removedNalu = CHevcSei::RemoveCuvaFromSeiNalu(buf_to_write, final_nal_size);
+        if (!removedNalu.empty())
+        {
+          fixedCuvaSeiNalu = std::move(removedNalu);
+          buf_to_write = fixedCuvaSeiNalu.data();
+          final_nal_size = fixedCuvaSeiNalu.size();
+        }
+        else
+        {
+          write_buf = false;
+        }
+      }
+
       if (write_buf)
       {
         if (unit_type == HEVC_NAL_UNSPEC62)

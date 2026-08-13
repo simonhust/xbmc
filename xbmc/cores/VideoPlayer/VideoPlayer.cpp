@@ -52,6 +52,7 @@
 #include "settings/SettingsComponent.h"
 #include "threads/SingleLock.h"
 #include "utils/AMLUtils.h"
+#include "dialogs/GUIDialogSelectHdrStream.h"
 #include "utils/FontUtils.h"
 #include "utils/LangCodeExpander.h"
 #include "utils/MathUtils.h"
@@ -6204,6 +6205,55 @@ void CVideoPlayer::GetVideoStreamInfo(int streamId, VideoStreamInfo& info) const
   }
   info.fpsRate = s.fpsRate;
   info.fpsScale = s.fpsScale;
+}
+
+void CVideoPlayer::CheckMixedHdrStream()
+{
+  // Detect mixed HDR streams and show selection dialog
+  std::vector<StreamHdrType> availableTypes;
+
+  // Check available HDR types from process info
+  const SelectionStream& s = m_content.m_selectionStreams.Get(
+      StreamType::VIDEO, m_content.m_videoIndex);
+
+  if (s.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION)
+    availableTypes.push_back(StreamHdrType::HDR_TYPE_DOLBYVISION);
+
+  if (m_processInfo->GetIsHdr10Plus())
+    availableTypes.push_back(StreamHdrType::HDR_TYPE_HDR10PLUS);
+
+  if (m_processInfo->GetIsHdrVivid())
+    availableTypes.push_back(StreamHdrType::HDR_TYPE_HDRVIVID);
+
+  // If we have multiple HDR types, show the selection dialog
+  if (availableTypes.size() > 1)
+  {
+    CLog::Log(LOGINFO, "CVideoPlayer::{} - Mixed HDR stream detected with {} types",
+              __FUNCTION__, availableTypes.size());
+
+    StreamHdrType selectedType = CGUIDialogSelectHdrStream::ShowDialog(availableTypes);
+
+    if (selectedType != StreamHdrType::HDR_TYPE_NONE)
+    {
+      CLog::Log(LOGINFO, "CVideoPlayer::{} - User selected HDR type: {}",
+                __FUNCTION__, static_cast<int>(selectedType));
+
+      // For non-DV streams, ensure DV is disabled
+      if (selectedType != StreamHdrType::HDR_TYPE_DOLBYVISION)
+      {
+        // Disable DV and remove DV RPU from bitstream
+        CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 0);
+        // HDR10+ goes to VPP HDR2 core
+        if (selectedType == StreamHdrType::HDR_TYPE_HDR10PLUS)
+          CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
+      }
+
+      // Set SEI stripping flags based on user selection
+      // (the bitstream converter handles the actual stripping)
+      m_processInfo->SetRemoveHdr10Plus(selectedType != StreamHdrType::HDR_TYPE_HDR10PLUS);
+      m_processInfo->SetRemoveCuva(selectedType != StreamHdrType::HDR_TYPE_HDRVIVID);
+    }
+  }
 }
 
 int CVideoPlayer::GetVideoStreamCount() const
