@@ -849,10 +849,17 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
       // Update hints hdrType so the decoder (AMLCodec::OpenDecoder)
       // sees the correct HDR type for sysfs configuration.
-      if (IsHdrVivid)
-        m_hints.hdrType = StreamHdrType::HDR_TYPE_HDRVIVID;
-      else if (IsHdr10Plus)
-        m_hints.hdrType = StreamHdrType::HDR_TYPE_HDR10PLUS;
+      // DV takes priority: if the stream is already DOLBYVISION (detected
+      // by the demuxer from DOVI_CONF side data), do not overwrite it
+      // with HDR10PLUS or HDRVIVID even if the BL layer carries those SEI
+      // messages (DV 8.4/8.6 BL is HDR10+ compatible).
+      if (m_hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
+      {
+        if (IsHdrVivid)
+          m_hints.hdrType = StreamHdrType::HDR_TYPE_HDRVIVID;
+        else if (IsHdr10Plus)
+          m_hints.hdrType = StreamHdrType::HDR_TYPE_HDR10PLUS;
+      }
       m_videobuffer.hdrType = m_hints.hdrType;
 
       CLog::Log(LOGINFO, "CDVDVideoCodecAmlogic::{}: Open decoder: fps:{:d}/{:d}", __FUNCTION__, m_hints.fpsrate, m_hints.fpsscale);
