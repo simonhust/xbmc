@@ -393,14 +393,18 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
 
   if (m_bitstream)
   {
+    const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+
+    // Strip HDR10+ SEI only if the display doesn't support HDR10+
+    // AND hdr10plus2dv is not enabled (DV core absorbs HDR10+).
     const CHDRCapabilities caps = CServiceBroker::GetWinSystem()->GetDisplayHDRCapabilities();
-    if (!caps.SupportsHDR10Plus())
+    if (!caps.SupportsHDR10Plus() &&
+        !settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV))
       m_bitstream->SetRemoveHdr10Plus(true);
 
     // cuva2dv: strip CUVA SEI so content degrades to HDR10,
     // then DV VS-Engine (enabled via aml_convert_to_dv_by_vs_engine)
     // handles the HDR10→DV tone mapping.
-    const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
     if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_CUVA2DV))
       m_bitstream->SetRemoveCuva(true);
   }

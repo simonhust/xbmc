@@ -31,6 +31,7 @@
 #include "settings/SettingsComponent.h"
 #include "threads/SystemClock.h"
 #include "utils/AMLUtils.h"
+#include "utils/HevcSei.h"
 #include "utils/FontUtils.h"
 #include "utils/LangCodeExpander.h"
 #include "utils/StreamUtils.h"
@@ -2600,6 +2601,27 @@ void CDVDDemuxFFmpeg::ParsePacket(AVPacket* pkt)
           CLog::Log(LOGERROR, "CDVDDemuxFFmpeg::ParsePacket() invalid width/height");
         }
       }
+    }
+
+    // Detect HDR10+ and CUVA HDR Vivid from the first video packet.
+    // This must happen before the codec opens so CheckMixedHdrStream()
+    // can show all available HDR types in the dialog.
+    if (stream && !stream->m_isHdr10Plus && !stream->m_isCuva &&
+        st->codecpar->codec_id == AV_CODEC_ID_HEVC && pkt->size > 0)
+    {
+      const uint8_t* pData = pkt->data;
+      int iSize = pkt->size;
+
+      // Skip mp4 start code if present
+      if (iSize > 4 && pData[0] == 0 && pData[1] == 0 && pData[2] == 0 && pData[3] == 1)
+      {
+        pData += 4;
+        iSize -= 4;
+      }
+
+      CDemuxStreamVideo* videoStream = static_cast<CDemuxStreamVideo*>(stream);
+      videoStream->m_isHdr10Plus = CHevcSei::ContainsHdr10Plus(pData, iSize);
+      videoStream->m_isCuva = CHevcSei::ContainsCuva(pData, iSize);
     }
   }
 }
