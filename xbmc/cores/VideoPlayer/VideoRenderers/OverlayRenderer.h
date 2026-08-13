@@ -229,7 +229,7 @@ namespace OVERLAY {
     bool m_saveSubtitleOffset{false}; // To save subtitle offset to calibration
     KODI::SUBTITLES::HorizontalAlign m_subtitleHorizontalAlign{
         KODI::SUBTITLES::HorizontalAlign::CENTER};
-    KODI::SUBTITLES::Align m_subtitleAlign{KODI::SUBTITLES::Align::BOTTOM_OUTSIDE};
+    KODI::SUBTITLES::Align m_subtitleAlign{KODI::SUBTITLES::Align::MANUAL};
 
     std::shared_ptr<struct KODI::SUBTITLES::STYLE::style> m_overlayStyle;
     std::atomic<bool> m_isSettingsChanged{false};
