@@ -116,6 +116,7 @@ public:
   void SetConvertDovi(bool value) { m_convert_dovi = value; }
   
   void SetRemoveHdr10Plus(bool value) { m_removeHdr10Plus = value; }
+  void SetRemoveCuva(bool value) { m_removeCuva = value; }
   void SetDoviZeroLevel5(bool value) { m_setDoviZeroLevel5 = value; }
   bool GetDoviIsFEL() const { return m_doviIsFEL; }
   void SetDoviIsFEL(bool fel) { m_doviIsFEL = fel; }
@@ -184,6 +185,7 @@ protected:
   bool m_convert_dovi;
   
   bool m_removeHdr10Plus;
+  bool m_removeCuva;
   bool m_setDoviZeroLevel5;
   bool m_doviIsFEL{false};
   bool m_doviELTested{false};

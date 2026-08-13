@@ -62,6 +62,10 @@ public:
   bool GetIsHdr10Plus();
   void SetIsHdrVivid(bool isHdrVivid);
   bool GetIsHdrVivid();
+  void SetRemoveHdr10Plus(bool remove);
+  bool GetRemoveHdr10Plus() const;
+  void SetRemoveCuva(bool remove);
+  bool GetRemoveCuva() const;
   virtual EINTERLACEMETHOD GetFallbackDeintMethod();
   virtual void SetSwDeinterlacingMethods();
   void UpdateDeinterlacingMethods(std::list<EINTERLACEMETHOD> &methods);
@@ -167,6 +171,8 @@ protected:
   bool m_doviIsFEL;
   bool m_IsHdr10Plus;
   bool m_IsHdrVivid;
+  bool m_removeHdr10Plus{false};
+  bool m_removeCuva{false};
   std::list<EINTERLACEMETHOD> m_deintMethods;
   EINTERLACEMETHOD m_deintMethodDefault;
   mutable CCriticalSection m_videoCodecSection;

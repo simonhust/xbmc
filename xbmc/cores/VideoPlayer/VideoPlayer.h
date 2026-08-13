@@ -327,6 +327,12 @@ public:
   int GetVideoStream() const override;
   int GetVideoStreamCount() const override;
   void GetVideoStreamInfo(int streamId, VideoStreamInfo& info) const override;
+
+  /*!
+   * \brief Check for mixed HDR streams and show selection dialog.
+   * Called after video stream is opened.
+   */
+  void CheckMixedHdrStream();
   void SetVideoStream(int iStream) override;
 
   int GetPrograms(std::vector<ProgramInfo>& programs) override;

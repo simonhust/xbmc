@@ -61,6 +61,15 @@ public:
   static bool ContainsCuva(
       const uint8_t* inData, const size_t inDataLen);
 
+  // Returns the CUVA SEI message if present in the NALU
+  static std::optional<std::tuple<std::vector<uint8_t>, std::vector<CHevcSei>, const CHevcSei*>>
+  FindCuva(const uint8_t* inData, const size_t inDataLen);
+
+  // Removes a CUVA HDR Vivid SEI message from a NALU.
+  // Returns the modified NALU, or an empty vector if the NALU only contained CUVA.
+  static std::vector<uint8_t> RemoveCuvaFromSeiNalu(
+      const uint8_t* inData, const size_t inDataLen);
+
   // Repairs a CUVA HDR Vivid SEI NALU that carries trailing garbage bytes
   // after the rbsp trailing bits (some encoders inflate the NALU length).
   // Returns the corrected NALU bytes when a fix was applied, or an empty

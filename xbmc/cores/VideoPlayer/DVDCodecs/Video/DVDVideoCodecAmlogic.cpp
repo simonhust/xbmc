@@ -804,6 +804,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         doviIsFEL = m_bitstream->GetDoviIsFEL();
         IsHdr10Plus = m_bitstream->GetIsHdrPlus();
         IsHdrVivid = m_bitstream->GetIsHdrVivid();
+
+        // Sync HDR format selection from user dialog (CheckMixedHdrStream)
+        if (m_processInfo.GetRemoveHdr10Plus())
+          m_bitstream->SetRemoveHdr10Plus(true);
+        if (m_processInfo.GetRemoveCuva())
+          m_bitstream->SetRemoveCuva(true);
       }
     }
     else if (!m_has_keyframe && m_bitparser)

@@ -341,6 +341,30 @@ bool CProcessInfo::GetIsHdrVivid()
   return m_IsHdrVivid;
 }
 
+void CProcessInfo::SetRemoveHdr10Plus(bool remove)
+{
+  std::unique_lock lock(m_videoCodecSection);
+  m_removeHdr10Plus = remove;
+}
+
+bool CProcessInfo::GetRemoveHdr10Plus() const
+{
+  std::unique_lock lock(m_videoCodecSection);
+  return m_removeHdr10Plus;
+}
+
+void CProcessInfo::SetRemoveCuva(bool remove)
+{
+  std::unique_lock lock(m_videoCodecSection);
+  m_removeCuva = remove;
+}
+
+bool CProcessInfo::GetRemoveCuva() const
+{
+  std::unique_lock lock(m_videoCodecSection);
+  return m_removeCuva;
+}
+
 EINTERLACEMETHOD CProcessInfo::GetFallbackDeintMethod()
 {
   return VS_INTERLACEMETHOD_DEINTERLACE;
