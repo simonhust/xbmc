@@ -337,10 +337,6 @@ void CRenderer::ResetSubtitlePosition()
   int pos{0};
   RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
 
-  // Restore the dynamic offset from the per-resolution calibration value
-  m_subtitleDynamicOffset.store(static_cast<float>(resInfo.iSubtitleOffset),
-                                std::memory_order_relaxed);
-
   m_subtitleVerticalMargin = static_cast<int>(
       static_cast<float>(m_rv.Height()) / 100 *
       CServiceBroker::GetSettingsComponent()->GetSubtitlesSettings()->GetVerticalMarginPerc());
@@ -486,6 +482,10 @@ void CRenderer::PrepareOverlays(int idx)
     {
       m_subtitleViewHeight = static_cast<int>(m_rv.Height());
       ResetSubtitlePosition();
+      // Restore the dynamic offset from the per-resolution calibration value
+      RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
+      m_subtitleDynamicOffset.store(static_cast<float>(resInfo.iSubtitleOffset),
+                                    std::memory_order_relaxed);
     }
 
     RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
