@@ -6207,17 +6207,28 @@ void CVideoPlayer::CheckMixedHdrStream()
   // Detect mixed HDR streams and show selection dialog
   std::vector<StreamHdrType> availableTypes;
 
-  // Check available HDR types from process info
+  // Check available HDR types from process info + demux-level detection
   const SelectionStream& s = m_content.m_selectionStreams.Get(
       StreamType::VIDEO, m_content.m_videoIndex);
 
   if (s.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION)
     availableTypes.push_back(StreamHdrType::HDR_TYPE_DOLBYVISION);
 
-  if (m_processInfo->GetIsHdr10Plus())
+  // Also check demux-level HDR10+/CUVA detection (set in ParsePacket
+  // before the codec opens, so the dialog can show all types even when
+  // the codec hasn't processed any packets yet).
+  CDemuxStream* demuxStream = m_pDemuxer ? m_pDemuxer->GetStream(s.demuxerId, s.uniqueId) : nullptr;
+  CDemuxStreamVideo* videoStream = demuxStream ? static_cast<CDemuxStreamVideo*>(demuxStream) : nullptr;
+
+  bool hasHdr10Plus = m_processInfo->GetIsHdr10Plus() ||
+                      (videoStream && videoStream->m_isHdr10Plus);
+  bool hasCuva = m_processInfo->GetIsHdrVivid() ||
+                 (videoStream && videoStream->m_isCuva);
+
+  if (hasHdr10Plus)
     availableTypes.push_back(StreamHdrType::HDR_TYPE_HDR10PLUS);
 
-  if (m_processInfo->GetIsHdrVivid())
+  if (hasCuva)
     availableTypes.push_back(StreamHdrType::HDR_TYPE_HDRVIVID);
 
   // If we have multiple HDR types, show the selection dialog
