@@ -4291,6 +4291,13 @@ bool CVideoPlayer::OpenStream(CCurrentStream& current, int64_t demuxerId, int iS
       if (aml_convert_to_dv_by_vs_engine(hint.hdrType))
         hint.hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
       res = OpenVideoStream(hint, reset);
+
+      // Check for mixed HDR streams after video stream is opened
+      // (HDR10+/CUVA detection happens in codec's AddData, so the
+      // dialog is shown after the first packets are processed)
+      if (res)
+        CheckMixedHdrStream();
+
       // Set the m_bFullScreenVideo flag now, before streamsReady, so the
       // renderer's Configure() sees a valid viewport via GetViewWindow().
       // The WINDOW_FULLSCREEN_VIDEO skin activation is deferred to
