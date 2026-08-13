@@ -205,14 +205,21 @@ std::optional<std::vector<uint8_t>> CHevcSei::FixCuvaSeiNalu(
   std::vector<uint8_t> buf;
   std::vector<CHevcSei> messages = CHevcSei::ParseSeiRbspUnclearedEmulation(inData, inDataLen, buf);
 
-  if (messages.empty() || !CHevcSei::FindCuvaSeiMessage(buf, messages))
+  if (messages.empty())
     return {};
 
-  // The last SEI message ends the NALU with rbsp trailing bits (a 1 bit
-  // followed by zero padding). Any bytes beyond that are garbage that some
-  // encoders append, inflating the NALU length and breaking NALU alignment.
-  const CHevcSei& last = messages.back();
-  size_t validLen = last.m_payloadOffset + last.m_payloadSize;
+  // Find the CUVA message; skip any phantom SEI messages parsed from
+  // garbage bytes that some encoders append after the rbsp trailing bits.
+  const auto cuvaFound = CHevcSei::FindCuvaSeiMessage(buf, messages);
+  if (!cuvaFound)
+    return {};
+
+  // Use the CUVA message's own end position, not messages.back(),
+  // because the SEI parser may have created phantom messages from
+  // trailing garbage bytes, making messages.back() point past the
+  // rbsp trailing boundary.
+  const CHevcSei& cuva = *cuvaFound;
+  size_t validLen = cuva.m_payloadOffset + cuva.m_payloadSize;
 
   // Skip the rbsp trailing bits: stop bit (1) then alignment zeros.
   while (validLen < buf.size())
