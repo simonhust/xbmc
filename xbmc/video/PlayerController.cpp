@@ -405,70 +405,36 @@ bool CPlayerController::OnAction(const CAction &action)
 
       case ACTION_SUBTITLE_VSHIFT_UP:
       {
-        const auto settings{CServiceBroker::GetSettingsComponent()->GetSubtitlesSettings()};
-        SUBTITLES::Align subAlign{settings->GetAlignment()};
-        if (subAlign != SUBTITLES::Align::BOTTOM_OUTSIDE && subAlign != SUBTITLES::Align::MANUAL)
-          return true;
-
+        // Initialize from per-resolution calibration value on first use
+        // (subsequent actions use the local copy which is already correct)
         RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
-        CVideoSettings vs = appPlayer->GetVideoSettings();
+        if (m_subtitleDynamicOffset == 0.0f)
+          m_subtitleDynamicOffset = static_cast<float>(resInfo.iSubtitleOffset);
 
-        int maxPos = resInfo.Overscan.bottom;
-        if (subAlign == SUBTITLES::Align::BOTTOM_OUTSIDE)
-        {
-          maxPos =
-              resInfo.Overscan.bottom + static_cast<int>(static_cast<float>(resInfo.iHeight) / 100 *
-                                                          settings->GetVerticalMarginPerc());
-        }
+        // Move by 0.5% of screen height, negative = up
+        m_subtitleDynamicOffset -= 0.5f;
+        appPlayer->SetDynamicSubtitleOffset(m_subtitleDynamicOffset);
 
-        // Move by 0.5% of the current resolution height
-        const int step =
-            std::max(1, static_cast<int>(static_cast<float>(resInfo.iHeight) * 0.005f));
-        vs.m_subtitleVerticalPosition -= step;
-        // Always save to the calibration value (resInfo.iSubtitles)
-        // so the change persists and is bound to the screen calibration parameter
-        appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition, true);
-
-        ShowSlider(action.GetID(), 277, static_cast<float>(vs.m_subtitleVerticalPosition),
-                   static_cast<float>(resInfo.Overscan.top), 1.0f, static_cast<float>(maxPos));
+        ShowSlider(action.GetID(), 277, m_subtitleDynamicOffset, -100.0f, 0.5f, 100.0f);
         return true;
       }
 
       case ACTION_SUBTITLE_VSHIFT_DOWN:
       {
-        const auto settings{CServiceBroker::GetSettingsComponent()->GetSubtitlesSettings()};
-        SUBTITLES::Align subAlign{settings->GetAlignment()};
-        if (subAlign != SUBTITLES::Align::BOTTOM_OUTSIDE && subAlign != SUBTITLES::Align::MANUAL)
-          return true;
-
+        // Initialize from per-resolution calibration value on first use
+        // (subsequent actions use the local copy which is already correct)
         RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
-        CVideoSettings vs = appPlayer->GetVideoSettings();
+        if (m_subtitleDynamicOffset == 0.0f)
+          m_subtitleDynamicOffset = static_cast<float>(resInfo.iSubtitleOffset);
 
-        int maxPos = resInfo.Overscan.bottom;
-        if (subAlign == SUBTITLES::Align::BOTTOM_OUTSIDE)
-        {
-          // In this case the position not includes the vertical margin,
-          // so to be able to move the text to the bottom of the screen
-          // we must extend the maximum position with the vertical margin.
-          // Note that the text may go also slightly off-screen, this is
-          // caused by Libass see "displacement compensation" on OverlayRenderer
-          maxPos =
-              resInfo.Overscan.bottom + static_cast<int>(static_cast<float>(resInfo.iHeight) / 100 *
-                                                          settings->GetVerticalMarginPerc());
-        }
+        // Move by 0.5% of screen height, positive = down
+        m_subtitleDynamicOffset += 0.5f;
+        appPlayer->SetDynamicSubtitleOffset(m_subtitleDynamicOffset);
 
-        // Move by 0.5% of the current resolution height
-        const int step =
-            std::max(1, static_cast<int>(static_cast<float>(resInfo.iHeight) * 0.005f));
-        vs.m_subtitleVerticalPosition += step;
-        if (vs.m_subtitleVerticalPosition > maxPos)
-          vs.m_subtitleVerticalPosition = maxPos;
-        // Always save to the calibration value (resInfo.iSubtitles)
-        // so the change persists and is bound to the screen calibration parameter
-        appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition, true);
+        if (m_subtitleDynamicOffset > 100.0f)
+          m_subtitleDynamicOffset = 100.0f;
 
-        ShowSlider(action.GetID(), 277, static_cast<float>(vs.m_subtitleVerticalPosition),
-                   static_cast<float>(resInfo.Overscan.top), 1.0f, static_cast<float>(maxPos));
+        ShowSlider(action.GetID(), 277, m_subtitleDynamicOffset, -100.0f, 0.5f, 100.0f);
         return true;
       }
 
@@ -630,7 +596,7 @@ void CPlayerController::OnSliderChange(void *data, CGUISliderControl *slider)
   else if (m_sliderAction == ACTION_SUBTITLE_VSHIFT_UP ||
            m_sliderAction == ACTION_SUBTITLE_VSHIFT_DOWN)
   {
-    std::string strValue = StringUtils::Format("{:.0f}px", slider->GetFloatValue());
+    std::string strValue = StringUtils::Format("{:.1f}%", slider->GetFloatValue());
     slider->SetTextValue(strValue);
   }
   else if (m_sliderAction == ACTION_VOLAMP_UP ||
@@ -665,6 +631,12 @@ void CPlayerController::OnSliderChange(void *data, CGUISliderControl *slider)
     else if (m_sliderAction == ACTION_SUBTITLE_DELAY)
     {
       appPlayer->SetSubTitleDelay(slider->GetFloatValue());
+    }
+    else if (m_sliderAction == ACTION_SUBTITLE_VSHIFT_UP ||
+             m_sliderAction == ACTION_SUBTITLE_VSHIFT_DOWN)
+    {
+      m_subtitleDynamicOffset = slider->GetFloatValue();
+      appPlayer->SetDynamicSubtitleOffset(m_subtitleDynamicOffset);
     }
     else if (m_sliderAction == ACTION_VOLAMP)
     {

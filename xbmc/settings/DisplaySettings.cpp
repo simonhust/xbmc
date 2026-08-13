@@ -189,6 +189,7 @@ bool CDisplaySettings::Load(const TiXmlNode *settings)
 
     XMLUtils::GetString(pResolution, "description", cal.strMode);
     XMLUtils::GetInt(pResolution, "subtitles", cal.iSubtitles);
+    XMLUtils::GetInt(pResolution, "subtitleoffset", cal.iSubtitleOffset);
     XMLUtils::GetFloat(pResolution, "pixelratio", cal.fPixelRatio);
 #ifdef HAVE_X11
     XMLUtils::GetFloat(pResolution, "refreshrate", cal.fRefreshRate);
@@ -253,6 +254,7 @@ bool CDisplaySettings::Save(TiXmlNode *settings) const
     // Now write each of the pieces of information we need...
     XMLUtils::SetString(pNode, "description", resInfo.strMode);
     XMLUtils::SetInt(pNode, "subtitles", resInfo.iSubtitles);
+    XMLUtils::SetInt(pNode, "subtitleoffset", resInfo.iSubtitleOffset);
     XMLUtils::SetFloat(pNode, "pixelratio", resInfo.fPixelRatio);
 #ifdef HAVE_X11
     XMLUtils::SetFloat(pNode, "refreshrate", resInfo.fRefreshRate);

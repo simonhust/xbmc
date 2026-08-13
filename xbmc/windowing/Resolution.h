@@ -92,6 +92,9 @@ struct RESOLUTION_INFO
   //!< The vertical subtitle baseline position, may be changed by Video calibration
   int iSubtitles;
 
+  //!< The dynamic subtitle offset in percentage of screen height (-100 ~ 100), stored per-resolution
+  int iSubtitleOffset{0};
+
   //!< Properties of the resolution e.g. interlaced mode
   uint32_t dwFlags;
 

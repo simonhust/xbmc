@@ -54,4 +54,5 @@ private:
 
   int m_sliderAction = 0; ///< \brief set to the action id for a slider being displayed \sa ShowSlider
   KODI::UTILS::MOVING_SPEED::CMovingSpeed m_movingSpeed;
+  float m_subtitleDynamicOffset{0.0f}; // current dynamic offset, loaded from calibration on init
 };

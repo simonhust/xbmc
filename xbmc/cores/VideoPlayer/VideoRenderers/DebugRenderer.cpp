@@ -176,24 +176,12 @@ void CDebugRenderer::CRenderer::Render(int idx, float depth)
           rOpts.sourceHeight = m_rs.Height() * 2;
       }
 
-      // Set position of subtitles based on video calibration settings
+      // Detect view height changes (resolution change) and reset position
       RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
-      // Keep track of subtitle position value change,
-      // can be changed by GUI Calibration or by window mode/resolution change or
-      // by user manual change (e.g. keyboard shortcut)
-      if (m_subtitlePosResInfo != resInfo.iSubtitles)
+      if (m_subtitleViewHeight != m_rv.Height())
       {
-        if (m_subtitlePosResInfo == POSRESINFO_SAVE_CHANGES)
-        {
-          // m_subtitlePosition has been changed
-          // and has been requested to save the value to resInfo
-          resInfo.iSubtitles = m_subtitlePosition + m_subtitleVerticalMargin;
-          CServiceBroker::GetWinSystem()->GetGfxContext().SetResInfo(
-              CServiceBroker::GetWinSystem()->GetGfxContext().GetVideoResolution(), resInfo);
-          m_subtitlePosResInfo = m_subtitlePosition + m_subtitleVerticalMargin;
-        }
-        else
-          ResetSubtitlePosition();
+        m_subtitleViewHeight = static_cast<int>(m_rv.Height());
+        ResetSubtitlePosition();
       }
 
       rOpts.m_par = resInfo.fPixelRatio;
