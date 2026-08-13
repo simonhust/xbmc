@@ -307,6 +307,8 @@ bool aml_convert_to_dv_by_vs_engine(StreamHdrType hdrType)
 
   if (hdrType == StreamHdrType::HDR_TYPE_NONE)
     user_convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_SDR2DV);
+  else if (hdrType == StreamHdrType::HDR_TYPE_HDRVIVID)
+    user_convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_CUVA2DV);
   else
     user_convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR2DV);
 
