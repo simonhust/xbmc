@@ -273,7 +273,7 @@ void CDataCacheCore::SetAudioChannels(std::string channels)
 
 void CDataCacheCore::SetAudioChannelsSink(std::string channels)
 {
-  std::unique_lock<CCriticalSection> lock(m_audioPlayerSection);
+  std::unique_lock lock(m_audioPlayerSection);
 
   m_playerAudioInfo.channels_sink = std::move(channels);
 }
@@ -287,7 +287,7 @@ std::string CDataCacheCore::GetAudioChannels()
 
 std::string CDataCacheCore::GetAudioChannelsSink()
 {
-  std::unique_lock<CCriticalSection> lock(m_audioPlayerSection);
+  std::unique_lock lock(m_audioPlayerSection);
 
   return m_playerAudioInfo.channels_sink;
 }
