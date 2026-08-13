@@ -301,7 +301,8 @@ void CRenderer::SetSubtitleVerticalPosition(const int value, bool save)
   std::unique_lock lock(m_section);
   m_subtitlePosition = value;
 
-  if (save && m_subtitleAlign == SUBTITLES::Align::MANUAL)
+  if (save && (m_subtitleAlign == SUBTITLES::Align::MANUAL ||
+               m_subtitleAlign == SUBTITLES::Align::BOTTOM_OUTSIDE))
   {
     m_subtitlePosResInfo = POSRESINFO_SAVE_CHANGES;
     // We save the value to XML file settings when playback is stopped
@@ -335,7 +336,13 @@ void CRenderer::ResetSubtitlePosition()
         static_cast<float>(m_rv.Height()) / 100 *
         CServiceBroker::GetSettingsComponent()->GetSubtitlesSettings()->GetVerticalMarginPerc());
 
-    m_subtitlePosResInfo = static_cast<int>(m_rv.Height());
+    // Set m_subtitlePosResInfo to match the current calibration value so
+    // that the (m_subtitlePosResInfo != resInfo.iSubtitles) check in
+    // PrepareOverlays does not trigger false resets. The actual position
+    // for non-MANUAL alignments is always computed relative to the frame
+    // height, so the calibration value is only relevant when it has been
+    // customized by the user via subtitle shift (saved via POSRESINFO_SAVE_CHANGES).
+    m_subtitlePosResInfo = resInfo.iSubtitles;
     pos = static_cast<int>(m_rv.Height()) - m_subtitleVerticalMargin + resInfo.Overscan.top;
   }
 

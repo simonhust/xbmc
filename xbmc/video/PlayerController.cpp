@@ -421,10 +421,10 @@ bool CPlayerController::OnAction(const CAction &action)
                                                           settings->GetVerticalMarginPerc());
         }
 
-        vs.m_subtitleVerticalPosition -=
-            static_cast<int>(m_movingSpeed.GetUpdatedDistance(ACTION_SUBTITLE_VSHIFT_UP));
-        if (vs.m_subtitleVerticalPosition < resInfo.Overscan.top)
-          vs.m_subtitleVerticalPosition = resInfo.Overscan.top;
+        // Move by 0.5% of the current resolution height
+        const int step =
+            std::max(1, static_cast<int>(static_cast<float>(resInfo.iHeight) * 0.005f));
+        vs.m_subtitleVerticalPosition -= step;
         // Always save to the calibration value (resInfo.iSubtitles)
         // so the change persists and is bound to the screen calibration parameter
         appPlayer->SetSubtitleVerticalPosition(vs.m_subtitleVerticalPosition, true);
@@ -457,8 +457,10 @@ bool CPlayerController::OnAction(const CAction &action)
                                                           settings->GetVerticalMarginPerc());
         }
 
-        vs.m_subtitleVerticalPosition +=
-            static_cast<int>(m_movingSpeed.GetUpdatedDistance(ACTION_SUBTITLE_VSHIFT_DOWN));
+        // Move by 0.5% of the current resolution height
+        const int step =
+            std::max(1, static_cast<int>(static_cast<float>(resInfo.iHeight) * 0.005f));
+        vs.m_subtitleVerticalPosition += step;
         if (vs.m_subtitleVerticalPosition > maxPos)
           vs.m_subtitleVerticalPosition = maxPos;
         // Always save to the calibration value (resInfo.iSubtitles)
