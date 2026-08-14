@@ -194,6 +194,7 @@ CStreamDetailVideo& CStreamDetailVideo::operator=(const CStreamDetailVideo& that
     this->m_strLanguage = that.m_strLanguage;
     this->m_strHdrType = that.m_strHdrType;
     this->m_strHdrTypeAlt = that.m_strHdrTypeAlt;
+    this->m_strHdrTypeAlt2 = that.m_strHdrTypeAlt2;
     this->m_strHdrDetail = that.m_strHdrDetail;
   }
   return *this;
@@ -715,4 +716,19 @@ std::string CStreamDetails::HdrTypeToString(StreamHdrType hdrType)
     default:
       return "";
   }
+}
+
+StreamHdrType CStreamDetails::StringToHdrType(const std::string& hdrType)
+{
+  if (hdrType == "dolbyvision" || hdrType == "dolby vision")
+    return StreamHdrType::HDR_TYPE_DOLBYVISION;
+  if (hdrType == "hdr10")
+    return StreamHdrType::HDR_TYPE_HDR10;
+  if (hdrType == "hlg")
+    return StreamHdrType::HDR_TYPE_HLG;
+  if (hdrType == "hdr10plus")
+    return StreamHdrType::HDR_TYPE_HDR10PLUS;
+  if (hdrType == "hdrvivid")
+    return StreamHdrType::HDR_TYPE_HDRVIVID;
+  return StreamHdrType::HDR_TYPE_NONE;
 }
