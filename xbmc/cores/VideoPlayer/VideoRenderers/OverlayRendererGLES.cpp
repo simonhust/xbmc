@@ -170,7 +170,7 @@ COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSour
     if (o.m_isHdrPq)
     {
       // HDR-authored PGS: pre-bake the palette from PQ-encoded BT.2020 to
-      // sRGB-encoded BT.2020 once at texture creation (256 entries only).
+      // sRGB-encoded BT.709 once at texture creation (256 entries only).
       // Peak scale maps 203-nit reference white to sRGB 1.0; the HDR subtitle
       // settings scale it (50 = neutral) and control saturation.
       const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
@@ -481,11 +481,10 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  // HDR-authored PGS textures are pre-baked to sRGB-encoded BT.2020 at creation;
-  // render them with the no-PQ variant so the 709->2020 transfer path is not
-  // applied a second time. SDR overlays keep the regular method.
-  const auto method = m_isHdrPqAuthored ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ
-                                        : ShaderMethodGLES::SM_TEXTURE_NOBLEND;
+  // HDR-authored PGS textures are pre-baked to sRGB BT.709 at creation,
+  // matching the GUI sRGB BT.709 color space. All overlays use the regular
+  // method; the kernel DV OSD path converts from sRGB BT.709 to PQ BT.2020.
+  const auto method = ShaderMethodGLES::SM_TEXTURE_NOBLEND;
   renderSystem->EnableGUIShader(method);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();

@@ -92,11 +92,13 @@ float EncodeSRGB(float l)
   return l <= 0.0031308f ? 12.92f * l : 1.055f * std::pow(l, 1.0f / 2.4f) - 0.055f;
 }
 
-// BT.709 -> BT.2020 gamut matrix (row-major, applied in linear light). The
+// BT.2020 -> BT.709 gamut matrix (row-major, applied in linear light). The
 // FFmpeg PGS decoder converts the stream YCbCr palette with a hardcoded BT.709
-// matrix; UHD-BD PGS is BT.2020, so the result is translated back here.
-constexpr float k709To2020[9] = {0.6274f, 0.3293f, 0.0433f, 0.0691f, 0.9195f,
-                                 0.0114f, 0.0164f, 0.0880f, 0.8956f};
+// matrix; UHD-BD PGS is BT.2020, so the result is translated back to BT.709
+// here. The kernel DV OSD path then converts from sRGB BT.709 to PQ BT.2020.
+constexpr float k2020To709[9] = {1.660511f, -0.587711f, -0.072801f,
+                                 -0.124561f, 1.132961f, -0.008399f,
+                                 -0.018168f, -0.100561f, 1.118728f};
 } // namespace
 
 std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palette,
@@ -115,16 +117,16 @@ std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palet
     for (int i = 0; i < 3; i++)
       rgb[i] = DecodePQ(rgb[i] / 255.0f);
 
-    // BT.709 -> BT.2020 (linear domain).
+    // BT.2020 -> BT.709 (linear domain).
     float lin[3];
     for (int i = 0; i < 3; i++)
-      lin[i] = k709To2020[i * 3] * rgb[0] + k709To2020[i * 3 + 1] * rgb[1] +
-               k709To2020[i * 3 + 2] * rgb[2];
+      lin[i] = k2020To709[i * 3] * rgb[0] + k2020To709[i * 3 + 1] * rgb[1] +
+               k2020To709[i * 3 + 2] * rgb[2];
 
-    // Saturation mix in linear BT.2020 (BT.2020 luma coefficients).
+    // Saturation mix in linear BT.709 (BT.709 luma coefficients).
     if (saturation != 1.0f)
     {
-      float luma = 0.2627f * lin[0] + 0.6780f * lin[1] + 0.0593f * lin[2];
+      float luma = 0.2126f * lin[0] + 0.7152f * lin[1] + 0.0722f * lin[2];
       for (int i = 0; i < 3; i++)
         lin[i] = luma + (lin[i] - luma) * saturation;
     }
