@@ -47,6 +47,11 @@ CPlayerController::CPlayerController()
 
 CPlayerController::~CPlayerController() = default;
 
+void CPlayerController::ResetSubtitleOffset()
+{
+  m_subtitleDynamicOffset = 0.0f;
+}
+
 CPlayerController& CPlayerController::GetInstance()
 {
   static CPlayerController instance;

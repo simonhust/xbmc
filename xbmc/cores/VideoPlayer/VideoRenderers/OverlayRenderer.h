@@ -226,7 +226,6 @@ namespace OVERLAY {
     // Current subtitle position
     int m_subtitlePosition{0};
     int m_subtitleVerticalMargin{0};
-    bool m_saveSubtitleOffset{false}; // To save subtitle offset to calibration
     KODI::SUBTITLES::HorizontalAlign m_subtitleHorizontalAlign{
         KODI::SUBTITLES::HorizontalAlign::CENTER};
     KODI::SUBTITLES::Align m_subtitleAlign{KODI::SUBTITLES::Align::MANUAL};

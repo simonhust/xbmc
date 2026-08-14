@@ -32,6 +32,7 @@
 #include "dialogs/GUIDialogYesNo.h"
 #include "video/dialogs/GUIDialogFullScreenInfo.h"
 #include "video/dialogs/GUIDialogSubtitleSettings.h"
+#include "video/PlayerController.h"
 #include "windowing/WinSystem.h"
 
 #include <algorithm>
@@ -259,6 +260,11 @@ bool CGUIWindowFullScreen::OnMessage(CGUIMessage& message)
       CServiceBroker::GetGUI()->GetWindowManager().CloseInternalModalDialogs(true);
 
       CGUIWindow::OnMessage(message);
+
+      // Reset the ephemeral sub up/down offset — it only lives for this
+      // fullscreen session.  The next video starts from the persistent
+      // calibration value (iSubtitleOffset).
+      CPlayerController::GetInstance().ResetSubtitleOffset();
 
       CServiceBroker::GetSettingsComponent()->GetSettings()->Save();
 

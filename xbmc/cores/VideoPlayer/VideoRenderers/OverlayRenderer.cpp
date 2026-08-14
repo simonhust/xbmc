@@ -19,9 +19,9 @@
 #include "cores/VideoPlayer/DVDCodecs/Overlay/DVDOverlaySpu.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
-#include "settings/DisplaySettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
+#include "video/PlayerController.h"
 #include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
 
@@ -80,18 +80,6 @@ void CRenderer::Release(std::vector<SElement>& list)
 
 void CRenderer::UnInit()
 {
-  if (m_saveSubtitleOffset)
-  {
-    m_saveSubtitleOffset = false;
-    // Save the current dynamic offset to the per-resolution calibration value
-    RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
-    resInfo.iSubtitleOffset = static_cast<int>(m_subtitleDynamicOffset.load(std::memory_order_relaxed));
-    CServiceBroker::GetWinSystem()->GetGfxContext().SetResInfo(
-        CServiceBroker::GetWinSystem()->GetGfxContext().GetVideoResolution(), resInfo);
-    CDisplaySettings::GetInstance().UpdateCalibrations();
-    CServiceBroker::GetSettingsComponent()->GetSettings()->Save();
-  }
-
   Flush();
 }
 
@@ -110,7 +98,6 @@ void CRenderer::Reset()
 {
   m_subtitlePosition = 0;
   m_subtitleViewHeight = 0;
-  m_saveSubtitleOffset = false;
 }
 
 void CRenderer::Release(int idx)
@@ -327,7 +314,9 @@ void CRenderer::SetSubtitleVerticalPosition(const int value, bool save)
 void CRenderer::SetDynamicSubtitleOffset(const float value)
 {
   m_subtitleDynamicOffset.store(value, std::memory_order_relaxed);
-  m_saveSubtitleOffset = true;
+  // Force immediate subtitle redraw so the position change is visible
+  // on screen without waiting for the next content change event.
+  MarkDirty();
 }
 
 void CRenderer::ResetSubtitlePosition()
@@ -486,6 +475,15 @@ void CRenderer::PrepareOverlays(int idx)
       RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();
       m_subtitleDynamicOffset.store(static_cast<float>(resInfo.iSubtitleOffset),
                                     std::memory_order_relaxed);
+      // Re-apply the PlayerController's persistent offset from the current
+      // fullscreen session (e.g. when switching to the next episode without
+      // closing fullscreen).  This ensures the sub up/down adjustment from
+      // the previous video carries over instantly to the new video.
+      float pcOffset = CPlayerController::GetInstance().GetSubtitleOffset();
+      if (pcOffset != 0.0f)
+      {
+        m_subtitleDynamicOffset.store(pcOffset, std::memory_order_relaxed);
+      }
     }
 
     RESOLUTION_INFO resInfo = CServiceBroker::GetWinSystem()->GetGfxContext().GetResInfo();

@@ -29,6 +29,17 @@ public:
   */
   bool OnAction(const CAction &action) override;
 
+  /*! \brief Reset the ephemeral subtitle offset to 0.
+   *  Called on fullscreen window exit so the next video session starts
+   *  from the persistent calibration value (iSubtitleOffset).
+   */
+  void ResetSubtitleOffset();
+
+  /*! \brief Get the current ephemeral subtitle offset.
+   *  \return The offset percentage, 0 if no adjustment.
+   */
+  float GetSubtitleOffset() const { return m_subtitleDynamicOffset; }
+
   /*! \brief Callback from the slider dialog.
    \sa CGUIDialogSlider
    */
