@@ -449,6 +449,14 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
     KODI::MEMORY::AlignedFree(std::get<0>(pkt));
   m_bl_packages.clear();
 
+  for (auto& pkt : m_el_packages_sb)
+    KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+  m_el_packages_sb.clear();
+
+  for (auto& pkt : m_bl_packages_sb)
+    KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+  m_bl_packages_sb.clear();
+
   for (auto& pkt : m_packages)
     KODI::MEMORY::AlignedFree(std::get<0>(pkt));
   m_packages.clear();
@@ -464,33 +472,57 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
   m_last_dts = DVD_NOPTS_VALUE;
   m_ready_to_pair = false;
   m_switched_to_dual = false;
+  m_use_standby = false;
 
   if (m_bitstream) m_bitstream->ResetStartDecode();
 }
 
 void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
 {
+  /* PTS wrap-around detection: if new packet DTS is >500ms behind the
+   * earliest queued packet, switch to standby queues.  The standby queues
+   * isolate the new PTS range packets while the old queues drain. */
+  if (!m_use_standby && !m_el_packages.empty() && !m_bl_packages.empty())
+  {
+    double min_front = std::min(std::get<3>(m_el_packages.front()),
+                                std::get<3>(m_bl_packages.front()));
+    if (packet.dts + DVD_MSEC_TO_TIME(500) < min_front)
+    {
+      m_use_standby = true;
+      CLog::Log(LOGDEBUG, "DV: PTS wrap-around detected, switching to standby queues");
+    }
+  }
+
+  auto &el_q = m_use_standby ? m_el_packages_sb : m_el_packages;
+  auto &bl_q = m_use_standby ? m_bl_packages_sb : m_bl_packages;
+
   CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, EL={}, dts={:.3f}, el_q={}, bl_q={}, ready={}",
-    packet.isELPackage, packet.dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size(), m_ready_to_pair);
+    packet.isELPackage, packet.dts / DVD_TIME_BASE, el_q.size(), bl_q.size(), m_ready_to_pair);
 
   /* Insert packet into the appropriate queue (sorted by DTS ascending) */
   auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
   memcpy(pkt, packet.pData, packet.iSize);
   DLDemuxPacket new_pkt(pkt, packet.iSize, packet.isELPackage, packet.dts);
 
-  if (packet.isELPackage)
+  auto &q = packet.isELPackage ? el_q : bl_q;
+  auto it = q.begin();
+  while (it != q.end() && std::get<3>(*it) < packet.dts)
+    ++it;
+  q.emplace(it, std::move(new_pkt));
+
+  /* In standby mode: wait for the primary queues to drain completely,
+   * then swap standby into primary and resume normal pairing. */
+  if (m_use_standby)
   {
-    auto it = m_el_packages.begin();
-    while (it != m_el_packages.end() && std::get<3>(*it) < packet.dts)
-      ++it;
-    m_el_packages.emplace(it, std::move(new_pkt));
-  }
-  else
-  {
-    auto it = m_bl_packages.begin();
-    while (it != m_bl_packages.end() && std::get<3>(*it) < packet.dts)
-      ++it;
-    m_bl_packages.emplace(it, std::move(new_pkt));
+    if (m_el_packages.empty() && m_bl_packages.empty())
+    {
+      m_el_packages.swap(m_el_packages_sb);
+      m_bl_packages.swap(m_bl_packages_sb);
+      m_use_standby = false;
+      m_ready_to_pair = false;
+      CLog::Log(LOGDEBUG, "DV: Primary queues drained, swapped standby -> primary");
+    }
+    return;
   }
 
   /* Already ready to pair — no need to re-check */
@@ -498,14 +530,14 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
     return;
 
   /* Need both queues to have accumulated enough packets */
-  if (m_el_packages.size() <= 5 || m_bl_packages.size() <= 5)
+  if (el_q.size() <= 5 || bl_q.size() <= 5)
     return;
 
   /* Find overlap range: max(el_min, bl_min) <= min(el_max, bl_max) */
-  double el_min = std::get<3>(m_el_packages.front());
-  double el_max = std::get<3>(m_el_packages.back());
-  double bl_min = std::get<3>(m_bl_packages.front());
-  double bl_max = std::get<3>(m_bl_packages.back());
+  double el_min = std::get<3>(el_q.front());
+  double el_max = std::get<3>(el_q.back());
+  double bl_min = std::get<3>(bl_q.front());
+  double bl_max = std::get<3>(bl_q.back());
 
   double overlap_start = std::max(el_min, bl_min);
   double overlap_end   = std::min(el_max, bl_max);
@@ -528,13 +560,13 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
         q.pop_front();
       }
     };
-    trim_queue(m_el_packages, overlap_start);
-    trim_queue(m_bl_packages, overlap_start);
+    trim_queue(el_q, overlap_start);
+    trim_queue(bl_q, overlap_start);
   }
 
   m_ready_to_pair = true;
   CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate — ready to pair, el_q={}, bl_q={}",
-    m_el_packages.size(), m_bl_packages.size());
+    el_q.size(), bl_q.size());
 }
 
 bool CDVDVideoCodecAmlogic::DualLayerTryPair()
