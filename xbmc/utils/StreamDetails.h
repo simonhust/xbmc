@@ -62,6 +62,7 @@ public:
   std::string m_strLanguage;
   std::string m_strHdrType;
   std::string m_strHdrTypeAlt;
+  std::string m_strHdrTypeAlt2;
   std::string m_strHdrDetail;
 };
 
@@ -111,6 +112,7 @@ public:
   int GetAudioStreamCount(void) const;
   int GetSubtitleStreamCount(void) const;
   static std::string HdrTypeToString(StreamHdrType hdrType);
+  static StreamHdrType StringToHdrType(const std::string& hdrType);
   const CStreamDetail* GetNthStream(CStreamDetail::StreamType type, int idx) const;
 
   std::string GetVideoCodec(int idx = 0) const;

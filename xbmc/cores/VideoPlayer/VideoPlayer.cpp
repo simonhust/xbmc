@@ -61,6 +61,7 @@
 #include "utils/StringUtils.h"
 #include "utils/TimeUtils.h"
 #include "utils/URIUtils.h"
+#include "video/VideoFileItemClassify.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/Bookmark.h"
@@ -6221,26 +6222,34 @@ void CVideoPlayer::GetVideoStreamInfo(int streamId, VideoStreamInfo& info) const
 
 bool CVideoPlayer::CheckMixedHdrStream()
 {
-  // Detect mixed HDR streams and show selection dialog
+  // HDR selection is driven by the media tag stream details that were parsed
+  // during directory browsing. PVR and Blu-ray items are explicitly excluded:
+  // PVR never gets a media tag, while Blu-ray discs/folders ARE parsed by the
+  // library scan (VideoInfoScanner) but must keep their own DV/EL handling.
+  // Only selectable formats (Dolby Vision / HDR10+ / HDR Vivid) are offered;
+  // the HDR10 and HLG bases are not separate choices.
+  if (m_item.IsPVR() || m_item.IsBluray() || VIDEO::IsBDFile(m_item))
+  {
+    m_selectedHdrType = StreamHdrType::HDR_TYPE_NONE;
+    return false;
+  }
+
   std::vector<StreamHdrType> availableTypes;
 
-  // Check available HDR types from demux-level detection
-  // (HDR10+/CUVA detected in ParsePacket before codec opens)
-  const SelectionStream& s = m_content.m_selectionStreams.Get(
-      StreamType::VIDEO, m_content.m_videoIndex);
-
-  if (s.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION)
-    availableTypes.push_back(StreamHdrType::HDR_TYPE_DOLBYVISION);
-
-  CDemuxStream* demuxStream = m_pDemuxer ? m_pDemuxer->GetStream(s.demuxerId, s.uniqueId) : nullptr;
-  CDemuxStreamVideo* videoStream = demuxStream ? static_cast<CDemuxStreamVideo*>(demuxStream) : nullptr;
-
-  if (videoStream)
+  const CVideoInfoTag* tag = m_item.GetVideoInfoTag();
+  if (tag && tag->HasStreamDetails())
   {
-    if (videoStream->m_isHdr10Plus)
-      availableTypes.push_back(StreamHdrType::HDR_TYPE_HDR10PLUS);
-    if (videoStream->m_isCuva)
-      availableTypes.push_back(StreamHdrType::HDR_TYPE_HDRVIVID);
+    const CStreamDetails& details = tag->m_streamDetails;
+    for (int i = 1; i <= details.GetVideoStreamCount(); ++i)
+    {
+      const StreamHdrType type = CStreamDetails::StringToHdrType(details.GetVideoHdrType(i));
+      if (type != StreamHdrType::HDR_TYPE_NONE && type != StreamHdrType::HDR_TYPE_HDR10 &&
+          type != StreamHdrType::HDR_TYPE_HLG &&
+          std::find(availableTypes.begin(), availableTypes.end(), type) == availableTypes.end())
+      {
+        availableTypes.push_back(type);
+      }
+    }
   }
 
   m_selectedHdrType = StreamHdrType::HDR_TYPE_NONE;

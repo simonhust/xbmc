@@ -168,8 +168,6 @@ public:
   int iBitsPerPixel = 0;
   int iBitRate = 0;
   int bitDepth = 0;
-  bool m_isHdr10Plus{false}; // detected HDR10+ SEI
-  bool m_isCuva{false}; // detected CUVA HDR Vivid SEI
 
   AVColorSpace colorSpace = AVCOL_SPC_UNSPECIFIED;
   AVColorRange colorRange = AVCOL_RANGE_UNSPECIFIED;
