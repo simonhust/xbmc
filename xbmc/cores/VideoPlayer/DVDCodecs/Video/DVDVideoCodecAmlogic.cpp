@@ -685,8 +685,17 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
                 m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
               }
 
-              /* Always queued in single-queue mode, no output to decoder */
-              dual_layer_queued = true;
+              /* Still drain the old dual-queue via DualLayerTryPair */
+              if (m_switched_to_dual)
+              {
+                if (!DualLayerTryPair())
+                  dual_layer_queued = true;
+              }
+              else
+              {
+                /* 1s boundary not reached yet, queued */
+                dual_layer_queued = true;
+              }
             }
             else
             {
