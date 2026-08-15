@@ -114,12 +114,10 @@ private:
 
   std::list<DLDemuxPacket> m_el_packages;  /* EL queue sorted by DTS ascending */
   std::list<DLDemuxPacket> m_bl_packages;  /* BL queue sorted by DTS ascending */
-  std::list<DLDemuxPacket> m_el_packages_sb; /* standby EL queue for PTS wrap-around */
-  std::list<DLDemuxPacket> m_bl_packages_sb; /* standby BL queue for PTS wrap-around */
   std::list<DLDemuxPacket> m_packages;     /* single package queue for dual layer */
   bool m_ready_to_pair{false};             /* state machine: ready to pair front of both queues */
   bool m_switched_to_dual{false};          /* switched from single-queue to dual-queue at 1s */
-  bool m_use_standby{false};               /* PTS wrap-around detected, using standby queues */
+  bool m_use_single_pairing{false};        /* PTS wrap detected, use single-queue pairing */
 
   bool      m_last_added = true;
   uint8_t  *m_last_pData = nullptr;
@@ -136,4 +134,12 @@ private:
     double dts;
   };
   std::list<ResumeBuffer> m_resume_buffers;
+
+  /* Paired outputs from single-queue pairing mode (PTS wrap-around fallback) */
+  struct PairedOutput {
+    uint8_t *data;
+    uint32_t size;
+    double dts;
+  };
+  std::list<PairedOutput> m_paired_outputs;
 };
