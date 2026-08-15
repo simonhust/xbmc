@@ -624,17 +624,48 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         {
           if (packet.isNoElEpMap && !packet.isMultiClip)
           {
-            /* PTS wrap-around detection: when CheckContinuity detects a
-             * backward jump, m_ptsOffsetCorrection is set to a negative value.
-             * Switch to single-queue pairing which doesn't depend on DTS order. */
+            /* For DTDL (directPair) MKV, always use the dual-queue.
+             * The single-queue fallback is only for BluRay forced-merge. */
+            if (packet.isDirectPair)
+            {
+              /* Always feed the dual-queue for synchronization. */
+              DualLayerAccumulate(packet);
+
+              if (!m_switched_to_dual)
+              {
+                m_switched_to_dual = true;
+
+                while (!m_packages.empty())
+                {
+                  KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
+                  m_packages.pop_front();
+                }
+
+                auto trim_to = [](std::list<DLDemuxPacket> &q, double boundary) {
+                  while (!q.empty() && std::get<3>(q.front()) < boundary)
+                  {
+                    KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
+                    q.pop_front();
+                  }
+                };
+                trim_to(m_el_packages, packet.dts);
+                trim_to(m_bl_packages, packet.dts);
+
+                m_ready_to_pair = false;
+              }
+
+              if (!DualLayerTryPair())
+                dual_layer_queued = true;
+            }
+            else
+            {
+            /* BluRay (non-directPair): PTS wrap-around detection */
             if (!m_use_single_pairing &&
                 packet.m_ptsOffsetCorrection < -DVD_MSEC_TO_TIME(500))
             {
               m_use_single_pairing = true;
               m_ready_to_pair = false;
 
-              /* Keep m_switched_to_dual true so DualLayerTryPair
-               * drains the existing dual-queue packets. */
               while (!m_packages.empty())
               {
                 KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
@@ -693,7 +724,6 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               }
               else
               {
-                /* 1s boundary not reached yet, queued */
                 dual_layer_queued = true;
               }
             }
@@ -790,6 +820,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
               return true;
             }
+          }
           }
           }
           }
