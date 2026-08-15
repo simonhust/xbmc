@@ -634,12 +634,18 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
               m_switched_to_dual = false;
               m_ready_to_pair = false;
 
-              /* Clear dual-queue state, keep existing packets for drain */
+              /* Flush dual-queue and single-queue buffer */
               while (!m_packages.empty())
               {
                 KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
                 m_packages.pop_front();
               }
+              for (auto& pkt : m_el_packages)
+                KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+              m_el_packages.clear();
+              for (auto& pkt : m_bl_packages)
+                KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+              m_bl_packages.clear();
 
               CLog::Log(LOGDEBUG, "DV: PTS wrap detected (corr={:.3f}s), switching to single-queue pairing",
                         packet.m_ptsOffsetCorrection / DVD_TIME_BASE);
