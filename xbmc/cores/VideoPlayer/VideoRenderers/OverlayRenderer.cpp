@@ -235,9 +235,10 @@ void CRenderer::Render(COverlay* o)
   state.x += GetStereoscopicDepth(o->m_pgsSubtitle, o->m_3dSubtitleDepth);
 
   // Classify overlays based on final screen y position
-  // Only ALIGN_SUBTITLE overlays in the bottom 20% of the screen are marked as dynamic
+  // Only subtitle overlays in the bottom 20% of the screen are marked as dynamic
   // ALIGN_VIDEO overlays (effect subtitles) are never moved to avoid breaking visual effects
-  if (o->m_align == COverlay::ALIGN_SUBTITLE)
+  if (o->m_align == COverlay::ALIGN_VIDEO || o->m_align == COverlay::ALIGN_SCREEN_AR ||
+      o->m_align == COverlay::ALIGN_SUBTITLE)
   {
     const float dynamicThreshold = m_rv.y1 + m_rv.Height() * 0.8f;
     o->m_isDynamic = (state.y >= dynamicThreshold);
