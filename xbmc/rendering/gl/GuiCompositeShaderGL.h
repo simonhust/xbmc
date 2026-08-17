@@ -18,6 +18,7 @@ public:
   explicit CGuiCompositeShaderGL(const std::string& prefix);
 
   void SetProjection(const GLfloat* proj) { m_proj = proj; }
+  void SetSdrPeak(float peak) { m_sdrPeak = peak; }
 
   GLint GetPosLoc() { return m_hPos; }
   GLint GetTexLoc() { return m_hTex; }
@@ -28,9 +29,11 @@ protected:
 
 private:
   const GLfloat* m_proj{nullptr};
+  float m_sdrPeak{203.0f / 10000.0f};
 
   GLint m_hPos{-1};
   GLint m_hTex{-1};
   GLint m_hSamp{-1};
   GLint m_hProj{-1};
+  GLint m_hSdrPeak{-1};
 };

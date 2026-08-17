@@ -23,7 +23,15 @@ void main ()
   rgb += 16.0 / 255.0;
 #endif
 
-
+#if defined(KODI_TRANSFER_PQ)
+  // BT.709 -> BT.2020 gamut conversion in the sRGB-encoded domain. The transfer
+  // function (sRGB -> linear -> PQ) is applied later by the OSD HDR core.
+  const mat3 bt709_to_bt2020 = mat3(0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.0880,
+                                    0.0433, 0.0114, 0.8956);
+  rgb = bt709_to_bt2020 * rgb;
+  const vec3 luma = vec3(dot(rgb, vec3(0.2627, 0.6780, 0.0593)));
+  rgb = mix(luma, rgb, m_sdrSaturation);
+#endif
 
   gl_FragColor = vec4(rgb, 1.0);
 }

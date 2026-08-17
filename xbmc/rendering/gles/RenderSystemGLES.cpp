@@ -458,8 +458,10 @@ void CRenderSystemGLES::InitialiseShaders()
     defines += "#define KODI_LIMITED_RANGE 1\n";
   }
 
-  // GUI is rendered in sRGB BT.709. The kernel DV OSD path converts to
-  // PQ BT.2020 via its core2 pipeline; no userspace transfer is needed.
+  if (m_transferPQ)
+  {
+    defines += "#define KODI_TRANSFER_PQ 1\n";
+  }
 
   m_pShader[ShaderMethodGLES::SM_DEFAULT] =
       std::make_unique<CGLESShader>("gles_shader.vert", "gles_shader_default.frag", defines);
@@ -534,9 +536,23 @@ void CRenderSystemGLES::InitialiseShaders()
     CLog::Log(LOGERROR, "GUI Shader gles_shader_texture_noblend.frag - compile and link failed");
   }
 
-  // HDR PGS overlays are pre-baked to sRGB BT.709 at texture creation,
-  // matching the GUI sRGB BT.709 color space. The kernel DV OSD path
-  // converts from sRGB BT.709 to PQ BT.2020 via its core2 pipeline.
+  // HDR PGS overlays are pre-baked to sRGB-encoded BT.2020 at texture creation,
+  // so they must render without the PQ transfer-path (709->2020 matrix) applied.
+  std::string definesNoPQ = defines;
+  const std::string pqDefine = "#define KODI_TRANSFER_PQ 1\n";
+  const auto pqPos = definesNoPQ.find(pqDefine);
+  if (pqPos != std::string::npos)
+    definesNoPQ.erase(pqPos, pqDefine.size());
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ] =
+      std::make_unique<CGLESShader>("gles_shader_texture_noblend.frag", definesNoPQ);
+  if (!m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ]->CompileAndLink())
+  {
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ]->Free();
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ].reset();
+    CLog::Log(LOGERROR, "GUI Shader gles_shader_texture_noblend.frag (no PQ) - compile and "
+                        "link failed");
+  }
+
   m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR] =
       std::make_unique<CGLESShader>("gles_shader_multi_blendcolor.frag", defines);
   if (!m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR]->CompileAndLink())
@@ -658,6 +674,10 @@ void CRenderSystemGLES::ReleaseShaders()
   if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND])
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND]->Free();
   m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND].reset();
+
+  if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ])
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ]->Free();
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ].reset();
 
   if (m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR])
     m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR]->Free();

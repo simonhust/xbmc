@@ -80,25 +80,21 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
 
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(dv_is_used | hdr_is_used);
 
-  // GUI is rendered in sRGB BT.709 by userspace. The kernel OSD HDR2 core
-  // applies the SDR->HDR conversion (EOTF, 709->2020, OETF). The gamut bypass
-  // is no longer needed since the userspace 709->2020 pre-conversion has been
-  // removed; keep the old parameter for backwards compatibility.
+  // GUI is pre-converted to BT.2020 in userspace (709->2020 shader matrix +
+  // HDR PGS palette pre-bake), while the kernel OSD HDR2 core applies its own
+  // 709->2020 gamut in the SDR_HDR path. Bypass it when outputting HDR so the
+  // gamut conversion is not applied twice.
   const bool hdrOutput = dv_is_used | hdr_is_used;
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOutput ? "1" : "0");
 
-  // Force OSD SDR->HDR conversion (sRGB BT.709 -> PQ BT.2020) whenever HDR
-  // content is playing, regardless of sink HDR support. This ensures the OSD
-  // (including HDR PGS subtitles) is always converted to the HDR domain.
-  const bool hdrContent = (picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION) ||
-                          (picture.color_transfer == AVCOL_TRC_SMPTE2084) ||
-                          (picture.color_transfer == AVCOL_TRC_ARIB_STD_B67);
-  CSysfsPath("/sys/module/amvecm/parameters/osd_force_hdr", hdrContent ? "1" : "0");
-
-  // The DV core2 OSD processing is now enabled by default (osd_bypass disabled)
-  // so the OSD receives the full DV perceptual pipeline. The osd_bypass_enable
-  // sysfs is kept as a debug fallback only; keep it at 0 here.
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", "0");
+  // Prevent the Dolby Vision core from processing the OSD plane. When the DV
+  // core applies its own EOTF/matrix to the OSD, SDR OSD data is treated as PQ
+  // and saturation is driven to zero. Bypass the DV core and let the amvecm
+  // HDR2 pipeline handle all OSD processing uniformly.
+  // Note: amdv.o is linked into the aml_media module, so the parameter lives
+  // under /sys/module/aml_media (not amdolby_vision).
+  const bool dvActive = (picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", dvActive ? "1" : "0");
 
   m_bConfigured = true;
 

@@ -212,6 +212,14 @@ bool CWinSystemGbmGLESContext::SetGuiCompositing(int colorTransfer)
         return false;
       }
     }
+
+    if (!m_compositeShader->CreateLUTs(colorTransfer))
+    {
+      CLog::Log(LOGERROR, "CWinSystemGbmGLESContext: failed to create LUTs");
+      m_compositeShader.reset();
+      m_guiCompositing = false;
+      return false;
+    }
   }
   else
   {

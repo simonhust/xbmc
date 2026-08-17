@@ -22,6 +22,7 @@ void CGuiCompositeShaderGL::OnCompiledAndLinked()
   m_hTex = glGetAttribLocation(ProgramHandle(), "a_tex");
   m_hSamp = glGetUniformLocation(ProgramHandle(), "u_samp");
   m_hProj = glGetUniformLocation(ProgramHandle(), "u_proj");
+  m_hSdrPeak = glGetUniformLocation(ProgramHandle(), "u_sdrPeak");
 
   glUseProgram(ProgramHandle());
   glUniform1i(m_hSamp, 0);
@@ -32,5 +33,7 @@ bool CGuiCompositeShaderGL::OnEnabled()
 {
   if (m_proj)
     glUniformMatrix4fv(m_hProj, 1, GL_FALSE, m_proj);
+
+  glUniform1f(m_hSdrPeak, m_sdrPeak);
   return true;
 }

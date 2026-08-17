@@ -210,9 +210,9 @@ bool CWinSystemGbmGLContext::CreateContext()
 
 bool CWinSystemGbmGLContext::SetGuiCompositing(int colorTransfer)
 {
-  // GUI is composited in sRGB BT.709. The kernel DV OSD path converts from
-  // sRGB BT.709 to PQ BT.2020 via its core2 pipeline; no userspace conversion
-  // is needed here.
+  // TODO: add CreateLUTs(colorTransfer) support to GL composite shader to match
+  // GLES (WinSystemGbmGLESContext). Currently GL only handles PQ via pow shader;
+  // HLG and LUT-based PQ are not yet implemented.
   m_guiCompositing = (colorTransfer != 0);
 
   if (m_guiCompositing)
@@ -370,6 +370,7 @@ void CWinSystemGbmGLContext::CompositeGui()
   GLfloat proj[16] = {2.0f / w, 0, 0, 0, 0, -2.0f / h, 0, 0, 0, 0, -1, 0, -1.0f, 1.0f, 0, 1};
 
   m_compositeShader->SetProjection(proj);
+  m_compositeShader->SetSdrPeak(203.0f / 10000.0f);
   m_compositeShader->Enable();
 
   GLint posLoc = m_compositeShader->GetPosLoc();
