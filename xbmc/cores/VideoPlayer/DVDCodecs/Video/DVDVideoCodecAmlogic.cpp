@@ -548,8 +548,31 @@ bool CDVDVideoCodecAmlogic::DualLayerTryPair()
   double el_dts = std::get<3>(m_el_packages.front());
   double bl_dts = std::get<3>(m_bl_packages.front());
 
-  if (std::abs(bl_dts - el_dts) > 5000.0)
+  if (std::abs(bl_dts - el_dts) > DVD_MSEC_TO_TIME(40))
+  {
+    /* BL is orphan — dts differs by >40ms from EL (roughly 1 UHD frame at 24fps).
+     * Pop BL, keep EL for continued pairing.
+     * Use single-layer Convert — BL-only H.265, no DV pipeline involvement. */
+    DLDemuxPacket bl_pkt = std::move(m_bl_packages.front());
+    m_bl_packages.pop_front();
+
+    uint8_t *bl_data = std::get<0>(bl_pkt);
+    uint32_t bl_size = std::get<1>(bl_pkt);
+
+    bool converted = m_bitstream->Convert(bl_data, bl_size);
+    KODI::MEMORY::AlignedFree(bl_data);
+
+    if (converted)
+    {
+      m_last_pData = m_bitstream->GetConvertBuffer();
+      m_last_iSize = m_bitstream->GetConvertSize();
+      m_last_dts = bl_dts;
+      m_last_added = true;
+      return true;
+    }
+
     return false;
+  }
 
   /* Match! Convert and output one pair */
   DLDemuxPacket bl_pkt = std::move(m_bl_packages.front());
