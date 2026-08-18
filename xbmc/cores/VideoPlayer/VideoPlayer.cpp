@@ -2722,10 +2722,13 @@ bool CVideoPlayer::CheckContinuity(CCurrentStream& current, DemuxPacket* pPacket
     // re-timed timestamps) must not shift the global m_offset_pts: that offset
     // is applied to subsequent audio/video packets and would drag the A/V
     // timeline along with the subtitle glitch (observed as wild video dts and
-    // hardware decoder lockup on affected discs). Keep the subtitle packet's
-    // own timestamps and let the subtitle stream resync on its own.
+    // hardware decoder lockup on affected discs). The subtitle packet itself
+    // is corrected to the A/V clock so subtitles display at the right time,
+    // but m_offset_pts is left untouched.
     if (current.type == StreamType::SUBTITLE)
     {
+      UpdateCorrection(pPacket, correction);
+      lastdts = pPacket->dts;
       if (current.avsync == CCurrentStream::AV_SYNC_CHECK)
         current.avsync = CCurrentStream::AV_SYNC_CONT;
     }
