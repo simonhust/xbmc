@@ -2717,15 +2717,24 @@ bool CVideoPlayer::CheckContinuity(CCurrentStream& current, DemuxPacket* pPacket
   double lastdts = pPacket->dts;
   if(correction != 0.0)
   {
+    // Subtitle streams must follow the master clock, never steer it.
+    // A discontinuity in a subtitle stream (e.g. DIY Blu-ray PGS tracks with
+    // re-timed timestamps) must not shift the global m_offset_pts: that offset
+    // is applied to subsequent audio/video packets and would drag the A/V
+    // timeline along with the subtitle glitch (observed as wild video dts and
+    // hardware decoder lockup on affected discs). Keep the subtitle packet's
+    // own timestamps and let the subtitle stream resync on its own.
+    if (current.type == StreamType::SUBTITLE)
+    {
+      if (current.avsync == CCurrentStream::AV_SYNC_CHECK)
+        current.avsync = CCurrentStream::AV_SYNC_CONT;
+    }
     // we want the dts values of two streams to close, or for one to be invalid (e.g. from a missing audio stream)
-    double this_dts = pPacket->dts;
-    double that_dts =
-        current.type == StreamType::AUDIO ? m_CurrentVideo.lastdts : m_CurrentAudio.lastdts;
-
-    if (m_CurrentAudio.id == -1 || m_CurrentVideo.id == -1 ||
-       current.type == StreamType::SUBTITLE ||
-       current.lastdts == DVD_NOPTS_VALUE ||
-       fabs(this_dts - that_dts) < DVD_MSEC_TO_TIME(1000))
+    else if (double that_dts =
+                 current.type == StreamType::AUDIO ? m_CurrentVideo.lastdts : m_CurrentAudio.lastdts;
+             m_CurrentAudio.id == -1 || m_CurrentVideo.id == -1 ||
+             current.lastdts == DVD_NOPTS_VALUE ||
+             fabs(pPacket->dts - that_dts) < DVD_MSEC_TO_TIME(1000))
     {
       m_offset_pts += correction;
       UpdateCorrection(pPacket, correction);
