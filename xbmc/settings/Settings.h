@@ -187,6 +187,7 @@ public:
   static constexpr auto SETTING_SUBTITLES_HDRPGSPEAKLUMINANCE = "subtitles.hdrpgspeakluminance";
   static constexpr auto SETTING_SUBTITLES_HDRPGSSATURATION = "subtitles.hdrpgssaturation";
   static constexpr auto SETTING_SUBTITLES_GUISDRSATURATION = "subtitles.guisdrsaturation";
+  static constexpr auto SETTING_SUBTITLES_GUISDRPEAKLUMINANCE = "subtitles.guisdrpeakluminance";
   static constexpr auto SETTING_DVDS_AUTORUN = "dvds.autorun";
   static constexpr auto SETTING_DVDS_PLAYERREGION = "dvds.playerregion";
   static constexpr auto SETTING_DVDS_AUTOMENU = "dvds.automenu";
@@ -393,7 +394,6 @@ public:
   static constexpr auto SETTING_VIDEOSCREEN_10BITSURFACES = "videoscreen.10bitsurfaces";
   static constexpr auto SETTING_VIDEOSCREEN_USESYSTEMSDRPEAKLUMINANCE =
       "videoscreen.usesystemsdrpeakluminance";
-  static constexpr auto SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE = "videoscreen.guipeakluminance";
   static constexpr auto SETTING_VIDEOSCREEN_DITHER = "videoscreen.dither";
   static constexpr auto SETTING_VIDEOSCREEN_DITHERDEPTH = "videoscreen.ditherdepth";
   static constexpr auto SETTING_AUDIOOUTPUT_AUDIODEVICE = "audiooutput.audiodevice";

@@ -1365,7 +1365,7 @@ float CWinSystemWin32::GetGuiSdrPeakLuminance() const
     return m_systemSdrPeakLuminance;
 
   // Max nits for 100% UI setting = 1000 nits, < 10000 nits, min 80 nits for 0%
-  const int guiSdrPeak = settings->GetInt(CSettings::SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE);
+  const int guiSdrPeak = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRPEAKLUMINANCE);
   return (80.0f * std::pow(std::exp(1.0f), 0.025257f * guiSdrPeak));
 }
 

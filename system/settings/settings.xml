@@ -1041,6 +1041,29 @@
           <default>50</default>
           <control type="slider" format="percentage" range="0,100" />
         </setting>
+        <setting id="subtitles.guisdrpeakluminance" type="integer" label="36097" help="36547">
+          <requirement>
+            <or>
+              <condition>HAS_DX</condition>
+              <condition>HAS_MEDIACODEC</condition>
+              <condition>HAVE_WEBOS</condition>
+              <condition>HAVE_AMCODEC</condition>
+            </or>
+          </requirement>
+          <dependencies>
+            <dependency type="visible" on="property" name="ishdrdisplay"/>
+            <dependency type="enable">
+              <or>
+                <condition on="property" name="hassystemsdrpeakluminance" operator="!is" />
+                <condition setting="videoscreen.usesystemsdrpeakluminance" operator="is">false</condition>
+                <condition>HAVE_AMCODEC</condition>
+              </or>
+            </dependency>
+          </dependencies>
+          <level>2</level>
+          <default>40</default>
+          <control type="slider" format="percentage" range="0,100" />
+        </setting>
       </group>
     </category>
   </section>
@@ -3221,29 +3244,6 @@
           </dependency>
         </dependencies>
         <control type="toggle" />
-      </setting>
-      <setting id="videoscreen.guipeakluminance" type="integer" label="36097" help="36547">
-        <requirement>
-          <or>
-            <condition>HAS_DX</condition>
-            <condition>HAS_MEDIACODEC</condition>
-            <condition>HAVE_WEBOS</condition>
-            <condition>HAVE_AMCODEC</condition>
-          </or>
-        </requirement>
-        <dependencies>
-          <dependency type="visible" on="property" name="ishdrdisplay"/>
-          <dependency type="enable">
-            <or>
-              <condition on="property" name="hassystemsdrpeakluminance" operator="!is" />
-              <condition setting="videoscreen.usesystemsdrpeakluminance" operator="is">false</condition>
-              <condition>HAVE_AMCODEC</condition>
-            </or>
-          </dependency>
-        </dependencies>
-        <level>2</level>
-        <default>40</default>
-        <control type="slider" format="percentage" range="0,100" />
       </setting>
       </group>
       <group id="3" label="14126">

@@ -237,7 +237,7 @@ void CWinSystemWaylandWebOS::UpdateResolutions()
 float CWinSystemWaylandWebOS::GetGuiSdrPeakLuminance() const
 {
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-  const int guiSdrPeak = settings->GetInt(CSettings::SETTING_VIDEOSCREEN_GUISDRPEAKLUMINANCE);
+  const int guiSdrPeak = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRPEAKLUMINANCE);
 
   return (0.7f * guiSdrPeak + 30.0f) / 100.0f;
 }
