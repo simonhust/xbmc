@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="tools.jre.zulu"
+       name="JRE for BD-J menus"
+       version="22.0.10.0"
+       provider-name="Team CoreELEC">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+
+  </requires>
+  <extension point="xbmc.python.script" library="default.py">
+    <provides></provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary>Java Runtime Environment 8 for Blu-ray Disc Java menus from Azul Systems.</summary>
+    <description>
+Java Runtime Environment 8 for Blu-ray Disc Java menus from Azul Systems.
+    </description>
+    <disclaimer>
+
+    </disclaimer>
+    <platform>all</platform>
+    <news>
+initial release
+    </news>
+    <assets>
+      <icon>resources/icon.png</icon>
+      <fanart>resources/fanart.png</fanart>
+
+    </assets>
+  </extension>
+</addon>
