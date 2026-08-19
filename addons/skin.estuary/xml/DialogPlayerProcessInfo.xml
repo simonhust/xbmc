@@ -4,6 +4,8 @@
 	<defaultcontrol always="true">5553</defaultcontrol>
 	<animation effect="fade" start="0" end="100" time="300">WindowOpen</animation>
 	<animation effect="fade" start="100" end="0" time="200">WindowClose</animation>
+	<onload condition="System.AddonIsEnabled(script.tinyppi)">RunScript(script.tinyppi)</onload>
+	<onload condition="System.AddonIsEnabled(script.tinyppi)">Close</onload>
 	<onunload>ClearProperty(PlayerInfoDialogFocus,Home)</onunload>
 	<controls>
 		<control type="group">
