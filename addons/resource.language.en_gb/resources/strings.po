@@ -9123,6 +9123,66 @@ msgctxt "#14427"
 msgid "Player-Led"
 msgstr ""
 
+#. Label for setting "HDR Vivid mode" of label #14428
+#: system/settings/settings.xml
+msgctxt "#14428"
+msgid "HDR Vivid mode"
+msgstr ""
+
+#. Help text for setting "HDR Vivid mode" of label #14429
+#: system/settings/settings.xml
+msgctxt "#14429"
+msgid "Select the HDR Vivid metadata delivery mode. Auto lets the kernel decide via EDID; VSIF and EMDS force a specific delivery format."
+msgstr ""
+
+#. Option label for HDR Vivid mode "Auto" of label #14430
+#: system/settings/settings.xml
+msgctxt "#14430"
+msgid "Auto"
+msgstr ""
+
+#. Option label for HDR Vivid mode "VSIF" of label #14431
+#: system/settings/settings.xml
+msgctxt "#14431"
+msgid "VSIF"
+msgstr ""
+
+#. Option label for HDR Vivid mode "EMDS" of label #14432
+#: system/settings/settings.xml
+msgctxt "#14432"
+msgid "EMDS"
+msgstr ""
+
+#. Label for setting "Multi HDR stream priority" of label #14433
+#: system/settings/settings.xml
+msgctxt "#14433"
+msgid "Multi HDR stream priority"
+msgstr ""
+
+#. Help text for setting "Multi HDR stream priority" of label #14434
+#: system/settings/settings.xml
+msgctxt "#14434"
+msgid "When a stream carries multiple HDR formats, select which format to use. Dolby Vision is preferred for dynamic metadata; HDR10+ and CUVA are alternatives."
+msgstr ""
+
+#. Option label for multi HDR priority "Dolby Vision" of label #14435
+#: system/settings/settings.xml
+msgctxt "#14435"
+msgid "Dolby Vision"
+msgstr ""
+
+#. Option label for multi HDR priority "HDR10+" of label #14436
+#: system/settings/settings.xml
+msgctxt "#14436"
+msgid "HDR10+"
+msgstr ""
+
+#. Option label for multi HDR priority "CUVA" of label #14437
+#: system/settings/settings.xml
+msgctxt "#14437"
+msgid "CUVA"
+msgstr ""
+
 #: xbmc/music/MusicDatabase.cpp
 #: xbmc/video/VideoDatabase.cpp
 msgctxt "#15011"
