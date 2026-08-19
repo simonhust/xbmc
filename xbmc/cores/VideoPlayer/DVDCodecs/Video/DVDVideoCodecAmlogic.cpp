@@ -6,6 +6,7 @@
  *  See LICENSES/README.md for more information.
  */
 
+#include <algorithm>
 #include <math.h>
 #include <utility>
 
@@ -13,6 +14,7 @@
 #include "utils/MemUtils.h"
 #include "DVDVideoCodecAmlogic.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
+#include "DVDClock.h"
 #include "DVDStreamInfo.h"
 #include "AMLCodec.h"
 #include "ServiceBroker.h"
@@ -22,6 +24,13 @@
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "threads/Thread.h"
+#include "windowing/GraphicContext.h"
+#include "windowing/WinSystem.h"
+
+extern "C"
+{
+#include <libavutil/hdr_dynamic_metadata.h>
+}
 
 #define __MODULE_NAME__ "DVDVideoCodecAmlogic"
 
@@ -106,6 +115,11 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
 
   m_hints = hints;
   m_hints.pClock = hints.pClock;
+
+  m_nalLengthSize = 0;
+  m_streamMeta = {};
+  m_stripHdr10Plus = false;
+  m_metadataSequencer.Reset();
 
   CLog::Log(LOGDEBUG, "{}::{} - codec {:d} profile:{:d} extra_size:{:d} fps:{:d}/{:d}",
     __MODULE_NAME__, __FUNCTION__, m_hints.codec, m_hints.profile, m_hints.extradata.GetSize(), m_hints.fpsrate, m_hints.fpsscale);
@@ -297,6 +311,11 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
       m_bitstream = new CBitstreamConverter();
       m_bitstream->Open(m_hints.codec, m_hints.extradata.GetData(), m_hints.extradata.GetSize(), true);
 
+      // length-prefix size from the original hvcC, read before the extradata
+      // below becomes Annex-B. Stays 0 for Annex-B input
+      if (m_hints.extradata.GetSize() > 21 && m_hints.extradata.GetData()[0] == 1)
+        m_nalLengthSize = (m_hints.extradata.GetData()[21] & 0x3) + 1;
+
       // check for hevc-hvcC and convert to h265-annex-b
       if (m_hints.extradata && !m_hints.cryptoSession)
       {
@@ -308,9 +327,11 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
           if (!user_dv_disable && CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
                   CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_TV_LED)
           {
-            m_bitstream->SetDoviZeroLevel5(
-                CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
-                    CSettings::SETTING_VIDEOPLAYER_DOVIZEROLEVEL5));
+            const bool zeroLevel5 = CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+                CSettings::SETTING_VIDEOPLAYER_DOVIZEROLEVEL5);
+            m_bitstream->SetDoviZeroLevel5(zeroLevel5);
+            if (zeroLevel5)
+              m_streamMeta.flags.push_back("l5-zeroed");
           }
 
           if ((m_hints.dovi.dv_profile == 4 || m_hints.dovi.dv_profile == 7) && !user_dv_disable)
@@ -323,6 +344,7 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
               m_hints.dovi.dv_profile = 8;
               m_hints.dovi.el_present_flag = false;
               m_bitstream->SetConvertDovi(true);
+              m_streamMeta.flags.push_back("converted");
             }
           }
         }
@@ -403,6 +425,22 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
       m_bitstream->SetRemoveCuva(true);
   }
 
+  if (m_hints.contentLightMetadata)
+    m_streamMeta.hdrCll = AMLSerializeContentLight(*m_hints.contentLightMetadata);
+  if (m_hints.masteringMetadata &&
+      (m_hints.masteringMetadata->has_primaries || m_hints.masteringMetadata->has_luminance))
+    m_streamMeta.hdrMdcv = AMLSerializeMastering(*m_hints.masteringMetadata);
+  // config record and EL presence from hints, not m_hints, which the P7 to P8
+  // conversion above has already rewritten
+  if (hints.dovi.dv_profile > 0)
+    m_streamMeta.doviConfig = AMLSerializeDoviConfig(hints.dovi);
+  m_dualLayer = hints.dovi.el_present_flag;
+
+  m_pendingMeta = m_streamMeta;
+  m_lastMeta = m_streamMeta;
+  m_metadataToken = CAMLFrameMetadataStore::GetInstance().Register();
+  CAMLFrameMetadataStore::GetInstance().Publish(m_metadataToken, m_streamMeta);
+
   CLog::Log(LOGINFO, "{}: Opened Amlogic Codec", __MODULE_NAME__);
   return true;
 FAIL:
@@ -413,6 +451,13 @@ FAIL:
 void CDVDVideoCodecAmlogic::Close(void)
 {
   CLog::Log(LOGDEBUG, "{}::{}", __MODULE_NAME__, __FUNCTION__);
+
+  // a successor codec may already own the store, so Unregister only clears our own values
+  if (m_metadataToken)
+  {
+    CAMLFrameMetadataStore::GetInstance().Unregister(m_metadataToken);
+    m_metadataToken = 0;
+  }
 
   m_videoBufferPool = nullptr;
 
@@ -595,6 +640,8 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
   // Handle Input, add demuxer packet to input queue, we must accept it or
   // it will be discarded as VideoPlayerVideo has no concept of "try again".
 
+  DrainMetadataToClock();
+
   uint8_t *pData(packet.pData);
   uint32_t iSize(packet.iSize);
   bool doviIsFEL = false;
@@ -605,6 +652,38 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
   if (pData)
   {
+    // named by how the EL arrives; a track pair can open with solo packets, so
+    // dt-dl may correct an early st-dl
+    if (m_dualLayer && m_streamMeta.structure != "dt-dl")
+    {
+      m_streamMeta.structure = packet.isDualStream ? "dt-dl" : "st-dl";
+      m_pendingMeta.structure = m_streamMeta.structure;
+    }
+
+    // latch from the original demuxer payload, before Convert() can strip or
+    // rewrite it. Dual-track streams are latched from the base layer at pair
+    // completion: the EL carries its own static SEIs with different values
+    if (!packet.isDualStream && m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE)
+    {
+      switch(m_hints.codec)
+      {
+        case AV_CODEC_ID_HEVC:
+          AMLLatchHevcDoviRpu(pData, iSize, m_nalLengthSize, m_pendingMeta);
+          AMLLatchHevcSei(pData, iSize, m_nalLengthSize, m_pendingMeta);
+          // the statics repeat rarely, so they persist where a skip cannot drop them
+          if (!m_pendingMeta.hdrMdcv.empty())
+            m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
+          if (!m_pendingMeta.hdrCll.empty())
+            m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
+          break;
+        case AV_CODEC_ID_AV1:
+          AMLLatchAv1Metadata(pData, iSize, m_pendingMeta);
+          break;
+        default:
+          break;
+      }
+    }
+
     if (m_bitstream)
     {
       if (!m_last_added)
@@ -952,6 +1031,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
       if (sideData && sideData->size)
       {
+        AMLLatchHdr10PlusT35(sideData->data, sideData->size, m_pendingMeta);
         if (m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
           CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr10p data with size {}", __FUNCTION__,
             sideData->size);
@@ -961,6 +1041,20 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
     double used_dts = (m_last_dts != DVD_NOPTS_VALUE) ? m_last_dts : packet.dts;
     m_last_dts = DVD_NOPTS_VALUE;
     m_last_added = m_Codec->AddData(pData, iSize, used_dts, m_hints.ptsinvalid ? DVD_NOPTS_VALUE : packet.pts);
+
+    if (m_last_added && packet.pData)
+    {
+      m_pendingMeta.Inherit(m_lastMeta);
+      m_lastMeta = m_pendingMeta;
+      if (m_hints.ptsinvalid || packet.pts == DVD_NOPTS_VALUE)
+        CAMLFrameMetadataStore::GetInstance().Publish(m_metadataToken, m_pendingMeta);
+      else
+      {
+        m_metadataSequencer.Commit(packet.pts, m_pendingMeta);
+        m_lastCommitPts = packet.pts;
+      }
+      m_pendingMeta = m_streamMeta;
+    }
   }
   else
   {
@@ -971,6 +1065,54 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
   return m_last_added;
 }
 
+// the latency the renderer adds when it schedules a frame for display,
+// see CRenderManager::PrepareNextRender and UpdateLatencyTweak
+double CDVDVideoCodecAmlogic::RenderDisplayLatency()
+{
+  const auto winSystem = CServiceBroker::GetWinSystem();
+  CGraphicContext& gfx = winSystem->GetGfxContext();
+
+  const bool isHDRUsed = winSystem->GetOSHDRStatus() == HDR_STATUS::HDR_ON &&
+                         m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE;
+  float refresh = gfx.GetFPS();
+  if (gfx.GetVideoResolution() == RES_WINDOW)
+    refresh = 0;
+
+  const double latencyTweak = static_cast<double>(
+      CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->GetLatencyTweak(
+          refresh, isHDRUsed, gfx.GetResInfo().iScreenHeight));
+  const double videoDelay =
+      static_cast<double>(m_processInfo.GetVideoSettings().m_AudioDelay) * 1000.0;
+
+  return DVD_MSEC_TO_TIME(latencyTweak + static_cast<double>(gfx.GetDisplayLatency()) -
+                          videoDelay -
+                          static_cast<double>(winSystem->GetFrameLatencyAdjustment()));
+}
+
+// publishes every committed value whose frame the renderer has scheduled
+// for display. A miss keeps the last published values
+void CDVDVideoCodecAmlogic::DrainMetadataToClock()
+{
+  if (!m_hints.pClock || m_metadataSequencer.Empty())
+    return;
+
+  double target = m_hints.pClock->GetClock();
+  if (!m_hints.pClock->IsPaused())
+    target += RenderDisplayLatency();
+
+  AMLFrameMetadata meta;
+  if (m_metadataSequencer.Consume(target, meta))
+  {
+    CAMLFrameMetadataStore::GetInstance().Publish(m_metadataToken, meta);
+    if (!m_metaLeadLogged)
+    {
+      m_metaLeadLogged = true;
+      CLog::Log(LOGDEBUG, "{}: frame metadata pts lead {:.3f}", __MODULE_NAME__,
+                (m_lastCommitPts - target) / DVD_TIME_BASE);
+    }
+  }
+}
+
 void CDVDVideoCodecAmlogic::Reset(void)
 {
   m_Codec->Reset();
@@ -979,10 +1121,14 @@ void CDVDVideoCodecAmlogic::Reset(void)
 
   m_mpeg2_sequence_pts = 0;
   m_has_keyframe = false;
+  m_metadataSequencer.Reset();
+  m_pendingMeta = m_streamMeta;
 }
 
 CDVDVideoCodec::VCReturn CDVDVideoCodecAmlogic::GetPicture(VideoPicture* pVideoPicture)
 {
+  DrainMetadataToClock();
+
   if (!m_Codec)
     return VC_ERROR;
 
