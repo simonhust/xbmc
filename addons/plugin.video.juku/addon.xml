@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="plugin.video.juku" name="剧库" version="0.55" provider-name="juku">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="default.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.service" library="service.py"/>
+    <extension point="xbmc.addon.metadata">
+        <platform>all</platform>
+        <summary lang="zh_CN">剧库 Kodi 视频插件</summary>
+        <description lang="zh_CN">基于 Kodi 19+ VFS 规范，提供最近热门、片单浏览和视频搜索等功能,网页控制端端口17654</description>
+        <assets>
+            <icon>resources/icon.png</icon>
+            <fanart>resources/fanart.webp</fanart>
+        </assets>
+    </extension>
+</addon>
