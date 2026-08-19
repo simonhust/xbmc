@@ -500,6 +500,13 @@ void COverlayTextureGLES::Render(SRenderState& state)
   if (m_pma)
     glUniform1f(renderSystem->GUIShaderGetPma(), 1.0f);
 
+  // Override the sdrPeak uniform with the subtitle-specific luminance
+  // so subtitles can be independently dimmed from the GUI overlay.
+  {
+    const float subSdrPeak = CServiceBroker::GetWinSystem()->GetSubSdrPeakLuminance();
+    glUniform1f(renderSystem->GUIShaderGetSdrPeak(), subSdrPeak);
+  }
+
   GLfloat ver[4][2];
   GLfloat tex[4][2];
   GLubyte idx[4] = {0, 1, 3, 2}; //determines order of triangle strip

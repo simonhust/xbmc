@@ -1064,6 +1064,22 @@
           <default>40</default>
           <control type="slider" format="percentage" range="0,100" />
         </setting>
+        <setting id="subtitles.subsdrpeakluminance" type="integer" label="39218" help="39219">
+          <requirement>
+            <or>
+              <condition>HAS_DX</condition>
+              <condition>HAS_MEDIACODEC</condition>
+              <condition>HAVE_WEBOS</condition>
+              <condition>HAVE_AMCODEC</condition>
+            </or>
+          </requirement>
+          <dependencies>
+            <dependency type="visible" on="property" name="ishdrdisplay"/>
+          </dependencies>
+          <level>2</level>
+          <default>50</default>
+          <control type="slider" format="percentage" range="0,100" />
+        </setting>
       </group>
     </category>
   </section>

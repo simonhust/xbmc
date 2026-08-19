@@ -40,6 +40,7 @@ public:
   CHDRCapabilities GetDisplayHDRCapabilities() const override;
   float GetGuiSdrPeakLuminance() const override;
   float GetGuiSdrSaturation() const override;
+  float GetSubSdrPeakLuminance() const override;
   HDR_STATUS GetOSHDRStatus() override;
 
   bool Hide() override;
