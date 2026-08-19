@@ -180,6 +180,8 @@ public:
   std::string stereo_mode; // expected stereo mode
   StreamHdrType hdr_type = StreamHdrType::HDR_TYPE_NONE; // type of HDR for this stream (hdr10, etc)
   AVDOVIDecoderConfigurationRecord dovi{};
+  bool m_isHdr10Plus{false}; // HDR10+ detected from first packet side data
+  bool m_isCuva{false}; // CUVA HDR Vivid detected from first packet side data
   bool bInterlaced = false; // progressive/interlaced flag
   bool bUnknownIP = false; // progressive/interlace unknown
 };

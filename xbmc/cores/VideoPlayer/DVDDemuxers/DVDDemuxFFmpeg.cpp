@@ -2601,6 +2601,35 @@ void CDVDDemuxFFmpeg::ParsePacket(AVPacket* pkt)
         }
       }
     }
+
+    // Aggregate HDR formats from ffmpeg packet side data on the first video
+    // packet of each HEVC stream. This must happen before the codec opens so
+    // the multi HDR stream priority filter is configured from the start.
+    if (stream->type == StreamType::VIDEO && st->codecpar->codec_id == AV_CODEC_ID_HEVC &&
+        pkt->side_data && !static_cast<CDemuxStreamVideo*>(stream)->m_isHdr10Plus &&
+        !static_cast<CDemuxStreamVideo*>(stream)->m_isCuva)
+    {
+      bool hasHdr10Plus = false;
+      bool hasCuva = false;
+      for (int i = 0; i < pkt->side_data_elems && (!hasHdr10Plus || !hasCuva); ++i)
+      {
+        switch (pkt->side_data[i].type)
+        {
+          case AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW:
+            hasHdr10Plus = true;
+            break;
+          case AV_PKT_DATA_DYNAMIC_HDR_VIVID_RAW:
+            hasCuva = true;
+            break;
+          default:
+            break;
+        }
+      }
+
+      CDemuxStreamVideo* videoStream = static_cast<CDemuxStreamVideo*>(stream);
+      videoStream->m_isHdr10Plus = hasHdr10Plus;
+      videoStream->m_isCuva = hasCuva;
+    }
   }
 }
 

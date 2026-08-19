@@ -75,6 +75,8 @@ public:
   int bitsperpixel;
   int bitdepth;
   StreamHdrType hdrType;
+  bool hdr10Plus = false; // HDR10+ SEI detected (demux first packet side data)
+  bool hdrVivid = false; // CUVA HDR Vivid SEI detected (demux first packet side data)
   AVColorSpace colorSpace;
   AVColorRange colorRange;
   AVColorPrimaries colorPrimaries;

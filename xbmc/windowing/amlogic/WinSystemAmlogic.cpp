@@ -105,6 +105,15 @@ void CWinSystemAmlogic::SettingOptionsHdrVividFiller(const SettingConstPtr& sett
   list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14432), 2); // EMDS
 }
 
+void CWinSystemAmlogic::SettingOptionsMultiHdrPriorityFiller(const SettingConstPtr& setting,
+                                                             std::vector<IntegerSettingOption>& list,
+                                                             int& current)
+{
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14435), 0); // Dolby Vision
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14436), 1); // HDR10+
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14437), 2); // CUVA
+}
+
 void CWinSystemAmlogic::MonitorStart()
 {
   int err;
@@ -307,6 +316,11 @@ bool CWinSystemAmlogic::InitWindowSystem()
   /* HDR Vivid passthrough mode (0 auto, 1 VSIF, 2 EMDS) - always available */
   CServiceBroker::GetSettingsComponent()->GetSettings()->
     GetSettingsManager()->RegisterSettingOptionsFiller("hdrvivid_modes", SettingOptionsHdrVividFiller);
+
+  /* Mixed HDR stream priority (0 DV, 1 HDR10+, 2 CUVA) - always available */
+  CServiceBroker::GetSettingsComponent()->GetSettings()->
+    GetSettingsManager()->RegisterSettingOptionsFiller("multihdr_priority_modes",
+                                                       SettingOptionsMultiHdrPriorityFiller);
 
   m_nativeDisplay = EGL_DEFAULT_DISPLAY;
 

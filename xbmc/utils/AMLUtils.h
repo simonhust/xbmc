@@ -56,7 +56,37 @@ bool aml_support_avs3();
 bool aml_support_dolby_vision();
 bool aml_dolby_vision_enabled();
 bool aml_convert_to_dv_by_vs_engine(StreamHdrType hdrType);
-void aml_set_hdr_gate(StreamHdrType hdrType);
+void aml_set_hdr_gate(StreamHdrType hdrType, bool hasDv);
+
+/*!
+ * \brief Resolved multi HDR stream path.
+ *
+ * Combines the configured priority (coreelec.amlogic.multihdrstreampriority),
+ * the HDR formats actually present in the stream and the VS-Engine
+ * conversion settings into a single decision:
+ *   - target:    the format selected following the priority order
+ *   - removeXxx: SEI stripping flags so the decoder sees a clean
+ *                single-format stream (DV RPU is handled by the kernel gate)
+ *   - vs10:      the clean single-format stream is handed to DV
+ *                (VS-Engine absorbs it)
+ */
+struct AMLHdrPath
+{
+  StreamHdrType target = StreamHdrType::HDR_TYPE_NONE;
+  bool removeHdr10Plus = false;
+  bool removeCuva = false;
+  bool vs10 = false;
+};
+
+/*!
+ * \brief Resolve the HDR handling path for a video stream.
+ * \param hasDv Whether the stream contains Dolby Vision (demuxer DOVI side data).
+ * \param hasHdr10Plus Whether HDR10+ was detected (demux side data / first SEI).
+ * \param hasCuva Whether CUVA HDR Vivid was detected (demux side data / first SEI).
+ * \param baseType The demuxer hints HDR type, used when no selectable format
+ *                 is present (HDR10/SDR → hdr2dv/sdr2dv conversion).
+ */
+AMLHdrPath aml_get_hdr_path(bool hasDv, bool hasHdr10Plus, bool hasCuva, StreamHdrType baseType);
 bool aml_video_started();
 int aml_amdv_wait(StreamHdrType hdrType);
 void aml_set_3d_video_mode(unsigned int mode, bool framepacking_support, int view_mode);

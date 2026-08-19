@@ -42,7 +42,6 @@
 #include "Util.h"
 #include "cores/FFmpeg.h"
 #include "filesystem/File.h"
-#include "utils/HevcSei.h"
 #include "utils/LangCodeExpander.h"
 
 #include <cstdlib>
@@ -265,57 +264,6 @@ std::unique_ptr<CTexture> PictureToTexture(const VideoPicture& picture, const CD
     result.reset();
 
   return result;
-}
-
-// Sniffs the first video packet of each HEVC stream for HDR10+/CUVA SEI
-// messages. The results are keyed by the stream's uniqueId so the media tag
-// can store up to three HDR formats (DV/HDR10+/HDR Vivid) for the
-// "Select HDR stream" dialog.
-void SniffHdrSei(CDVDDemux* demuxer, std::map<int, std::pair<bool, bool>>& streamHdrSei)
-{
-  std::set<int> hevcStreams;
-  for (const CDemuxStream* stream : demuxer->GetStreams())
-  {
-    if (stream->type == StreamType::VIDEO && stream->codec == AV_CODEC_ID_HEVC)
-      hevcStreams.insert(stream->uniqueId);
-  }
-  if (hevcStreams.empty())
-    return;
-
-  DemuxPacket* pkt = nullptr;
-  int attempts = 0;
-  while (attempts++ < 128 && (pkt = demuxer->Read()))
-  {
-    if (pkt->iStreamId < 0 || !pkt->pData || pkt->iSize == 0)
-    {
-      CDVDDemuxUtils::FreeDemuxPacket(pkt);
-      continue;
-    }
-
-    if (hevcStreams.count(pkt->iStreamId))
-    {
-      const uint8_t* pData = pkt->pData;
-      int iSize = pkt->iSize;
-
-      // Skip mp4 start code if present
-      if (iSize > 4 && pData[0] == 0 && pData[1] == 0 && pData[2] == 0 && pData[3] == 1)
-      {
-        pData += 4;
-        iSize -= 4;
-      }
-
-      streamHdrSei[pkt->iStreamId] = {CHevcSei::ContainsHdr10Plus(pData, iSize),
-                                      CHevcSei::ContainsCuva(pData, iSize)};
-      hevcStreams.erase(pkt->iStreamId);
-      if (hevcStreams.empty())
-      {
-        CDVDDemuxUtils::FreeDemuxPacket(pkt);
-        break;
-      }
-    }
-
-    CDVDDemuxUtils::FreeDemuxPacket(pkt);
-  }
 }
 
 } // namespace
@@ -580,16 +528,13 @@ static bool GetDetailsFromFrame(CDemuxStreamVideo* stream,
     return false;
   }
 
-  // Frame-level detection fills what the packet sniff could not detect.
+  // Frame-level detection fills what could not be detected at demux level.
   const std::string frameHdrType = CStreamDetails::HdrTypeToString(picture.hdrType);
-  const std::string frameHdrTypeAlt = CStreamDetails::HdrTypeToString(picture.hdrTypeAlt);
   if (vDetail.m_strHdrType.empty())
     vDetail.m_strHdrType = frameHdrType;
   else if (vDetail.m_strHdrType == "hdr10" &&
            (frameHdrType == "hdr10plus" || frameHdrType == "hdrvivid"))
     vDetail.m_strHdrType = frameHdrType;
-  if (vDetail.m_strHdrTypeAlt.empty())
-    vDetail.m_strHdrTypeAlt = frameHdrTypeAlt;
   if (vDetail.m_strHdrDetail.find("7") != std::string::npos)
     vDetail.m_strHdrDetail += picture.strDVELType;
   return true;
@@ -604,10 +549,28 @@ bool CDVDFileInfo::DemuxerToStreamDetails(const std::shared_ptr<CDVDInputStream>
   bool retVal = false;
   details.Reset();
 
-  // Sniff the first video packets for HDR10+/CUVA before any seek, so the
-  // media tag can store up to three HDR formats for the HDR stream dialog.
-  std::map<int, std::pair<bool, bool>> streamHdrSei;
-  SniffHdrSei(pDemux, streamHdrSei);
+  // Read the first video packets so ParsePacket aggregates the ffmpeg side
+  // data (HDR10+ / CUVA HDR Vivid RAW) into the stream flags before the
+  // stream details are built.
+  std::set<int> hevcVideoStreams;
+  for (const CDemuxStream* stream : pDemux->GetStreams())
+  {
+    if (stream->type == StreamType::VIDEO && stream->codec == AV_CODEC_ID_HEVC)
+      hevcVideoStreams.insert(stream->uniqueId);
+  }
+  if (!hevcVideoStreams.empty())
+  {
+    int attempts = 0;
+    DemuxPacket* pkt = nullptr;
+    while (attempts++ < 128 && (pkt = pDemux->Read()))
+    {
+      if (pkt->iStreamId >= 0 && hevcVideoStreams.count(pkt->iStreamId))
+        hevcVideoStreams.erase(pkt->iStreamId);
+      CDVDDemuxUtils::FreeDemuxPacket(pkt);
+      if (hevcVideoStreams.empty())
+        break;
+    }
+  }
 
   const CURL pathToUrl(path);
   for (CDemuxStream* stream : pDemux->GetStreams())
@@ -626,6 +589,15 @@ bool CDVDFileInfo::DemuxerToStreamDetails(const std::shared_ptr<CDVDInputStream>
       p->m_strStereoMode = vstream->stereo_mode;
       p->m_strLanguage = vstream->language;
       p->m_strHdrType = CStreamDetails::HdrTypeToString(vstream->hdr_type);
+      // Upgrade an HDR10 base to the formats detected by ffmpeg (first packet
+      // side data), same sources as the playback path.
+      if (p->m_strHdrType == "hdr10" && (vstream->m_isCuva || vstream->m_isHdr10Plus))
+      {
+        if (vstream->m_isCuva)
+          p->m_strHdrType = "hdrvivid";
+        else if (vstream->m_isHdr10Plus)
+          p->m_strHdrType = "hdr10plus";
+      }
       if (vstream->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION)
       {
         p->m_strHdrDetail = vstream->dovi.dv_profile == 0
@@ -637,49 +609,13 @@ bool CDVDFileInfo::DemuxerToStreamDetails(const std::shared_ptr<CDVDInputStream>
           p->m_strHdrDetail += ".";
           p->m_strHdrDetail +=
               std::to_string(static_cast<int>(vstream->dovi.dv_bl_signal_compatibility_id));
-          if (vstream->dovi.dv_bl_signal_compatibility_id == 4)
-            p->m_strHdrTypeAlt = "hlg";
         }
       }
-      // HDR10+/CUVA detection from the first packet SEI (browse-time media tag)
+      // DV EL type (FEL/MEL) detail, and frame-level fallback for HDR10+/CUVA
       const bool isBaseHdr = vstream->hdr_type != StreamHdrType::HDR_TYPE_NONE &&
                              vstream->hdr_type != StreamHdrType::HDR_TYPE_HLG &&
                              vstream->dovi.dv_profile != 5 && vstream->dovi.dv_profile <= 10;
       if (isBaseHdr)
-      {
-        const auto sei = streamHdrSei.find(stream->uniqueId);
-        const bool hasHdr10Plus = sei != streamHdrSei.end() && sei->second.first;
-        const bool hasCuva = sei != streamHdrSei.end() && sei->second.second;
-
-        if (vstream->hdr_type == StreamHdrType::HDR_TYPE_HDR10)
-        {
-          if (hasCuva)
-            p->m_strHdrType = "hdrvivid";
-          else if (hasHdr10Plus)
-            p->m_strHdrType = "hdr10plus";
-          if (hasCuva && hasHdr10Plus)
-            p->m_strHdrTypeAlt = "hdr10plus";
-        }
-        else if (vstream->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION)
-        {
-          if (hasHdr10Plus && p->m_strHdrTypeAlt != "hdr10plus")
-          {
-            if (p->m_strHdrTypeAlt.empty())
-              p->m_strHdrTypeAlt = "hdr10plus";
-            else
-              p->m_strHdrTypeAlt2 = "hdr10plus";
-          }
-          if (hasCuva)
-          {
-            if (p->m_strHdrTypeAlt.empty())
-              p->m_strHdrTypeAlt = "hdrvivid";
-            else if (p->m_strHdrTypeAlt2.empty())
-              p->m_strHdrTypeAlt2 = "hdrvivid";
-          }
-        }
-      }
-      // DV EL type (FEL/MEL) detail, and frame-level fallback for HDR10+/CUVA
-      if (isBaseHdr && p->m_strHdrTypeAlt != "hlg")
       {
         if (!GetDetailsFromFrame(vstream, pDemux, *p))
           CLog::LogF(LOGERROR, "Failed to get HDR details from frame");
@@ -706,34 +642,6 @@ bool CDVDFileInfo::DemuxerToStreamDetails(const std::shared_ptr<CDVDInputStream>
         p->m_iDuration = p->m_iDuration / 1000;
 
       details.AddStream(p);
-
-      // add virtual streams for the alternate HDR types
-      if (!p->m_strHdrTypeAlt.empty())
-      {
-        // add a virtual stream for the alternate HDR type
-        CStreamDetailVideo* q = new CStreamDetailVideo();
-        *q = *p;
-        q->m_strHdrType = q->m_strHdrTypeAlt;
-        q->m_strHdrTypeAlt = "";
-        q->m_strHdrTypeAlt2 = "";
-        // atm we use hdrDetail only for DV
-        if (q->m_strHdrType != "dolbyvision")
-          q->m_strHdrDetail = "";
-        if (p->m_strHdrType != "dolbyvision")
-          p->m_strHdrDetail = "";
-        details.AddStream(q);
-      }
-      if (!p->m_strHdrTypeAlt2.empty())
-      {
-        CStreamDetailVideo* q = new CStreamDetailVideo();
-        *q = *p;
-        q->m_strHdrType = q->m_strHdrTypeAlt2;
-        q->m_strHdrTypeAlt = "";
-        q->m_strHdrTypeAlt2 = "";
-        if (q->m_strHdrType != "dolbyvision")
-          q->m_strHdrDetail = "";
-        details.AddStream(q);
-      }
 
       retVal = true;
     }

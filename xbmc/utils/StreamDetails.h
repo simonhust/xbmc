@@ -61,8 +61,6 @@ public:
   std::string m_strStereoMode;
   std::string m_strLanguage;
   std::string m_strHdrType;
-  std::string m_strHdrTypeAlt;
-  std::string m_strHdrTypeAlt2;
   std::string m_strHdrDetail;
 };
 
@@ -112,14 +110,13 @@ public:
   int GetAudioStreamCount(void) const;
   int GetSubtitleStreamCount(void) const;
   static std::string HdrTypeToString(StreamHdrType hdrType);
-  static StreamHdrType StringToHdrType(const std::string& hdrType);
   const CStreamDetail* GetNthStream(CStreamDetail::StreamType type, int idx) const;
 
   std::string GetVideoCodec(int idx = 0) const;
   float GetVideoAspect(int idx = 0) const;
   int GetVideoWidth(int idx = 0) const;
   int GetVideoHeight(int idx = 0) const;
-  std::string GetVideoHdrType(int idx = 0, bool alt = false) const;
+  std::string GetVideoHdrType(int idx = 0) const;
   std::string GetVideoHdrDetail(int idx = 0) const;
   int GetVideoDuration(int idx = 0) const;
   void SetVideoDuration(int idx, const int duration);

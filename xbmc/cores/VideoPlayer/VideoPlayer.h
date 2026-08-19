@@ -328,12 +328,6 @@ public:
   int GetVideoStreamCount() const override;
   void GetVideoStreamInfo(int streamId, VideoStreamInfo& info) const override;
 
-  /*!
-   * \brief Check for mixed HDR streams and show selection dialog.
-   * \return true if user made a selection (stored in m_selectedHdrType)
-   */
-  bool CheckMixedHdrStream();
-  StreamHdrType m_selectedHdrType{StreamHdrType::HDR_TYPE_NONE};
   void SetVideoStream(int iStream) override;
 
   int GetPrograms(std::vector<ProgramInfo>& programs) override;

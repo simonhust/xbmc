@@ -17,9 +17,12 @@
 #include "application/ApplicationPowerHandling.h"
 #include "application/ApplicationSkinHandling.h"
 #include "application/ApplicationVolumeHandling.h"
+#include "dialogs/GUIDialogKaiToast.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIWindowManager.h"
 #include "messaging/ApplicationMessenger.h"
+#include "resources/LocalizeStrings.h"
+#include "resources/ResourcesComponent.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "settings/lib/Setting.h"
@@ -75,7 +78,8 @@ void CApplicationSettingsHandling::RegisterSettings()
                                        CSettings::SETTING_SOURCE_VIDEOS,
                                        CSettings::SETTING_SOURCE_MUSIC,
                                        CSettings::SETTING_SOURCE_PICTURES,
-                                       CSettings::SETTING_VIDEOSCREEN_FAKEFULLSCREEN});
+                                       CSettings::SETTING_VIDEOSCREEN_FAKEFULLSCREEN,
+                                       CSettings::SETTING_COREELEC_AMLOGIC_MULTI_HDR_PRIORITY});
 
   auto& components = CServiceBroker::GetAppComponents();
   const auto appPlayer = components.GetComponent<CApplicationPlayer>();
@@ -137,6 +141,18 @@ void CApplicationSettingsHandling::OnSettingChanged(const std::shared_ptr<const 
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_PASSTHROUGH)
   {
     CServiceBroker::GetAppMessenger()->PostMsg(TMSG_MEDIA_RESTART);
+  }
+  else if (settingId == CSettings::SETTING_COREELEC_AMLOGIC_MULTI_HDR_PRIORITY)
+  {
+    // Toast the resulting priority order, which differs per selected option
+    const int priority = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+        CSettings::SETTING_COREELEC_AMLOGIC_MULTI_HDR_PRIORITY);
+    const int msgId = priority == 0 ? 14438 : priority == 1 ? 14439 : 14440;
+
+    CGUIDialogKaiToast::QueueNotification(
+        CGUIDialogKaiToast::Info,
+        CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14433),
+        CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(msgId));
   }
 }
 

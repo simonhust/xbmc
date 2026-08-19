@@ -320,7 +320,96 @@ bool aml_convert_to_dv_by_vs_engine(StreamHdrType hdrType)
   return ((convert_to_dv && !!user_convert_to_dv && !!dv_user_enabled) == 1);
 }
 
-void aml_set_hdr_gate(StreamHdrType hdrType)
+AMLHdrPath aml_get_hdr_path(bool hasDv, bool hasHdr10Plus, bool hasCuva, StreamHdrType baseType)
+{
+  AMLHdrPath path;
+
+  // When the stream itself carries Dolby Vision, source-side conversion
+  // (vs10) is disabled entirely: it would conflict with the priority
+  // selection (e.g. HDR10+ preferred while the DV RPU stays in the stream
+  // and hdr10plus2dv is also enabled) and it is meaningless anyway, since
+  // DV content is handled natively by the kernel. vs10 only serves DV-free
+  // sources.
+  const bool vs10Allowed = !hasDv;
+
+  // Priority orders:
+  //   DV:     DV > HDR10+ > CUVA
+  //   HDR10+: HDR10+ > DV > CUVA
+  //   CUVA:   CUVA > DV > HDR10+
+  const int priority = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
+      CSettings::SETTING_COREELEC_AMLOGIC_MULTI_HDR_PRIORITY);
+
+  std::vector<StreamHdrType> order;
+  switch (priority)
+  {
+    case 1: // HDR10+
+      order = {StreamHdrType::HDR_TYPE_HDR10PLUS, StreamHdrType::HDR_TYPE_DOLBYVISION,
+               StreamHdrType::HDR_TYPE_HDRVIVID};
+      break;
+    case 2: // CUVA
+      order = {StreamHdrType::HDR_TYPE_HDRVIVID, StreamHdrType::HDR_TYPE_DOLBYVISION,
+               StreamHdrType::HDR_TYPE_HDR10PLUS};
+      break;
+    default: // DV
+      order = {StreamHdrType::HDR_TYPE_DOLBYVISION, StreamHdrType::HDR_TYPE_HDR10PLUS,
+               StreamHdrType::HDR_TYPE_HDRVIVID};
+      break;
+  }
+
+  for (const auto& type : order)
+  {
+    const bool present = type == StreamHdrType::HDR_TYPE_DOLBYVISION
+                             ? hasDv
+                             : type == StreamHdrType::HDR_TYPE_HDR10PLUS ? hasHdr10Plus
+                                                                         : hasCuva;
+    if (present)
+    {
+      path.target = type;
+      break;
+    }
+  }
+
+  if (path.target == StreamHdrType::HDR_TYPE_NONE)
+  {
+    // No selectable format present. DV is always part of the priority order,
+    // so a DV source can never reach here (hasDv == false by construction),
+    // which also means vs10 is never disabled on this path: plain
+    // HDR10/SDR/HLG streams convert to DV purely by their own settings.
+    path.vs10 = aml_convert_to_dv_by_vs_engine(baseType);
+    return path;
+  }
+
+  // Strip the SEI of non-target formats so the decoder only sees the
+  // selected one. DV RPU cannot be stripped here, it goes to the gate.
+  path.removeHdr10Plus = path.target != StreamHdrType::HDR_TYPE_HDR10PLUS;
+  path.removeCuva = path.target != StreamHdrType::HDR_TYPE_HDRVIVID;
+
+  // vs10 policy: when the user enabled VS-Engine conversion for the target
+  // format, hand the clean single-format stream to DV.
+  switch (path.target)
+  {
+    case StreamHdrType::HDR_TYPE_HDRVIVID:
+      if (vs10Allowed && aml_convert_to_dv_by_vs_engine(StreamHdrType::HDR_TYPE_HDRVIVID))
+      {
+        // VS-Engine consumes the HDR10 base: strip the CUVA SEI too.
+        path.removeCuva = true;
+        path.vs10 = true;
+      }
+      break;
+    case StreamHdrType::HDR_TYPE_HDR10PLUS:
+      // Kernel absorbs HDR10+ (gate writes HDRP_BY_DV); open as DV so the
+      // decoder enables the kernel DV path.
+      path.vs10 = vs10Allowed && aml_convert_to_dv_by_vs_engine(StreamHdrType::HDR_TYPE_HDR10PLUS);
+      break;
+    case StreamHdrType::HDR_TYPE_DOLBYVISION:
+    default:
+      break;
+  }
+
+  return path;
+}
+
+void aml_set_hdr_gate(StreamHdrType hdrType, bool hasDv)
 {
   CLog::Log(LOGINFO, "AMLUtils::{} - Setting HDR gate for type: {}",
             __FUNCTION__, static_cast<int>(hdrType));
@@ -342,7 +431,10 @@ void aml_set_hdr_gate(StreamHdrType hdrType)
       bool hdr10plus2dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV);
       bool device_support_dv = aml_support_dolby_vision() && aml_display_support_dv();
 
-      if (dv_user_enabled && hdr10plus2dv && device_support_dv)
+      // Absorb HDR10+ into DV only for DV-free sources: when the stream
+      // itself carries DV the priority selection rules and conversion is
+      // meaningless (and would fight the native DV RPU).
+      if (!hasDv && dv_user_enabled && hdr10plus2dv && device_support_dv)
       {
         // hdr10plus2dv enabled: let DV absorb HDR10+.
         static constexpr unsigned int HDRP_BY_DV = 0x4;

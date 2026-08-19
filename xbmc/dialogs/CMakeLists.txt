@@ -20,7 +20,6 @@ set(SOURCES GUIDialogBoxBase.cpp
             GUIDialogProgress.cpp
             GUIDialogSeekBar.cpp
             GUIDialogSelect.cpp
-            GUIDialogSelectHdrStream.cpp
             GUIDialogSimpleMenu.cpp
             GUIDialogSlider.cpp
             GUIDialogSmartPlaylistEditor.cpp

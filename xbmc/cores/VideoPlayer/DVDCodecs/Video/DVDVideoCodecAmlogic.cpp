@@ -17,13 +17,11 @@
 #include "AMLCodec.h"
 #include "ServiceBroker.h"
 #include "utils/AMLUtils.h"
-#include "utils/HDRCapabilities.h"
 #include "utils/log.h"
 #include "settings/AdvancedSettings.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "threads/Thread.h"
-#include "windowing/WinSystem.h"
 
 #define __MODULE_NAME__ "DVDVideoCodecAmlogic"
 
@@ -391,21 +389,17 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
 
   m_has_keyframe = false;
 
+  // Pre-configure the multi HDR stream filter from the demuxer first-packet
+  // side data, so SEI stripping applies from the very first frame. The first
+  // frame detection in AddData refines this when side data was unavailable.
   if (m_bitstream)
   {
-    const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-
-    // Strip HDR10+ SEI only if the display doesn't support HDR10+
-    // AND hdr10plus2dv is not enabled (DV core absorbs HDR10+).
-    const CHDRCapabilities caps = CServiceBroker::GetWinSystem()->GetDisplayHDRCapabilities();
-    if (!caps.SupportsHDR10Plus() &&
-        !settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV))
+    const AMLHdrPath initPath = aml_get_hdr_path(
+        m_hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION, m_hints.hdr10Plus,
+        m_hints.hdrVivid, m_hints.hdrType);
+    if (initPath.removeHdr10Plus)
       m_bitstream->SetRemoveHdr10Plus(true);
-
-    // cuva2dv: strip CUVA SEI so content degrades to HDR10,
-    // then DV VS-Engine (enabled via aml_convert_to_dv_by_vs_engine)
-    // handles the HDR10→DV tone mapping.
-    if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_CUVA2DV))
+    if (initPath.removeCuva)
       m_bitstream->SetRemoveCuva(true);
   }
 
@@ -606,6 +600,8 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
   bool doviIsFEL = false;
   bool IsHdr10Plus = false;
   bool IsHdrVivid = false;
+  bool hasDv = false;
+  AMLHdrPath hdrPath;
 
   if (pData)
   {
@@ -809,10 +805,18 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         IsHdr10Plus = m_bitstream->GetIsHdrPlus();
         IsHdrVivid = m_bitstream->GetIsHdrVivid();
 
-        // Sync HDR format selection from user dialog (CheckMixedHdrStream)
-        if (m_processInfo.GetRemoveHdr10Plus())
+        // Resolve the multi HDR stream path: target format follows the configured
+        // priority, SEI of non-target formats is stripped so the decoder sees
+        // a clean single-format stream. DV RPU cannot be stripped here, it is
+        // handled through the kernel gate below. Demuxer side data (first
+        // packet) is merged with the real-time detection.
+        hasDv = m_hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+        hdrPath = aml_get_hdr_path(
+            hasDv,
+            m_hints.hdr10Plus || IsHdr10Plus, m_hints.hdrVivid || IsHdrVivid, m_hints.hdrType);
+        if (hdrPath.removeHdr10Plus)
           m_bitstream->SetRemoveHdr10Plus(true);
-        if (m_processInfo.GetRemoveCuva())
+        if (hdrPath.removeCuva)
           m_bitstream->SetRemoveCuva(true);
       }
     }
@@ -854,23 +858,41 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         m_hints.ptsinvalid = true;
 
       m_processInfo.SetDoviIsFEL(doviIsFEL);
-      m_processInfo.SetIsHdr10Plus(IsHdr10Plus);
-      m_processInfo.SetIsHdrVivid(IsHdrVivid);
+      // Report the real format set from the demuxer side data (first packet),
+      // merged with the first-frame SEI detection. The codec-side detection
+      // alone is unreliable here: once the filter strips a format it stops
+      // being detected.
+      m_processInfo.SetIsHdr10Plus(IsHdr10Plus || m_hints.hdr10Plus);
+      m_processInfo.SetIsHdrVivid(IsHdrVivid || m_hints.hdrVivid);
 
       // Update hints hdrType so the decoder (AMLCodec::OpenDecoder)
-      // sees the correct HDR type for sysfs configuration.
-      // DV takes priority: if the stream is already DOLBYVISION (detected
-      // by the demuxer from DOVI_CONF side data), do not overwrite it
-      // with HDR10PLUS or HDRVIVID even if the BL layer carries those SEI
-      // messages (DV 8.4/8.6 BL is HDR10+ compatible).
-      if (m_hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
+      // sees the target HDR format for sysfs configuration. When a target
+      // was selected by the path it wins, otherwise keep the demuxer hint
+      // upgraded by the detected SEI (DV 8.4/8.6 BL is HDR10+ compatible).
+      if (hdrPath.target != StreamHdrType::HDR_TYPE_NONE)
+        m_hints.hdrType = hdrPath.target;
+      else if (m_hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
       {
-        if (IsHdrVivid)
+        if (IsHdrVivid || m_hints.hdrVivid)
           m_hints.hdrType = StreamHdrType::HDR_TYPE_HDRVIVID;
-        else if (IsHdr10Plus)
+        else if (IsHdr10Plus || m_hints.hdr10Plus)
           m_hints.hdrType = StreamHdrType::HDR_TYPE_HDR10PLUS;
       }
       m_videobuffer.hdrType = m_hints.hdrType;
+
+      // Configure the kernel HDR gate for the target format (DV led /
+      // HDR10+ or CUVA passthrough). The kernel then performs automatic
+      // downgrade for sinks that don't support the format. hasDv gates the
+      // HDR10+ absorption so mixed DV sources never get converted.
+      aml_set_hdr_gate(m_hints.hdrType, hasDv);
+
+      // vs10 path: hand the clean single-format stream to DV so the decoder
+      // enables the kernel DV / VS-Engine path.
+      if (hdrPath.vs10)
+      {
+        m_hints.hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
+        m_videobuffer.hdrType = m_hints.hdrType;
+      }
 
       CLog::Log(LOGINFO, "CDVDVideoCodecAmlogic::{}: Open decoder: fps:{:d}/{:d}", __FUNCTION__, m_hints.fpsrate, m_hints.fpsscale);
       if (m_Codec && !m_Codec->OpenDecoder(m_hints, doviIsFEL))

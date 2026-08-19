@@ -61,6 +61,8 @@ void CDVDStreamInfo::Clear()
   forced_aspect = false;
   bitsperpixel = 0;
   hdrType = StreamHdrType::HDR_TYPE_NONE;
+  hdr10Plus = false;
+  hdrVivid = false;
   colorSpace = AVCOL_SPC_UNSPECIFIED;
   colorRange = AVCOL_RANGE_UNSPECIFIED;
   colorPrimaries = AVCOL_PRI_UNSPECIFIED;
@@ -232,6 +234,8 @@ void CDVDStreamInfo::Assign(const CDVDStreamInfo& right, bool withextradata)
   vfr = right.vfr;
   codecOptions = right.codecOptions;
   hdrType = right.hdrType;
+  hdr10Plus = right.hdr10Plus;
+  hdrVivid = right.hdrVivid;
   colorSpace = right.colorSpace;
   colorRange = right.colorRange;
   colorPrimaries = right.colorPrimaries;
@@ -307,6 +311,8 @@ void CDVDStreamInfo::Assign(const CDemuxStream& right, bool withextradata)
     bitsperpixel = stream->iBitsPerPixel;
     bitdepth = stream->bitDepth;
     hdrType = stream->hdr_type;
+    hdr10Plus = stream->m_isHdr10Plus;
+    hdrVivid = stream->m_isCuva;
     colorSpace = stream->colorSpace;
     colorRange = stream->colorRange;
     colorPrimaries = stream->colorPrimaries;

@@ -51,8 +51,6 @@
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "threads/SingleLock.h"
-#include "utils/AMLUtils.h"
-#include "dialogs/GUIDialogSelectHdrStream.h"
 #include "utils/FontUtils.h"
 #include "utils/LangCodeExpander.h"
 #include "utils/MathUtils.h"
@@ -61,7 +59,6 @@
 #include "utils/StringUtils.h"
 #include "utils/TimeUtils.h"
 #include "utils/URIUtils.h"
-#include "video/VideoFileItemClassify.h"
 #include "utils/Variant.h"
 #include "utils/log.h"
 #include "video/Bookmark.h"
@@ -4300,32 +4297,9 @@ bool CVideoPlayer::OpenStream(CCurrentStream& current, int64_t demuxerId, int iS
       res = OpenAudioStream(hint, reset);
       break;
     case StreamType::VIDEO:
-      // Check for mixed HDR streams BEFORE conversion and codec open.
-      // User selects the preferred HDR format from the dialog, then
-      // conversion (sdr2dv, hdr2dv, hdr10p2dv, cuva2dv) is applied
-      // based on the selection, and finally the codec is opened with
-      // the resolved hdrType.
-      {
-        StreamHdrType selectedHdr = StreamHdrType::HDR_TYPE_NONE;
-        if (CheckMixedHdrStream())
-          selectedHdr = m_selectedHdrType;
-
-        // Apply DV VS-Engine conversion if user didn't make a manual selection
-        if (selectedHdr == StreamHdrType::HDR_TYPE_NONE)
-        {
-          if (aml_convert_to_dv_by_vs_engine(hint.hdrType))
-            hint.hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
-        }
-        else
-        {
-          // User made a manual selection from the dialog
-          if (selectedHdr == StreamHdrType::HDR_TYPE_DOLBYVISION ||
-              aml_convert_to_dv_by_vs_engine(selectedHdr))
-            hint.hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
-          else
-            hint.hdrType = selectedHdr;
-        }
-      }
+      // All HDR format decisions (multi HDR stream priority policy and
+      // VS-Engine conversion) are made in the Amlogic codec from real
+      // bitstream SEI right before the decoder opens.
       res = OpenVideoStream(hint, reset);
 
       // Set the m_bFullScreenVideo flag now, before streamsReady, so the
@@ -6230,66 +6204,6 @@ void CVideoPlayer::GetVideoStreamInfo(int streamId, VideoStreamInfo& info) const
   }
   info.fpsRate = s.fpsRate;
   info.fpsScale = s.fpsScale;
-}
-
-bool CVideoPlayer::CheckMixedHdrStream()
-{
-  // HDR selection is driven by the media tag stream details that were parsed
-  // during directory browsing. PVR and Blu-ray items are explicitly excluded:
-  // PVR never gets a media tag, while Blu-ray discs/folders ARE parsed by the
-  // library scan (VideoInfoScanner) but must keep their own DV/EL handling.
-  // Only selectable formats (Dolby Vision / HDR10+ / HDR Vivid) are offered;
-  // the HDR10 and HLG bases are not separate choices.
-  if (m_item.IsPVR() || m_item.IsBluray() || VIDEO::IsBDFile(m_item))
-  {
-    m_selectedHdrType = StreamHdrType::HDR_TYPE_NONE;
-    return false;
-  }
-
-  std::vector<StreamHdrType> availableTypes;
-
-  const CVideoInfoTag* tag = m_item.GetVideoInfoTag();
-  if (tag && tag->HasStreamDetails())
-  {
-    const CStreamDetails& details = tag->m_streamDetails;
-    for (int i = 1; i <= details.GetVideoStreamCount(); ++i)
-    {
-      const StreamHdrType type = CStreamDetails::StringToHdrType(details.GetVideoHdrType(i));
-      if (type != StreamHdrType::HDR_TYPE_NONE && type != StreamHdrType::HDR_TYPE_HDR10 &&
-          type != StreamHdrType::HDR_TYPE_HLG &&
-          std::find(availableTypes.begin(), availableTypes.end(), type) == availableTypes.end())
-      {
-        availableTypes.push_back(type);
-      }
-    }
-  }
-
-  m_selectedHdrType = StreamHdrType::HDR_TYPE_NONE;
-
-  // If we have multiple HDR types, show the selection dialog
-  if (availableTypes.size() > 1)
-  {
-    CLog::Log(LOGINFO, "CVideoPlayer::{} - Mixed HDR stream detected with {} types",
-              __FUNCTION__, availableTypes.size());
-
-    m_selectedHdrType = CGUIDialogSelectHdrStream::ShowDialog(availableTypes);
-
-    if (m_selectedHdrType != StreamHdrType::HDR_TYPE_NONE)
-    {
-      CLog::Log(LOGINFO, "CVideoPlayer::{} - User selected HDR type: {}",
-                __FUNCTION__, static_cast<int>(m_selectedHdrType));
-
-      // Configure kernel HDR gate based on selection
-      aml_set_hdr_gate(m_selectedHdrType);
-
-      // Set SEI stripping flags based on user selection
-      m_processInfo->SetRemoveHdr10Plus(m_selectedHdrType != StreamHdrType::HDR_TYPE_HDR10PLUS);
-      m_processInfo->SetRemoveCuva(m_selectedHdrType != StreamHdrType::HDR_TYPE_HDRVIVID);
-
-      return true;
-    }
-  }
-  return false;
 }
 
 int CVideoPlayer::GetVideoStreamCount() const

@@ -9113,6 +9113,46 @@ msgid "EMDS"
 msgstr ""
 
 #: system/settings/settings.xml
+msgctxt "#14433"
+msgid "Multi HDR Stream Priority"
+msgstr ""
+
+#: system/settings/settings.xml
+msgctxt "#14434"
+msgid "Priority order used to automatically select the HDR stream when a file contains multiple HDR formats."
+msgstr ""
+
+#: xbmc/windowing/amlogic/WinSystemAmlogic.cpp
+msgctxt "#14435"
+msgid "Dolby Vision"
+msgstr ""
+
+#: xbmc/windowing/amlogic/WinSystemAmlogic.cpp
+msgctxt "#14436"
+msgid "HDR10+"
+msgstr ""
+
+#: xbmc/windowing/amlogic/WinSystemAmlogic.cpp
+msgctxt "#14437"
+msgid "CUVA"
+msgstr ""
+
+#: xbmc/application/ApplicationSettingsHandling.cpp
+msgctxt "#14438"
+msgid "HDR stream priority: DV > HDR10+ > CUVA"
+msgstr ""
+
+#: xbmc/application/ApplicationSettingsHandling.cpp
+msgctxt "#14439"
+msgid "HDR stream priority: HDR10+ > DV > CUVA"
+msgstr ""
+
+#: xbmc/application/ApplicationSettingsHandling.cpp
+msgctxt "#14440"
+msgid "HDR stream priority: CUVA > DV > HDR10+"
+msgstr ""
+
+#: system/settings/settings.xml
 msgctxt "#14426"
 msgid "TV-Led"
 msgstr ""
