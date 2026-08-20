@@ -185,10 +185,10 @@
       <seven>Number7</seven>
       <eight>Number8</eight>
       <nine>Number9</nine>
-      <left>Left</left>
-      <right>Right</right>
-      <up>Up</up>
-      <down>Down</down>
+      <left>StepBack</left>
+      <right>StepForward</right>
+      <up>ChapterOrBigStepForward</up>
+      <down>ChapterOrBigStepBack</down>
       <back>Back</back>
       <menu>OSD</menu>
       <contentsmenu>OSD</contentsmenu>
@@ -201,13 +201,11 @@
       <teletext>ActivateWindow(Teletext)</teletext>
       <subtitle>DialogSelectSubtitle</subtitle>
       <star>NextSubtitle</star>
-      <audio>DialogSelectAudio</audio>
+      <language>DialogSelectAudio</language>
       <playlist>Playlist</playlist>
       <hash>AudioNextLanguage</hash>
       <pageplus>SkipNext</pageplus>
       <pageminus>SkipPrevious</pageminus>
-      <channel_up>SubtitleShiftUp</channel_up>
-      <channel_down>SubtitleShiftDown</channel_down>
     </remote>
   </FullscreenVideo>
   <FullscreenGame>
