@@ -1369,6 +1369,13 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
       return false;
   }
 
+    // For hev1 streams the parameter sets arrive in-band in the first packet
+  // and the dynamic HDR SEI only rides the first IDR (packet 2+), so the
+  // "tested" flags must not be latched until an IDR has actually been seen;
+  // otherwise detection on the very first Convert() permanently closes the
+  // detection window before any SEI arrives.
+  bool idr_seen = false;
+
   do
   {
     if (buf + m_sps_pps_context.length_size > buf_end)
@@ -1389,6 +1396,9 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
 
     if (buf + nal_size > buf_end || nal_size <= 0)
       goto fail;
+
+    if (IsIDR(unit_type))
+      idr_seen = true;
 
     // Don't add sps/pps if the unit already contain them
     if (m_sps_pps_context.first_idr && (unit_type == nal_sps || unit_type == nal_pps))
@@ -1516,8 +1526,11 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
     cumul_size += nal_size + m_sps_pps_context.length_size;
   } while (cumul_size < buf_size);
 
-  m_Hdr10PlusTested = true;
-  m_HdrVividTested = true;
+  if (idr_seen)
+  {
+    m_Hdr10PlusTested = true;
+    m_HdrVividTested = true;
+  }
 
   return true;
 
