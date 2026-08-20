@@ -3382,14 +3382,14 @@
           <default>true</default>
           <control type="toggle" />
         </setting>
-        <setting id="audiooutput.avsyncpassthrough" type="integer" label="40803" help="40804">
+        <setting id="audiooutput.avsyncpassthrough" type="integer" label="40810" help="40811">
           <level>2</level>
           <default>2</default>
           <constraints>
             <options>
               <option label="231">0</option> <!-- NONE -->
-              <option label="40805">1</option> <!-- SB -->
-              <option label="40806">2</option> <!-- FULL -->
+              <option label="40812">1</option> <!-- SB -->
+              <option label="40813">2</option> <!-- FULL -->
             </options>
           </constraints>
           <control type="list" format="string" />

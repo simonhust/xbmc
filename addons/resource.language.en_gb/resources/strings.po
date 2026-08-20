@@ -8974,7 +8974,27 @@ msgctxt "#14313"
 msgid "Intended for Dolby Vision enabled displays. HDR content will be tone mapped by Dolby Vision VS-Engine."
 msgstr ""
 
-#empty strings from id 14305 to 15010
+#: system/settings/settings.xml
+msgctxt "#14314"
+msgid "Convert HDR10+ to Dolby Vision"
+msgstr ""
+
+#: system/settings/settings.xml
+msgctxt "#14315"
+msgid "HDR10+ is absorbed by the Dolby Vision VS-Engine and tone mapped to Dolby Vision on DV capable displays."
+msgstr ""
+
+#: system/settings/settings.xml
+msgctxt "#14316"
+msgid "Convert CUVA HDR Vivid to Dolby Vision"
+msgstr ""
+
+#: system/settings/settings.xml
+msgctxt "#14317"
+msgid "CUVA HDR Vivid is converted to Dolby Vision by the DV VS-Engine on DV capable displays."
+msgstr ""
+
+#empty strings from id 14318 to 15010
 
 #: system/settings/settings.xml
 msgctxt "#14400"
@@ -25556,4 +25576,28 @@ msgstr ""
 #: system/settings/settings.xml
 msgctxt "#40803"
 msgid "Monitor change may require restart."
+msgstr ""
+
+#. Label for A/V sync passthrough mode setting
+#: system/settings/settings.xml
+msgctxt "#40810"
+msgid "A/V sync passthrough mode"
+msgstr ""
+
+#. Description of setting with label #40810 "A/V sync passthrough mode"
+#: system/settings/settings.xml
+msgctxt "#40811"
+msgid "Select the audio/video sync mode for passthrough audio. NONE: stock Kodi passthrough. SB: seamless branch handling only (PTS validation). FULL: internal-clock retiming with jitter tracking (recommended)."
+msgstr ""
+
+#. Option label for #40810 "A/V sync passthrough mode" - SB mode
+#: system/settings/settings.xml
+msgctxt "#40812"
+msgid "Seamless branch"
+msgstr ""
+
+#. Option label for #40810 "A/V sync passthrough mode" - FULL mode
+#: system/settings/settings.xml
+msgctxt "#40813"
+msgid "Full sync"
 msgstr ""
