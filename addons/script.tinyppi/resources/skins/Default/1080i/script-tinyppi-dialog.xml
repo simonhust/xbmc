@@ -112,10 +112,12 @@
                 <texturefocus colordiffuse="$INFO[Window(10000).Property(TinyPPI.DialogFocusColor)]" border="40">common/button-white.png</texturefocus>
                 <onup condition="String.IsEmpty(Window(10000).Property(TinyPPI.HdrType))">1004</onup>
                 <onup condition="String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdr10)">1008</onup>
+                <onup condition="String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdrvivid)">1008</onup>
                 <onup condition="String.Contains(Window(10000).Property(TinyPPI.HdrType),hlg)">1011</onup>
                 <onup condition="String.Contains(Window(10000).Property(TinyPPI.HdrType),dolby)">1013</onup>
                 <ondown condition="String.IsEmpty(Window(10000).Property(TinyPPI.HdrType))">1002</ondown>
                 <ondown condition="String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdr10)">1005</ondown>
+                <ondown condition="String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdrvivid)">1005</ondown>
                 <ondown condition="String.Contains(Window(10000).Property(TinyPPI.HdrType),hlg)">1009</ondown>
                 <ondown condition="String.Contains(Window(10000).Property(TinyPPI.HdrType),dolby)">1012</ondown>
             </control>
@@ -192,7 +194,7 @@
 
             <!-- HDR10 -->
             <control type="group">
-                <visible>String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdr10)</visible>
+                <visible>[String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdr10) | String.IsEqual(Window(10000).Property(TinyPPI.HdrType),hdrvivid)]</visible>
                 <control type="button" id="1005">
                     <left>35</left>
                     <top>235</top>

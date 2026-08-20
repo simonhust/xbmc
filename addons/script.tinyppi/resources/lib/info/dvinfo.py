@@ -403,6 +403,8 @@ def _hdr_token(label: str, parsed: dict) -> str:
         token = "hdr10+"
     elif "hlg" in low:
         token = "hlg"
+    elif "vivid" in low:
+        token = "hdrvivid"
     elif "hdr" in low or "pq" in low:
         token = "hdr10"
     else:
@@ -471,6 +473,8 @@ def _output_mode(
         if not profile:
             return "Dolby Vision"
         return f"Dolby Vision Profile {_format_el_tag(profile, el_type)}"
+    if token == "hdrvivid":
+        return "HDR Vivid"
     if token == "hdr10+":
         return f"HDR10+ {_hdr10plus_profile_label(hdr10plus)}".strip()
     if token == "hdr10":

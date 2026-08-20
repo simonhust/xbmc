@@ -151,8 +151,8 @@ def _is_converting(hdr_type: str, gamut: str) -> bool:
     parts = gamut.split()
     mode = parts[0] if parts else ""
 
-    non_dv_source     = hdr_type in ("hdr10", "hlg", "hdr10+", "")
-    hdr_or_dv_source  = hdr_type in ("hdr10", "hlg", "hdr10+") or "dolby" in hdr_type
+    non_dv_source     = hdr_type in ("hdr10", "hlg", "hdr10+", "hdrvivid", "")
+    hdr_or_dv_source  = hdr_type in ("hdr10", "hlg", "hdr10+", "hdrvivid") or "dolby" in hdr_type
     sdr_or_dv_source  = hdr_type in ("", "hdr10+") or "dolby" in hdr_type
 
     if non_dv_source and "DV" in gamut:

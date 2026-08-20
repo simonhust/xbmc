@@ -377,6 +377,8 @@ def _output_mode_from_videoplayer() -> str:
         return "HDR10+"
     if "hlg" in hdr:
         return "HLG"
+    if "vivid" in hdr:
+        return "HDR Vivid"
     if "hdr10" in hdr or "hdr" in hdr or "pq" in hdr:
         return "HDR10"
     return "SDR"
@@ -396,6 +398,8 @@ def _media_source_name(output_mode: str) -> str:
         return "Dolby Vision"
     if "hdr10+" in low:
         return "HDR10+"
+    if "vivid" in low:
+        return "HDR Vivid"
     if "hdr10" in low:
         return "HDR10"
     if "hlg" in low:
