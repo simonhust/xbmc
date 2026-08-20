@@ -248,9 +248,6 @@ public:
   // GUI saturation factor used by the 709->2020 GUI shader transfer path;
   // 1.0 is neutral. Platforms without a setting keep the GUI fully saturated.
   virtual float GetGuiSdrSaturation() const { return 1.0f; }
-  // subtitle SDR peak luminance, separate from GUI so subtitles can be
-  // independently dimmed in HDR mode
-  virtual float GetSubSdrPeakLuminance() const { return GetGuiSdrPeakLuminance(); }
   virtual bool HasSystemSdrPeakLuminance() { return false; }
 
   /*!

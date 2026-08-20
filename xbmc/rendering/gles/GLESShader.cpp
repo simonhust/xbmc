@@ -49,7 +49,6 @@ void CGLESShader::OnCompiledAndLinked()
   m_hStep   = glGetUniformLocation(ProgramHandle(), "m_step");
   m_hContrast   = glGetUniformLocation(ProgramHandle(), "m_contrast");
   m_hBrightness = glGetUniformLocation(ProgramHandle(), "m_brightness");
-  m_sdrPeak = glGetUniformLocation(ProgramHandle(), "m_sdrPeak");
   m_sdrSaturation = glGetUniformLocation(ProgramHandle(), "m_sdrSaturation");
 
   // Variables passed directly to the Vertex shader
@@ -179,9 +178,6 @@ bool CGLESShader::OnEnabled()
   // premultiplied-alpha textures (COverlayTextureGLES) overrides this to 1.0
   // before drawing so the limited-range conversion offset scales by alpha.
   glUniform1f(m_hPma, 0.0f);
-
-  const float sdrPeak = CServiceBroker::GetWinSystem()->GetGuiSdrPeakLuminance();
-  glUniform1f(m_sdrPeak, sdrPeak);
 
   const float sdrSaturation = CServiceBroker::GetWinSystem()->GetGuiSdrSaturation();
   glUniform1f(m_sdrSaturation, sdrSaturation);

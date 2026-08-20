@@ -510,14 +510,6 @@ float CWinSystemAmlogic::GetGuiSdrSaturation() const
   return saturation / 50.0f;
 }
 
-float CWinSystemAmlogic::GetSubSdrPeakLuminance() const
-{
-  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-  const int subSdrPeak = settings->GetInt(CSettings::SETTING_SUBTITLES_SUBSDRPEAKLUMINANCE);
-
-  return ((0.7f * subSdrPeak + 30.0f) / 100.0f);
-}
-
 HDR_STATUS CWinSystemAmlogic::GetOSHDRStatus()
 {
   return (IsHDRDisplay() ? HDR_STATUS::HDR_ON : HDR_STATUS::HDR_UNSUPPORTED);

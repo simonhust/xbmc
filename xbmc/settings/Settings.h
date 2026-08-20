@@ -188,7 +188,6 @@ public:
   static constexpr auto SETTING_SUBTITLES_HDRPGSSATURATION = "subtitles.hdrpgssaturation";
   static constexpr auto SETTING_SUBTITLES_GUISDRSATURATION = "subtitles.guisdrsaturation";
   static constexpr auto SETTING_SUBTITLES_GUISDRPEAKLUMINANCE = "subtitles.guisdrpeakluminance";
-  static constexpr auto SETTING_SUBTITLES_SUBSDRPEAKLUMINANCE = "subtitles.subsdrpeakluminance";
   static constexpr auto SETTING_DVDS_AUTORUN = "dvds.autorun";
   static constexpr auto SETTING_DVDS_PLAYERREGION = "dvds.playerregion";
   static constexpr auto SETTING_DVDS_AUTOMENU = "dvds.automenu";

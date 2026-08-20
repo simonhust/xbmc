@@ -23,7 +23,6 @@
 precision mediump float;
 uniform sampler2D m_samp0;
 varying vec4 m_cord0;
-uniform float m_sdrPeak;
 uniform float m_sdrSaturation;
 uniform float m_pma;
 
