@@ -23,7 +23,7 @@ public:
   // huge positive count that keeps callers looping forever.
   unsigned int AvailableBits()
   {
-    return m_posBits >= static_cast<unsigned int>(length) * 8 ? 0 : length * 8 - m_posBits;
+    return static_cast<unsigned int>(m_posBits) >= static_cast<unsigned int>(length) * 8 ? 0 : length * 8 - m_posBits;
   }
 
 private:
