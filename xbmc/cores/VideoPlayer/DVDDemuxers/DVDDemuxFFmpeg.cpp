@@ -2579,9 +2579,13 @@ void ScanHevcPacketForDynamicHdr(const uint8_t* data, int size, bool& hasHdr10Pl
       if (payloadType == 4 && payloadSize >= 5 && i + 5 <= len)
       {
         const uint8_t* d = p + i;
+        // CUVA HDR Vivid: CN 0x26, provider 0x0004 (UWA), oriented 0x0005
         if (d[0] == 0x26 && d[1] == 0x00 && d[2] == 0x04 && d[3] == 0x00 && d[4] == 0x05)
           hasCuva = true;
-        else if (d[0] == 0x8E && d[1] == 0x00 && d[2] == 0x3C && d[3] == 0x00 && d[4] == 0x01)
+        // HDR10+ (ST 2094-40): 0xB5, provider 0x003C (Samsung), oriented
+        // 0x0001, application id 0x04 -- same signature CHevcSei uses
+        else if (d[0] == 0xB5 && d[1] == 0x00 && d[2] == 0x3C && d[3] == 0x00 && d[4] == 0x01 &&
+                 (payloadSize < 6 || i + 6 > len || d[5] == 0x04))
           hasHdr10Plus = true;
       }
       i += payloadSize;
