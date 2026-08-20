@@ -73,8 +73,12 @@ int CHevcSei::ParseSeiMessage(CBitstreamReader& br, std::vector<CHevcSei>& messa
   sei.m_payloadSize += lastPayloadSizeByte;
   sei.m_payloadOffset = br.Position() / 8;
 
-  // Invalid size
-  if (sei.m_payloadSize > br.AvailableBits())
+  // Invalid size. AvailableBits() is in bits, m_payloadSize is in bytes --
+  // comparing them directly let an overlong payload slip past SkipBits and
+  // move the reader beyond the buffer; AvailableBits() then underflows to a
+  // huge value and the outer parse loop never terminates (messages vector
+  // grows until operator new throws std::bad_alloc).
+  if (sei.m_payloadSize > br.AvailableBits() / 8)
     return 1;
 
   br.SkipBits(sei.m_payloadSize * 8);
