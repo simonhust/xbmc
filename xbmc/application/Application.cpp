@@ -1588,9 +1588,14 @@ void CApplication::FrameMove(bool processEvents, bool processGUI)
 
     // Dirty-driven skip: on paths with a persistent framebuffer (D2P plane or
     // HDR GUI compositing FBO), skip Render when no controls dirtied themselves
-    // this frame. The persistence keeps the previous OSD on screen for free.
+    // this frame and no subtitle overlay is visible. The persistence keeps the
+    // previous OSD on screen for free; a visible overlay is drawn by the
+    // RenderManager gui pass, so an undirty frame must not freeze the plane
+    // while a subtitle is up (the full-frame PGS quad that last painted the
+    // shared GUI plane would otherwise hide the GUI until the next dirty).
     if (!m_skipGuiRender && appPlayer->IsRenderingVideoLayer() &&
-        !CServiceBroker::GetGUI()->GetWindowManager().HasDirtyRegions())
+        !CServiceBroker::GetGUI()->GetWindowManager().HasDirtyRegions() &&
+        !appPlayer->HasVisibleOverlay())
       m_skipGuiRender = true;
     CServiceBroker::GetGUI()->GetWindowManager().FrameMove();
   }
