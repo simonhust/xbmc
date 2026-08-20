@@ -36,6 +36,12 @@
 						<onclick condition="System.HasAddon(plugin.video.youtube) + !System.AddonIsEnabled(plugin.video.youtube)">EnableAddon(plugin.video.youtube)</onclick>
 						<onclick condition="!System.HasAddon(plugin.video.youtube)">InstallAddon(plugin.video.youtube)</onclick>
 					</item>
+					<item>
+						<label>Juku Search</label>
+						<visible>System.AddonIsEnabled(plugin.video.juku)</visible>
+						<onclick>Dialog.Close(all)</onclick>
+						<onclick condition="System.AddonIsEnabled(plugin.video.juku)">ActivateWindow(videos,"plugin://plugin.video.juku/?action=search_menu",return)</onclick>
+					</item>
 				</content>
 			</control>
 		</control>
