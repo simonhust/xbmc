@@ -182,6 +182,9 @@ public:
   AVDOVIDecoderConfigurationRecord dovi{};
   bool m_isHdr10Plus{false}; // HDR10+ detected from first packet side data
   bool m_isCuva{false}; // CUVA HDR Vivid detected from first packet side data
+  // packets scanned for in-band dynamic HDR SEI (bounded scan, see
+  // DVDDemuxFFmpeg.cpp ParsePacket); stops once the flag limit is reached
+  int m_dynHdrPacketsScanned{0};
   bool bInterlaced = false; // progressive/interlaced flag
   bool bUnknownIP = false; // progressive/interlace unknown
 };

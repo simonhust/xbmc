@@ -2536,6 +2536,103 @@ std::string CDVDDemuxFFmpeg::ConvertCodecToInternalStereoMode(const std::string 
   return "";
 }
 
+namespace
+{
+// Scans one HEVC demuxer packet for SEI messages carrying ITU-T T.35 dynamic
+// HDR metadata: HDR10+ (ST 2094-40: country 0x8E, provider 0x003C, oriented
+// 0x0001) and CUVA HDR Vivid (country 0x26, provider 0x0004, oriented 0x0005).
+// Handles both Annex-B (start codes) and length-prefixed (hvc1/hev1-style)
+// NAL unit framing, so MP4/MKV/TS are all covered; packet side data alone
+// only covers Matroska BlockAdditional.
+void ScanHevcPacketForDynamicHdr(const uint8_t* data, int size, bool& hasHdr10Plus, bool& hasCuva)
+{
+  auto checkSeiNal = [&](const uint8_t* p, int len) {
+    if (len < 7)
+      return;
+    const int nalType = (p[0] >> 1) & 0x3F;
+    if (nalType != 39 && nalType != 40) // SEI_PREFIX / SEI_SUFFIX only
+      return;
+
+    int i = 2; // 2-byte NAL header
+    while (i < len)
+    {
+      int payloadType = 0;
+      while (i < len && p[i] == 0xFF)
+      {
+        payloadType += 255;
+        ++i;
+      }
+      if (i >= len)
+        return;
+      payloadType += p[i++];
+
+      int payloadSize = 0;
+      while (i < len && p[i] == 0xFF)
+      {
+        payloadSize += 255;
+        ++i;
+      }
+      if (i >= len)
+        return;
+      payloadSize += p[i++];
+
+      if (payloadType == 4 && payloadSize >= 5 && i + 5 <= len)
+      {
+        const uint8_t* d = p + i;
+        if (d[0] == 0x26 && d[1] == 0x00 && d[2] == 0x04 && d[3] == 0x00 && d[4] == 0x05)
+          hasCuva = true;
+        else if (d[0] == 0x8E && d[1] == 0x00 && d[2] == 0x3C && d[3] == 0x00 && d[4] == 0x01)
+          hasHdr10Plus = true;
+      }
+      i += payloadSize;
+    }
+  };
+
+  const bool annexB = size >= 3 && ((data[0] == 0x00 && data[1] == 0x00 && data[2] == 0x01) ||
+                                    (size >= 4 && data[0] == 0x00 && data[1] == 0x00 &&
+                                     data[2] == 0x00 && data[3] == 0x01));
+
+  if (annexB)
+  {
+    int i = 0;
+    while (i + 4 < size)
+    {
+      int nalStart = -1;
+      if (data[i] == 0x00 && data[i + 1] == 0x00 && data[i + 2] == 0x01)
+        nalStart = i + 3;
+      else if (i + 5 <= size && data[i] == 0x00 && data[i + 1] == 0x00 && data[i + 2] == 0x00 &&
+               data[i + 3] == 0x01)
+        nalStart = i + 4;
+      if (nalStart < 0)
+      {
+        ++i;
+        continue;
+      }
+      // find the end of this NAL (next start code or packet end)
+      int j = nalStart;
+      while (j + 4 < size &&
+             !(data[j] == 0x00 && data[j + 1] == 0x00 && data[j + 2] == 0x01))
+        ++j;
+      checkSeiNal(data + nalStart, j - nalStart);
+      i = j;
+    }
+    return;
+  }
+
+  // length-prefixed: <4-byte BE length><nal>
+  int i = 0;
+  while (i + 4 <= size)
+  {
+    const int nalLen = (data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3];
+    i += 4;
+    if (nalLen <= 0 || i + nalLen > size)
+      break;
+    checkSeiNal(data + i, nalLen);
+    i += nalLen;
+  }
+}
+} // namespace
+
 void CDVDDemuxFFmpeg::ParsePacket(AVPacket* pkt)
 {
   AVStream* st = m_pFormatContext->streams[pkt->stream_index];
@@ -2602,33 +2699,43 @@ void CDVDDemuxFFmpeg::ParsePacket(AVPacket* pkt)
       }
     }
 
-    // Aggregate HDR formats from ffmpeg packet side data on the first video
-    // packet of each HEVC stream. This must happen before the codec opens so
-    // the multi HDR stream priority filter is configured from the start.
-    if (stream->type == StreamType::VIDEO && st->codecpar->codec_id == AV_CODEC_ID_HEVC &&
-        pkt->side_data && !static_cast<CDemuxStreamVideo*>(stream)->m_isHdr10Plus &&
-        !static_cast<CDemuxStreamVideo*>(stream)->m_isCuva)
+    // Aggregate HDR formats on HEVC video packets. ffmpeg packet side data
+    // covers Matroska BlockAdditional only; for in-band SEI (MP4/MKV/TS with
+    // CUVA or HDR10+ inside the stream) fall back to a bounded NAL scan so
+    // m_isCuva/m_isHdr10Plus are set before the codec opens and the multi HDR
+    // stream priority filter is configured from the start.
+    if (stream->type == StreamType::VIDEO && st->codecpar->codec_id == AV_CODEC_ID_HEVC)
     {
-      bool hasHdr10Plus = false;
-      bool hasCuva = false;
-      for (int i = 0; i < pkt->side_data_elems && (!hasHdr10Plus || !hasCuva); ++i)
-      {
-        switch (pkt->side_data[i].type)
-        {
-          case AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW:
-            hasHdr10Plus = true;
-            break;
-          case AV_PKT_DATA_DYNAMIC_HDR_VIVID_RAW:
-            hasCuva = true;
-            break;
-          default:
-            break;
-        }
-      }
-
       CDemuxStreamVideo* videoStream = static_cast<CDemuxStreamVideo*>(stream);
-      videoStream->m_isHdr10Plus = hasHdr10Plus;
-      videoStream->m_isCuva = hasCuva;
+      if ((!videoStream->m_isHdr10Plus || !videoStream->m_isCuva) &&
+          videoStream->m_dynHdrPacketsScanned < 48)
+      {
+        bool hasHdr10Plus = false;
+        bool hasCuva = false;
+
+        for (int i = 0; pkt->side_data && i < pkt->side_data_elems && (!hasHdr10Plus || !hasCuva);
+             ++i)
+        {
+          switch (pkt->side_data[i].type)
+          {
+            case AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW:
+              hasHdr10Plus = true;
+              break;
+            case AV_PKT_DATA_DYNAMIC_HDR_VIVID_RAW:
+              hasCuva = true;
+              break;
+            default:
+              break;
+          }
+        }
+
+        if (!hasHdr10Plus || !hasCuva)
+          ScanHevcPacketForDynamicHdr(pkt->data, pkt->size, hasHdr10Plus, hasCuva);
+
+        videoStream->m_isHdr10Plus |= hasHdr10Plus;
+        videoStream->m_isCuva |= hasCuva;
+        videoStream->m_dynHdrPacketsScanned++;
+      }
     }
   }
 }
