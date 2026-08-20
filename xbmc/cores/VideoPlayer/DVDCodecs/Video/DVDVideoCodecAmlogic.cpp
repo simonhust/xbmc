@@ -661,8 +661,11 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
     }
 
     // latch from the original demuxer payload, before Convert() can strip or
-    // rewrite it. Dual-track streams are latched from the base layer at pair
-    // completion: the EL carries its own static SEIs with different values
+    // rewrite it. For dual-track streams the RPU lives in the base layer, so
+    // it is latched from the BL packets as they arrive (the EL carries its
+    // own static SEIs with different values); this covers both the single
+    // queue (m_packages) and the dual queue (m_bl_packages/m_el_packages)
+    // pairing paths, which share this entry point.
     if (!packet.isDualStream && m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE)
     {
       switch(m_hints.codec)
@@ -678,6 +681,28 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
           break;
         case AV_CODEC_ID_AV1:
           AMLLatchAv1Metadata(pData, iSize, m_pendingMeta);
+          break;
+        default:
+          break;
+      }
+    }
+    else if (packet.isDualStream && !packet.isELPackage &&
+             m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE)
+    {
+      // latch from packet.pData, the untouched demuxer payload, before the
+      // packet is queued for either pairing path
+      switch(m_hints.codec)
+      {
+        case AV_CODEC_ID_HEVC:
+          AMLLatchHevcDoviRpu(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
+          AMLLatchHevcSei(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
+          if (!m_pendingMeta.hdrMdcv.empty())
+            m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
+          if (!m_pendingMeta.hdrCll.empty())
+            m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
+          break;
+        case AV_CODEC_ID_AV1:
+          AMLLatchAv1Metadata(packet.pData, packet.iSize, m_pendingMeta);
           break;
         default:
           break;
