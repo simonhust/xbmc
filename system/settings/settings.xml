@@ -1055,7 +1055,6 @@
               <or>
                 <condition on="property" name="hassystemsdrpeakluminance" operator="!is" />
                 <condition setting="videoscreen.usesystemsdrpeakluminance" operator="is">false</condition>
-                <condition>HAVE_AMCODEC</condition>
               </or>
             </dependency>
           </dependencies>
