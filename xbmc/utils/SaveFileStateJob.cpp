@@ -15,6 +15,8 @@
 #include "URIUtils.h"
 #include "URL.h"
 #include "Util.h"
+#include "filesystem/VideoDatabaseDirectory.h"
+#include "filesystem/VideoDatabaseDirectory/QueryParams.h"
 #include "guilib/GUIComponent.h"
 #include "guilib/GUIMessage.h"
 #include "guilib/GUIWindowManager.h"
@@ -36,6 +38,35 @@ using namespace KODI;
 using namespace KODI::VIDEO;
 using namespace std::chrono_literals;
 
+namespace
+{
+// Video library items played from a videodb:// url may not carry their real
+// file path in the video info tag (eg. web/jsonrpc clients, or Blu-ray ISO items
+// after the UseDynPathForAddOrUpdate disc-image exception). Resolve the file
+// record stored in the database so resume bookmarks land on the same record that
+// is looked up at resume time (CApplicationPlay::GetOptionsAndUpdateItem).
+std::string GetVideoDbFile(const CFileItem& item)
+{
+  XFILE::VIDEODATABASEDIRECTORY::CQueryParams params;
+  if (!XFILE::CVideoDatabaseDirectory::GetQueryParams(item.GetPath(), params))
+    return item.GetPath();
+
+  const long idMovie{params.GetMovieId()};
+  if (idMovie < 0)
+    return item.GetPath();
+
+  CVideoDatabase videodatabase;
+  if (!videodatabase.Open())
+    return item.GetPath();
+
+  CVideoInfoTag tag;
+  if (!videodatabase.GetMovieInfo("", tag, static_cast<int>(idMovie)))
+    return item.GetPath();
+
+  return tag.m_strFileNameAndPath;
+}
+} // namespace
+
 void CSaveFileState::DoWork(CFileItem& item,
                             CBookmark& bookmark,
                             bool updatePlayCount)
@@ -50,6 +81,14 @@ void CSaveFileState::DoWork(CFileItem& item,
     progressTrackingFile =
         item.GetVideoInfoTag()
             ->m_strFileNameAndPath; // we need the file url of the video db item to create the bookmark
+    // The tag may only carry the videodb:// browse url (or nothing) - fall back
+    // to the file record from the database in that case.
+    if (progressTrackingFile.empty() || URIUtils::IsVideoDb(progressTrackingFile))
+      progressTrackingFile = GetVideoDbFile(item);
+  }
+  else if (IsVideoDb(item))
+  {
+    progressTrackingFile = GetVideoDbFile(item);
   }
   else if (item.HasProperty("original_listitem_url"))
   {

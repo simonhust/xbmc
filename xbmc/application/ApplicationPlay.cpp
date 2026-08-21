@@ -17,6 +17,8 @@
 #include "cores/playercorefactory/PlayerCoreFactory.h"
 #include "filesystem/DirectoryFactory.h"
 #include "filesystem/DiscDirectoryHelper.h"
+#include "filesystem/VideoDatabaseDirectory.h"
+#include "filesystem/VideoDatabaseDirectory/QueryParams.h"
 #include "music/MusicFileItemClassify.h"
 #include "playlists/PlayList.h"
 #include "playlists/PlayListFileItemClassify.h"
@@ -131,6 +133,24 @@ void CApplicationPlay::GetOptionsAndUpdateItem()
              URIUtils::IsPlugin(m_item.GetProperty("original_listitem_url").asString()))
     {
       path = m_item.GetProperty("original_listitem_url").asString();
+    }
+
+    // A videodb:// url can't be used for database lookups - resolve it to the file
+    // record stored for the library item (eg. bluray://...mpls for scraped Blu-rays)
+    // so the resume lookup matches the record used when saving (SaveFileStateJob).
+    if (URIUtils::IsVideoDb(path))
+    {
+      VIDEODATABASEDIRECTORY::CQueryParams params;
+      if (CVideoDatabaseDirectory::GetQueryParams(path, params))
+      {
+        const long idMovie{params.GetMovieId()};
+        if (idMovie >= 0)
+        {
+          CVideoInfoTag tag;
+          if (db.GetMovieInfo("", tag, static_cast<int>(idMovie)))
+            path = tag.m_strFileNameAndPath;
+        }
+      }
     }
 
     // Note that we need to load the tag from database also if the item already has a tag,
