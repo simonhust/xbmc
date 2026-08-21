@@ -3,6 +3,16 @@
 	<section id="metadata.themoviedb.org.python">
 		<category id="general" label="128" help="">
 			<group id="1">
+				<setting id="tmdb_api_base_url" type="string" label="30104" help="">
+					<level>0</level>
+					<default></default>
+					<control type="edit" format="string"/>
+				</setting>
+				<setting id="tmdb_image_proxy" type="string" label="30105" help="">
+					<level>0</level>
+					<default>https://wsrv.nl/?url=</default>
+					<control type="edit" format="string"/>
+				</setting>
 				<setting id="keeporiginaltitle" type="boolean" label="30005" help="">
 					<level>0</level>
 					<default>false</default>

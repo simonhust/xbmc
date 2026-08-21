@@ -38,12 +38,46 @@ HEADERS = (
 )
 
 TMDB_PARAMS = {'api_key': 'f090bb54758cabf231fb605d3e3e0468'}
-BASE_URL = 'https://api.themoviedb.org/3/{}'
-SEARCH_URL = BASE_URL.format('search/movie')
-FIND_URL = BASE_URL.format('find/{}')
-MOVIE_URL = BASE_URL.format('movie/{}')
-COLLECTION_URL = BASE_URL.format('collection/{}')
-CONFIG_URL = BASE_URL.format('configuration')
+
+
+def get_base_url(settings=None):
+    try:
+        if settings is None:
+            try:
+                import xbmcaddon
+                settings = xbmcaddon.Addon()
+            except Exception:
+                settings = None
+        base = ""
+        if settings:
+            base = settings.getSettingString('tmdb_api_base_url')
+        if not base:
+            base = 'https://api.tmdb.org'
+        if not base.startswith('http'):
+            base = 'https://' + base
+        return base + '/3/{}'
+    except:
+        return 'https://api.tmdb.org/3/{}'
+
+
+def search_url(settings=None):
+    return get_base_url(settings).format('search/movie')
+
+
+def find_url(settings=None):
+    return get_base_url(settings).format('find/{}')
+
+
+def movie_url(settings=None):
+    return get_base_url(settings).format('movie/{}')
+
+
+def collection_url(settings=None):
+    return get_base_url(settings).format('collection/{}')
+
+
+def config_url(settings=None):
+    return get_base_url(settings).format('configuration')
 
 def log(message):
     if xbmc:
@@ -62,7 +96,7 @@ def search_movie(query, year=None, language=None, page=None):
     """
     query = unicodedata.normalize('NFC', query)
     log('using title of %s to find movie' % query)
-    theurl = SEARCH_URL
+    theurl = search_url()
     params = _set_params(None, language)
     params['query'] = query
     if page is not None:
@@ -83,7 +117,7 @@ def find_movie_by_external_id(external_id, language=None):
     :return: the movie or error
     """
     log('using external id of %s to find movie' % external_id)
-    theurl = FIND_URL.format(external_id)
+    theurl = find_url().format(external_id)
     params = _set_params(None, language)
     params['external_source'] = 'imdb_id'
     api_utils.set_headers(dict(HEADERS))
@@ -102,7 +136,7 @@ def get_movie(mid, language=None, append_to_response=None):
     :return: the movie or error
     """
     log('using movie id of %s to get movie details' % mid)
-    theurl = MOVIE_URL.format(mid)
+    theurl = movie_url().format(mid)
     api_utils.set_headers(dict(HEADERS))
     return api_utils.load_info(theurl, params=_set_params(append_to_response, language))
 
@@ -118,7 +152,7 @@ def get_collection(collection_id, language=None, append_to_response=None):
     :return: the movie or error
     """
     log('using collection id of %s to get collection details' % collection_id)
-    theurl = COLLECTION_URL.format(collection_id)
+    theurl = collection_url().format(collection_id)
     api_utils.set_headers(dict(HEADERS))
     return api_utils.load_info(theurl, params=_set_params(append_to_response, language))
 
@@ -132,7 +166,7 @@ def get_configuration():
     """
     log('getting configuration details')
     api_utils.set_headers(dict(HEADERS))
-    return api_utils.load_info(CONFIG_URL, params=TMDB_PARAMS.copy())
+    return api_utils.load_info(config_url(), params=TMDB_PARAMS.copy())
 
 
 def _set_params(append_to_response, language):

@@ -104,6 +104,14 @@ msgctxt "#30103"
 msgid "Prioritize Fanart.TV artworks over preferred language"
 msgstr ""
 
+msgctxt "#30104"
+msgid "TMDB API base URL (optional)"
+msgstr ""
+
+msgctxt "#30105"
+msgid "Image acceleration proxy prefix (e.g. https://wsrv.nl/?url=)"
+msgstr ""
+
 msgctxt "#30999"
 msgid "Fanart.tv"
 msgstr "Fanart.tv"

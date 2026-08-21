@@ -249,6 +249,11 @@ def _load_base_urls(url_settings):
             url_settings.setSetting('originalUrl', urls['original'])
             url_settings.setSetting('previewUrl', urls['preview'])
             url_settings.setSetting('lastUpdated', str(_get_date_numeric(datetime.now())))
+    # optional image acceleration prefix, e.g. 'https://wsrv.nl/?url='
+    proxy = url_settings.getSettingString('tmdb_image_proxy')
+    if proxy:
+        urls['original'] = proxy + urls['original']
+        urls['preview'] = proxy + urls['preview']
     return urls
 
 def _parse_trailer(trailers, fallback):
