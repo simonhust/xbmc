@@ -541,7 +541,7 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
     return;
 
   /* Need both queues to have accumulated enough packets */
-  if (m_el_packages.size() <= 12 || m_bl_packages.size() <= 12)
+  if (m_el_packages.size() <= 6 || m_bl_packages.size() <= 6)
     return;
 
   /* Find overlap range: max(el_min, bl_min) <= min(el_max, bl_max) */
