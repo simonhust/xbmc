@@ -45,6 +45,7 @@ bool PgsIsPqAuthored(const CDVDStreamInfo& hints)
     case StreamHdrType::HDR_TYPE_HDR10:
     case StreamHdrType::HDR_TYPE_HDR10PLUS:
     case StreamHdrType::HDR_TYPE_DOLBYVISION:
+    case StreamHdrType::HDR_TYPE_HDRVIVID: // CUVA HDR Vivid is PQ/HLG signed, base BT.2020
       return true;
     default:
       return false;
