@@ -24,6 +24,7 @@ precision mediump float;
 uniform sampler2D m_samp0;
 uniform lowp vec4 m_unicol;
 varying vec4 m_cord0;
+uniform float m_sdrPeak;
 uniform float m_sdrSaturation;
 
 void main ()

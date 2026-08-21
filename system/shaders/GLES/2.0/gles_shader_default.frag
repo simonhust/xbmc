@@ -22,6 +22,7 @@
 
 precision mediump float;
 uniform lowp vec4 m_unicol;
+uniform float m_sdrPeak;
 uniform float m_sdrSaturation;
 
 void main ()
