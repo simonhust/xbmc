@@ -23,7 +23,9 @@ public:
   // huge positive count that keeps callers looping forever.
   unsigned int AvailableBits()
   {
-    return static_cast<unsigned int>(m_posBits) >= static_cast<unsigned int>(length) * 8 ? 0 : length * 8 - m_posBits;
+    const unsigned int totalBits = static_cast<unsigned int>(length) * 8u;
+    const unsigned int posBits = static_cast<unsigned int>(m_posBits);
+    return posBits >= totalBits ? 0u : totalBits - posBits;
   }
 
 private:
