@@ -5,7 +5,7 @@
 			<group id="1">
 				<setting id="tmdb_api_base_url" type="string" label="30104" help="">
 					<level>0</level>
-					<default></default>
+					<default>https://api.tmdb.org</default>
 					<control type="edit" format="string"/>
 				</setting>
 				<setting id="tmdb_image_proxy" type="string" label="30105" help="">
