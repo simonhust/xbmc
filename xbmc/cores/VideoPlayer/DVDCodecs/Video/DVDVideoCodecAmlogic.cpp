@@ -936,7 +936,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
     }
     FrameRateTracking( pData, iSize, packet.dts, packet.pts);
 
-    if (!m_opened)
+    // Delay the decoder open until the first decodable data is available.
+    // For dual-track (DT-DL) DV the early packets are queued for BL+EL
+    // pairing (pData stays null), and doviIsFEL is only known once the
+    // first pair's Convert has parsed the EL RPU; opening earlier would
+    // configure a P7 FEL stream as MEL and drop the enhancement layer.
+    if (!m_opened && pData && iSize > 0)
     {
       if (packet.m_seekTime != DVD_NOPTS_VALUE && m_resume_pair_count < 5 && pData && iSize > 0)
       {
