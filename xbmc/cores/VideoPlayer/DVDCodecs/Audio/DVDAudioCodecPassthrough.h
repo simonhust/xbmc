@@ -13,6 +13,7 @@
 #pragma once
 
 #include "DVDAudioCodec.h"
+#include "DVDStreamInfo.h"
 #include "FloatingAverage.h"
 #include "cores/AudioEngine/Utils/AEAudioFormat.h"
 #include "cores/AudioEngine/Utils/AEBitstreamPacker.h"
@@ -69,6 +70,7 @@ public:
 private:
   int GetData(uint8_t** dst);
   unsigned int PackTrueHD();
+  CDVDStreamInfo m_hints;
   CAEStreamParser m_parser;
   uint8_t* m_buffer = nullptr;
   unsigned int m_bufferSize = 0;
