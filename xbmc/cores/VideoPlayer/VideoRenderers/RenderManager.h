@@ -172,10 +172,6 @@ protected:
   bool m_bRenderGUI = true;
   bool m_renderedDebugOverlay = false;
   bool m_renderDebug = false;
-  // Overlays are drawn at most once per frame (preferring the video pass).
-  // Set in CRenderManager::Render, reset every frame in FrameMove, so the
-  // GUI pass that follows in the same frame skips a second blend.
-  bool m_overlaysRenderedThisFrame = false;
   bool m_renderDebugVideo = false;
   XbmcThreads::EndTime<> m_debugTimer;
   std::atomic_bool m_showVideo = {false};

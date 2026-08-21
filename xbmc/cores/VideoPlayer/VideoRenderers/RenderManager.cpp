@@ -302,10 +302,6 @@ bool CRenderManager::IsPresenting()
 void CRenderManager::FrameMove()
 {
   bool firstFrame = false;
-  // Each GUI frame may run both the video pass (gui=false, from RenderEx)
-  // and the GUI pass (gui=true); let the first pass that draws a visible
-  // overlay own it and reset the gate for the next frame.
-  m_overlaysRenderedThisFrame = false;
   UpdateResolution();
 
   {
@@ -755,12 +751,13 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
       PresentSingle(clear, flags, alpha);
   }
 
-  // Overlays draw at most once per frame: prefer the video pass (gui=false)
-  // so subtitle rendering survives the dirty-driven GUI skip; the GUI pass
-  // (gui=true) that may follow in the same frame skips the second blend via
-  // m_overlaysRenderedThisFrame.
-  const bool overlaysVisible = m_overlays.HasVisibleOverlay(m_presentsource);
-  if ((gui || m_renderDebug || overlaysVisible) && !m_overlaysRenderedThisFrame)
+  // Overlays draw in the GUI pass only. The video pass (gui=false) must not
+  // draw them: on layer renderers (AML OSD plane) the GUI pass clears the
+  // backbuffer over the video region afterwards (CGUIWindowFullScreen::
+  // ClearBackground -> Clear(0)), wiping anything the video pass painted,
+  // and the frame is only presented when the GUI pass renders something
+  // (hasRendered), so a video-pass-only draw would never reach the screen.
+  if (gui || m_renderDebug)
   {
     if (!m_pRenderer->IsGuiLayer())
       m_pRenderer->Update();
@@ -769,7 +766,6 @@ void CRenderManager::Render(bool clear, DWORD flags, DWORD alpha, bool gui)
     m_pRenderer->GetVideoRect(src, dst, view);
     m_overlays.SetVideoRect(src, dst, view);
     m_overlays.Render(m_presentsource);
-    m_overlaysRenderedThisFrame = true;
 
     if (m_renderDebug)
     {
