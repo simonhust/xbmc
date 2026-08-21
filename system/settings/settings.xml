@@ -1047,7 +1047,6 @@
               <condition>HAS_DX</condition>
               <condition>HAS_MEDIACODEC</condition>
               <condition>HAVE_WEBOS</condition>
-              <condition>HAVE_AMCODEC</condition>
             </or>
           </requirement>
           <dependencies>
