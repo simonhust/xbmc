@@ -81,6 +81,7 @@ void CProcessInfo::ResetVideoCodecInfo()
   m_doviIsFEL = false;
   m_IsHdr10Plus = false;
   m_IsHdrVivid = false;
+  m_videoHdrType = StreamHdrType::HDR_TYPE_NONE;
   m_deintMethods.clear();
   m_deintMethods.push_back(EINTERLACEMETHOD::VS_INTERLACEMETHOD_NONE);
   m_deintMethodDefault = EINTERLACEMETHOD::VS_INTERLACEMETHOD_NONE;
@@ -339,6 +340,20 @@ bool CProcessInfo::GetIsHdrVivid()
   std::unique_lock lock(m_videoCodecSection);
 
   return m_IsHdrVivid;
+}
+
+void CProcessInfo::SetVideoHdrType(StreamHdrType hdrType)
+{
+  std::unique_lock lock(m_videoCodecSection);
+
+  m_videoHdrType = hdrType;
+}
+
+StreamHdrType CProcessInfo::GetVideoHdrType()
+{
+  std::unique_lock lock(m_videoCodecSection);
+
+  return m_videoHdrType;
 }
 
 EINTERLACEMETHOD CProcessInfo::GetFallbackDeintMethod()

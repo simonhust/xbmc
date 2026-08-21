@@ -6172,22 +6172,34 @@ void CVideoPlayer::GetVideoStreamInfo(int streamId, VideoStreamInfo& info) const
   info.flags = s.flags;
   info.hdrType = s.hdrType;
 
+  // The multi-HDR stream priority decision (and vs10 conversion) happens in
+  // the Amlogic codec on its first frame; surface that resolved format here
+  // instead of the static demuxer metadata. DV profile details (P8.x / P7)
+  // only apply to a native DV source, not to vs10-synthesised DV.
+  const StreamHdrType resolved = m_processInfo->GetVideoHdrType();
+  const bool nativeDv = (s.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+  if (resolved != StreamHdrType::HDR_TYPE_NONE)
+    info.hdrType = resolved;
+
   if (info.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION)
   {
-    if (info.hdrDetail.length() == 0)
-      info.hdrDetail =
-          s.dovi.dv_profile == 0 ? "" : std::to_string(static_cast<int>(s.dovi.dv_profile));
-    // distinguish HDR10 from HLG base
-    if (s.dovi.dv_profile == 8)
+    if (nativeDv)
     {
-      info.hdrDetail += ".";
-      info.hdrDetail += std::to_string(static_cast<int>(s.dovi.dv_bl_signal_compatibility_id));
-      if (s.dovi.dv_bl_signal_compatibility_id == 4)
-        info.hdrTypeAlt = StreamHdrType::HDR_TYPE_HLG;
-    }
-    else if (s.dovi.dv_profile == 7)
-    {
-      info.hdrDetail += m_processInfo->GetDoviIsFEL() ? "FEL" : "MEL";
+      if (info.hdrDetail.length() == 0)
+        info.hdrDetail =
+            s.dovi.dv_profile == 0 ? "" : std::to_string(static_cast<int>(s.dovi.dv_profile));
+      // distinguish HDR10 from HLG base
+      if (s.dovi.dv_profile == 8)
+      {
+        info.hdrDetail += ".";
+        info.hdrDetail += std::to_string(static_cast<int>(s.dovi.dv_bl_signal_compatibility_id));
+        if (s.dovi.dv_bl_signal_compatibility_id == 4)
+          info.hdrTypeAlt = StreamHdrType::HDR_TYPE_HLG;
+      }
+      else if (s.dovi.dv_profile == 7)
+      {
+        info.hdrDetail += m_processInfo->GetDoviIsFEL() ? "FEL" : "MEL";
+      }
     }
   }
   else if (info.hdrType == StreamHdrType::HDR_TYPE_HDR10)

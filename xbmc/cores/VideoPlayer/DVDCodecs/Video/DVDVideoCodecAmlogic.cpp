@@ -1003,6 +1003,11 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         m_videobuffer.hdrType = m_hints.hdrType;
       }
 
+      // Report the resolved output format (multi-HDR priority target, SEI
+      // upgrade or vs10 conversion) so the video stream info shows what is
+      // actually being output instead of the static demuxer metadata.
+      m_processInfo.SetVideoHdrType(m_hints.hdrType);
+
       CLog::Log(LOGINFO, "CDVDVideoCodecAmlogic::{}: Open decoder: fps:{:d}/{:d}", __FUNCTION__, m_hints.fpsrate, m_hints.fpsscale);
       if (m_Codec && !m_Codec->OpenDecoder(m_hints, doviIsFEL))
         CLog::Log(LOGERROR, "CDVDVideoCodecAmlogic::{}: Failed to open Amlogic Codec", __FUNCTION__);

@@ -9,6 +9,7 @@
 #pragma once
 
 #include "cores/VideoPlayer/Buffers/VideoBuffer.h"
+#include "cores/VideoPlayer/Interface/StreamInfo.h"
 #include "cores/VideoPlayer/VideoRenderers/RenderInfo.h"
 #include "cores/VideoSettings.h"
 #include "threads/CriticalSection.h"
@@ -62,6 +63,8 @@ public:
   bool GetIsHdr10Plus();
   void SetIsHdrVivid(bool isHdrVivid);
   bool GetIsHdrVivid();
+  void SetVideoHdrType(StreamHdrType hdrType);
+  StreamHdrType GetVideoHdrType();
   virtual EINTERLACEMETHOD GetFallbackDeintMethod();
   virtual void SetSwDeinterlacingMethods();
   void UpdateDeinterlacingMethods(std::list<EINTERLACEMETHOD> &methods);
@@ -167,6 +170,9 @@ protected:
   bool m_doviIsFEL;
   bool m_IsHdr10Plus;
   bool m_IsHdrVivid;
+  // HDR format the video codec actually outputs (multi-HDR priority decision,
+  // vs10 conversion included). NONE until the codec decides on its first frame.
+  StreamHdrType m_videoHdrType{StreamHdrType::HDR_TYPE_NONE};
   std::list<EINTERLACEMETHOD> m_deintMethods;
   EINTERLACEMETHOD m_deintMethodDefault;
   mutable CCriticalSection m_videoCodecSection;
