@@ -147,7 +147,13 @@ std::shared_ptr<COverlay> COverlay::Create(const CDVDOverlayImage& o, CRect& rSo
 
 COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSource)
 {
-  m_isHdrPqAuthored = o.m_isHdrPq;
+  // Pre-bake follows the output mode: on an HDR output the palette lands on
+  // sRGB-encoded BT.2020 for the kernel OSD HDR2 path; on an SDR output it is
+  // baked to BT.709 sRGB so it displays directly. m_isHdrPqAuthored keeps the
+  // no-PQ shader for HDR outputs only (an SDR output has no 709->2020 GUI
+  // matrix active, so the regular shader path is correct there).
+  const bool sdrOutput = !CServiceBroker::GetWinSystem()->GetGfxContext().IsTransferPQ();
+  m_isHdrPqAuthored = o.m_isHdrPq && !sdrOutput;
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
 
@@ -170,17 +176,18 @@ COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSour
     if (o.m_isHdrPq)
     {
       // HDR-authored PGS: pre-bake the palette from PQ-encoded BT.2020 to
-      // sRGB-encoded BT.2020 once at texture creation (256 entries only).
+      // sRGB-encoded RGB once at texture creation (256 entries only).
       // Peak scale maps 203-nit reference white to sRGB 1.0; the HDR subtitle
-      // settings scale it (50 = neutral) and control saturation.
+      // settings scale it (50 = neutral) and control saturation. SDR output
+      // bakes to BT.709, HDR output to BT.2020.
       const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
       const float peakSetting =
           settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSPEAKLUMINANCE) / 50.0f;
       const float satSetting =
           settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSSATURATION) / 50.0f;
       const float peakScale = (10000.0f / 203.0f) * peakSetting;
-      const auto bakedPalette =
-          OVERLAY::prebake_hdr_pgs_palette(o.palette, peakScale, satSetting);
+      const auto bakedPalette = OVERLAY::prebake_hdr_pgs_palette(
+          o.palette, peakScale, satSetting, /*target2020=*/!sdrOutput);
       OVERLAY::convert_rgba(o, bakedPalette, m_pma, rgba);
     }
     else
@@ -481,9 +488,11 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  // HDR-authored PGS textures are pre-baked to sRGB-encoded BT.2020 at creation;
-  // render them with the no-PQ variant so the 709->2020 transfer path is not
-  // applied a second time. SDR overlays keep the regular method.
+  // HDR-authored PGS textures are pre-baked to sRGB-encoded BT.2020 at creation
+  // and rendered with the no-PQ variant so the 709->2020 transfer path is not
+  // applied a second time (the GUI matrix is active on HDR outputs). On SDR
+  // outputs m_isHdrPqAuthored is false (baked to BT.709, no matrix active),
+  // so the regular method is correct there. SDR overlays keep it too.
   const auto method = m_isHdrPqAuthored ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_NO_PQ
                                         : ShaderMethodGLES::SM_TEXTURE_NOBLEND;
   renderSystem->EnableGUIShader(method);

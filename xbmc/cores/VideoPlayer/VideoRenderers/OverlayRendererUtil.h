@@ -53,10 +53,14 @@ int GetStereoscopicDepth(bool isPgs, int subtitleDepth);
 
 // Pre-bakes an HDR-authored PGS palette (PQ-encoded BT.2020 RGB as produced by
 // the FFmpeg PGS decoder with its hardcoded BT.709 matrix) into sRGB-encoded
-// BT.2020. Runs once per subtitle texture at creation time (256 entries, no
-// per-pixel cost). Returns a palette with RGB replaced, alpha preserved.
+// RGB. target2020 keeps the BT.2020 primaries for the kernel OSD HDR2 path
+// (gamut conversion bypassed via osd_gamut_bypass); otherwise the palette is
+// baked to BT.709 sRGB so an SDR output shows it directly. Runs once per
+// subtitle texture at creation time (256 entries, no per-pixel cost).
+// Returns a palette with RGB replaced, alpha preserved.
 std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palette,
                                               float peakScale,
-                                              float saturation);
+                                              float saturation,
+                                              bool target2020);
 
 } // namespace OVERLAY

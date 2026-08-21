@@ -97,13 +97,20 @@ float EncodeSRGB(float l)
 // matrix; UHD-BD PGS is BT.2020, so the result is translated back here.
 constexpr float k709To2020[9] = {0.6274f, 0.3293f, 0.0433f, 0.0691f, 0.9195f,
                                  0.0114f, 0.0164f, 0.0880f, 0.8956f};
+// BT.2020 luma coefficients (linear), for saturation mix on the HDR target.
+constexpr float BT2020_LUMA[3] = {0.2627f, 0.6780f, 0.0593f};
+// BT.709 luma coefficients (linear), for saturation mix on the SDR target.
+constexpr float k709Luma[3] = {0.2126f, 0.7152f, 0.0722f};
 } // namespace
 
 std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palette,
                                               float peakScale,
-                                              float saturation)
+                                              float saturation,
+                                              bool target2020)
 {
   std::vector<uint32_t> out = palette;
+
+  const float* luma = target2020 ? BT2020_LUMA : k709Luma;
 
   for (auto& entry : out)
   {
@@ -115,28 +122,34 @@ std::vector<uint32_t> prebake_hdr_pgs_palette(const std::vector<uint32_t>& palet
     for (int i = 0; i < 3; i++)
       rgb[i] = DecodePQ(rgb[i] / 255.0f);
 
-    // BT.709 -> BT.2020 (linear domain).
-    float lin[3];
-    for (int i = 0; i < 3; i++)
-      lin[i] = k709To2020[i * 3] * rgb[0] + k709To2020[i * 3 + 1] * rgb[1] +
-               k709To2020[i * 3 + 2] * rgb[2];
+    // Gamut: translate the assumed BT.709 decode result to the target
+    // primaries (identity for the BT.709 target).
+    if (target2020)
+    {
+      float lin[3];
+      for (int i = 0; i < 3; i++)
+        lin[i] = k709To2020[i * 3] * rgb[0] + k709To2020[i * 3 + 1] * rgb[1] +
+                 k709To2020[i * 3 + 2] * rgb[2];
+      for (int i = 0; i < 3; i++)
+        rgb[i] = lin[i];
+    }
 
-    // Saturation mix in linear BT.2020 (BT.2020 luma coefficients).
+    // Saturation mix in linear light (target-primaries luma).
     if (saturation != 1.0f)
     {
-      float luma = 0.2627f * lin[0] + 0.6780f * lin[1] + 0.0593f * lin[2];
+      float l = luma[0] * rgb[0] + luma[1] * rgb[1] + luma[2] * rgb[2];
       for (int i = 0; i < 3; i++)
-        lin[i] = luma + (lin[i] - luma) * saturation;
+        rgb[i] = l + (rgb[i] - l) * saturation;
     }
 
     // Peak scale (SDR_SCALE semantics: 203 nits reference white -> 1.0) then
     // sRGB encode, clamped so values stay in the sRGB code range.
     for (int i = 0; i < 3; i++)
-      lin[i] = std::max(lin[i] * peakScale, 0.0f);
+      rgb[i] = std::max(rgb[i] * peakScale, 0.0f);
 
     float srgb[3];
     for (int i = 0; i < 3; i++)
-      srgb[i] = std::min(EncodeSRGB(lin[i]), 1.0f);
+      srgb[i] = std::min(EncodeSRGB(rgb[i]), 1.0f);
 
     entry = (a << PIXEL_ASHIFT) | (static_cast<uint32_t>(srgb[0] * 255.0f + 0.5f)
                                    << PIXEL_RSHIFT) |
