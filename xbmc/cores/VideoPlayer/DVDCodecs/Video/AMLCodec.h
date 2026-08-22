@@ -70,6 +70,7 @@ public:
 
   bool          AddData(uint8_t *pData, size_t size, double dts, double pts);
   int           AddHDR10PData(uint8_t *pData, size_t iSize);
+  int           AddVividData(uint8_t *pData, size_t iSize);
   CDVDVideoCodec::VCReturn GetPicture(VideoPicture* pVideoPicture);
 
   void          SetSpeed(int speed);

@@ -2704,6 +2704,17 @@ int CAMLCodec::AddHDR10PData(uint8_t *pData, size_t iSize)
   return m_dll->codec_checkin_hdr10p_data(&am_private->vcodec);
 }
 
+int CAMLCodec::AddVividData(uint8_t *pData, size_t iSize)
+{
+  // Push raw Vivid T.35 SEI to amvecm for dynamic metadata processing
+  CSysfsPath("/sys/class/amvecm/cuva_sei", iSize, pData);
+  // Force CUVA signal type: bit31(is_cuva) + bit29(available) + transfer=16(PQ) + primaries=9 + matrix=9
+  // = 0xA0100909
+  CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type", 0xA0100909);
+  CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type_enable", 1);
+  return 0;
+}
+
 int CAMLCodec::m_pollDevice;
 
 int CAMLCodec::PollFrame()
