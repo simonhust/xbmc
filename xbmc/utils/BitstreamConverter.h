@@ -11,6 +11,7 @@
 #include "cores/FFmpeg.h"
 
 #include <stdint.h>
+#include <vector>
 
 extern "C"
 {
@@ -122,6 +123,9 @@ public:
   void SetDoviIsFEL(bool fel) { m_doviIsFEL = fel; }
   bool GetIsHdrPlus() const { return m_IsHdr10Plus; }
   bool GetIsHdrVivid() const { return m_IsHdrVivid; }
+  // Raw CUVA T.35 payload (starting at country_code) of the last SEI NAL
+  // seen during Convert(); empty when none was captured yet.
+  const std::vector<uint8_t>& GetCuvaPayload() const { return m_cuvaPayload; }
 
   static bool mpeg2_sequence_header(const uint8_t* data,
                                     const uint32_t size,
@@ -193,4 +197,5 @@ protected:
   bool m_Hdr10PlusTested{false};
   bool m_IsHdrVivid{false};
   bool m_HdrVividTested{false};
+  std::vector<uint8_t> m_cuvaPayload;
 };

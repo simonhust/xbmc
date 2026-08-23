@@ -382,6 +382,7 @@ CBitstreamConverter::CBitstreamConverter()
   m_convert_dovi = false;
   
   m_removeHdr10Plus = false;
+  m_removeCuva = false;
   m_setDoviZeroLevel5 = false;
   m_combine = false;
 }
@@ -1433,7 +1434,7 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         if (!m_Hdr10PlusTested && !m_removeHdr10Plus && !m_IsHdr10Plus)
           m_IsHdr10Plus = CHevcSei::ContainsHdr10Plus(buf, nal_size);
 
-        if (m_removeHdr10Plus)
+        if (m_removeHdr10Plus && CHevcSei::ContainsHdr10Plus(buf, nal_size))
         {
           finalPrefixSeiNalu = CHevcSei::RemoveHdr10PlusFromSeiNalu(buf, nal_size);
 
@@ -1469,8 +1470,27 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         }
       }
 
-      // Remove CUVA SEI if user selected a different HDR format
-      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 && m_removeCuva)
+      // Capture the raw CUVA T.35 payload (from country_code on) so the codec
+      // can inject it into amvecm even when the container exports no packet
+      // side data (in-band SEI in MP4/TS).
+      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 &&
+          m_IsHdrVivid && !m_removeCuva)
+      {
+        auto res = CHevcSei::FindCuva(buf_to_write, final_nal_size);
+        if (res)
+        {
+          auto& [clearedBuf, messages, msg] = *res;
+          m_cuvaPayload.assign(clearedBuf.begin() + msg->m_payloadOffset,
+                               clearedBuf.begin() + msg->m_payloadOffset + msg->m_payloadSize);
+        }
+      }
+
+      // Remove CUVA SEI if user selected a different HDR format. Preflight
+      // with ContainsCuva: the remover returns empty for NALs without a CUVA
+      // payload, and empty means "drop the whole NAL" here — without the
+      // preflight, unrelated SEIs (MDCV/CLL/picture timing) would be destroyed.
+      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 && m_removeCuva &&
+          CHevcSei::ContainsCuva(buf_to_write, final_nal_size))
       {
         auto removedNalu = CHevcSei::RemoveCuvaFromSeiNalu(buf_to_write, final_nal_size);
         if (!removedNalu.empty())

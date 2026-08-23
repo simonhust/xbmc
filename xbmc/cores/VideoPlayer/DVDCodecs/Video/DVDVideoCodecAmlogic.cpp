@@ -1058,6 +1058,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
   if (pData && iSize > 0)
   {
+    bool vividSent = false;
     if (packet.pSideData && packet.iSideDataElems > 0)
     {
       const AVPacketSideData* sideData = av_packet_side_data_get(static_cast<AVPacketSideData*>(packet.pSideData),
@@ -1077,9 +1078,23 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
                                          AV_PKT_DATA_DYNAMIC_HDR_VIVID_RAW);
       if (sideData && sideData->size)
       {
+        vividSent = true;
         if (m_Codec->AddVividData(sideData->data, sideData->size) < 0)
           CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set vivid data with size {}", __FUNCTION__,
             sideData->size);
+      }
+    }
+
+    // In-band CUVA SEI (MP4/TS carry no HDR_VIVID_RAW side data): inject the
+    // payload the bitstream converter captured from the converted stream.
+    if (!vividSent && m_bitstream && m_bitstream->GetIsHdrVivid())
+    {
+      const std::vector<uint8_t>& cuvaPayload = m_bitstream->GetCuvaPayload();
+      if (!cuvaPayload.empty())
+      {
+        if (m_Codec->AddVividData(const_cast<uint8_t*>(cuvaPayload.data()), cuvaPayload.size()) < 0)
+          CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set vivid data with size {}", __FUNCTION__,
+            cuvaPayload.size());
       }
     }
 

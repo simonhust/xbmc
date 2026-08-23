@@ -2188,6 +2188,18 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   int hdrvivid_mode = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
       CSettings::SETTING_COREELEC_AMLOGIC_HDRVIVID_MODE);
   CSysfsPath("/sys/module/amvecm/parameters/cuva_vsif_mode", hdrvivid_mode);
+  // The h265 force_video_signal_type module params are global and outlive a
+  // stream: re-arm them only for CUVA sources, clear otherwise, so state from
+  // a previous Vivid playback never leaks into the next HEVC file.
+  if (hints.hdrType == StreamHdrType::HDR_TYPE_HDRVIVID)
+  {
+    CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type", 0xA0091009);
+    CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type_enable", 1);
+  }
+  else
+  {
+    CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type_enable", 0);
+  }
   // Enable VS10 dynamic HDR processing for HDR Vivid / HDR10+ content
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
@@ -2713,9 +2725,12 @@ int CAMLCodec::AddVividData(uint8_t *pData, size_t iSize)
     write(fd, pData, iSize);
     close(fd);
   }
-  // Force CUVA signal type: bit31(is_cuva) + bit29(available) + transfer=16(PQ) + primaries=9 + matrix=9
-  // = 0xA0100909
-  CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type", 0xA0100909);
+  // Force CUVA signal type. vf->signal_type field layout (see vh265.c):
+  // bit31 is_cuva, bit29 available, bits23-16 matrix_coeffs, bits15-8
+  // transfer_characteristics, bits7-0 colour_primaries.
+  // CUVA + BT.2020 matrix/primaries + PQ transfer = 0xA0000000 | 9<<16 | 16<<8 | 9
+  // = 0xA0091009
+  CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type", 0xA0091009);
   CSysfsPath("/sys/module/amvdec_h265/parameters/force_video_signal_type_enable", 1);
   return 0;
 }

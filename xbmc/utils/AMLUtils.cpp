@@ -380,9 +380,11 @@ AMLHdrPath aml_get_hdr_path(bool hasDv, bool hasHdr10Plus, bool hasCuva, StreamH
   }
 
   // Strip the SEI of non-target formats so the decoder only sees the
-  // selected one. DV RPU cannot be stripped here, it goes to the gate.
-  path.removeHdr10Plus = path.target != StreamHdrType::HDR_TYPE_HDR10PLUS;
-  path.removeCuva = path.target != StreamHdrType::HDR_TYPE_HDRVIVID;
+  // selected one — but only when that format is actually present. The
+  // stripper drops whole NALs it cannot rewrite, so arming it for an
+  // absent format would destroy unrelated SEIs (MDCV/CLL/picture timing).
+  path.removeHdr10Plus = hasHdr10Plus && path.target != StreamHdrType::HDR_TYPE_HDR10PLUS;
+  path.removeCuva = hasCuva && path.target != StreamHdrType::HDR_TYPE_HDRVIVID;
 
   // vs10 policy: when the user enabled VS-Engine conversion for the target
   // format, hand the clean single-format stream to DV.
