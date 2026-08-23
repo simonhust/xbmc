@@ -106,7 +106,15 @@ msgctxt "#30109"
 msgid "Include art from fanart.tv"
 msgstr ""
 
-# empty strings from 30110 to 30149
+msgctxt "#30110"
+msgid "TMDB API base URL (optional)"
+msgstr ""
+
+msgctxt "#30111"
+msgid "Image acceleration proxy prefix (e.g. https://wsrv.nl/?url=)"
+msgstr ""
+
+# empty strings from 30112 to 30149
 
 msgctxt "#30150"
 msgid "Enable season poster"

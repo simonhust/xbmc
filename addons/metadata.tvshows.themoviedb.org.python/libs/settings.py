@@ -48,10 +48,50 @@ def _get_date_numeric(datetime_):
     return (datetime_ - datetime(1970, 1, 1)).total_seconds()
 
 
+def get_base_url(addon=None):
+    try:
+        if addon is None:
+            addon = Addon()
+        base = addon.getSettingString('tmdb_api_base_url')
+        if not base:
+            base = 'https://api.tmdb.org'
+        if not base.startswith('http'):
+            base = 'https://' + base
+        return base + '/3/{}'
+    except Exception:
+        return 'https://api.tmdb.org/3/{}'
+
+
+def episode_group_url():
+    return get_base_url().format('tv/episode_group/{}')
+
+
+def search_url():
+    return get_base_url().format('search/tv')
+
+
+def find_url():
+    return get_base_url().format('find/{}')
+
+
+def show_url():
+    return get_base_url().format('tv/{}')
+
+
+def season_url():
+    return get_base_url().format('tv/{}/season/{}')
+
+
+def episode_url():
+    return get_base_url().format('tv/{}/season/{}/episode/{}')
+
+
 def _get_configuration():
     addon = Addon()
     logger.debug('getting configuration details')
-    return api_utils.load_info('https://api.themoviedb.org/3/configuration', params={'api_key': TMDB_CLOWNCAR}, verboselog=addon.getSettingBool('verboselog'))
+    return api_utils.load_info(get_base_url(addon).format(
+        'configuration'), params={'api_key': TMDB_CLOWNCAR},
+        verboselog=addon.getSettingBool('verboselog'))
 
 
 def loadBaseUrls():
@@ -69,6 +109,11 @@ def loadBaseUrls():
             addon.setSetting('previewUrl', preview_root_url)
             addon.setSetting('lastUpdated', str(
                 _get_date_numeric(datetime.now())))
+    # optional image acceleration prefix, e.g. 'https://wsrv.nl/?url='
+    proxy = addon.getSettingString('tmdb_image_proxy')
+    if proxy and image_root_url and preview_root_url:
+        image_root_url = proxy + image_root_url
+        preview_root_url = proxy + preview_root_url
     return image_root_url, preview_root_url
 
 

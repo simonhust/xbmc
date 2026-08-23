@@ -3,6 +3,16 @@
 	<section id="metadata.tvshows.themoviedb.org.python">
 		<category id="general" label="128" help="">
 			<group id="1">
+				<setting id="tmdb_api_base_url" type="string" label="30110" help="">
+					<level>0</level>
+					<default>https://api.tmdb.org</default>
+					<control type="edit" format="string"/>
+				</setting>
+				<setting id="tmdb_image_proxy" type="string" label="30111" help="">
+					<level>0</level>
+					<default>https://wsrv.nl/?url=</default>
+					<control type="edit" format="string"/>
+				</setting>
 				<setting id="languageDetails" type="string" label="30000" help="">
 					<level>0</level>
 					<default>en-US</default>

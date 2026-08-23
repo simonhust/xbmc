@@ -37,13 +37,6 @@ HEADERS = (
 )
 
 TMDB_PARAMS = {'api_key': settings.TMDB_CLOWNCAR}
-BASE_URL = 'https://api.themoviedb.org/3/{}'
-EPISODE_GROUP_URL = BASE_URL.format('tv/episode_group/{}')
-SEARCH_URL = BASE_URL.format('search/tv')
-FIND_URL = BASE_URL.format('find/{}')
-SHOW_URL = BASE_URL.format('tv/{}')
-SEASON_URL = BASE_URL.format('tv/{}/season/{}')
-EPISODE_URL = BASE_URL.format('tv/{}/season/{}/episode/{}')
 FANARTTV_URL = 'https://webservice.fanart.tv/v3/tv/{}'
 FANARTTV_PARAMS = {'api_key': settings.FANARTTV_CLOWNCAR}
 
@@ -73,18 +66,18 @@ def search_show(title, year=None):
         logger.debug('using %s of %s to find show' %
                      (ext_media_id['type'], ext_media_id['title']))
         if ext_media_id['type'] == 'tmdb_id':
-            search_url = SHOW_URL.format(ext_media_id['title'])
+            theurl = settings.show_url().format(ext_media_id['title'])
         else:
-            search_url = FIND_URL.format(ext_media_id['title'])
+            theurl = settings.find_url().format(ext_media_id['title'])
             params['external_source'] = ext_media_id['type']
     else:
         logger.debug('using title of %s to find show' % title)
-        search_url = SEARCH_URL
+        theurl = settings.search_url()
         params['query'] = unicodedata.normalize('NFKC', title)
         if year:
             params['first_air_date_year'] = str(year)
     resp = api_utils.load_info(
-        search_url, params=params, verboselog=source_settings["VERBOSELOG"])
+        theurl, params=params, verboselog=source_settings["VERBOSELOG"])
     if resp is not None:
         if ext_media_id:
             if ext_media_id['type'] == 'tmdb_id':
@@ -114,9 +107,9 @@ def find_by_id(unique_ids):
     for key, value in unique_ids.items():
         if key in supported_ids:
             params['external_source'] = key + '_id'
-            search_url = FIND_URL.format(value)
+            theurl = settings.find_url().format(value)
             resp = api_utils.load_info(
-                search_url, params=params, verboselog=source_settings["VERBOSELOG"])
+                theurl, params=params, verboselog=source_settings["VERBOSELOG"])
             if resp is not None:
                 return resp.get('tv_results', [])
     api_utils.set_headers()
@@ -133,9 +126,9 @@ def load_episode_list(show_info, season_map, ep_grouping):
     if ep_grouping is not None:
         logger.debug(
             'Getting episodes with episode grouping of ' + ep_grouping)
-        episode_group_url = EPISODE_GROUP_URL.format(ep_grouping)
+        theurl = settings.episode_group_url().format(ep_grouping)
         custom_order = api_utils.load_info(
-            episode_group_url, params=TMDB_PARAMS, verboselog=source_settings["VERBOSELOG"])
+            theurl, params=TMDB_PARAMS, verboselog=source_settings["VERBOSELOG"])
         if custom_order is not None:
             show_info['seasons'] = []
             for custom_season in custom_order.get('groups', []):
@@ -189,34 +182,34 @@ def load_show_info(show_id, ep_grouping=None, named_seasons=None):
     show_info = cache.load_show_info_from_cache(show_id)
     if show_info is None:
         logger.debug('no cache file found, loading from scratch')
-        show_url = SHOW_URL.format(show_id)
+        theurl = settings.show_url().format(show_id)
         params = _get_params()
         params['append_to_response'] = 'credits,content_ratings,external_ids,images,videos,keywords'
         params['include_image_language'] = '%s,en,null' % source_settings["LANG_IMAGES"][0:2]
         params['include_video_language'] = '%s,en,null' % source_settings["LANG_IMAGES"][0:2]
         show_info = api_utils.load_info(
-            show_url, params=params, verboselog=source_settings["VERBOSELOG"])
+            theurl, params=params, verboselog=source_settings["VERBOSELOG"])
         if show_info is None:
             return None
         if show_info['overview'] == '' and source_settings["LANG_DETAILS"] != 'en-US':
             params['language'] = 'en-US'
             del params['append_to_response']
             show_info_backup = api_utils.load_info(
-                show_url, params=params, verboselog=source_settings["VERBOSELOG"])
+                theurl, params=params, verboselog=source_settings["VERBOSELOG"])
             if show_info_backup is not None:
                 show_info['overview'] = show_info_backup.get('overview', '')
             params['language'] = source_settings["LANG_DETAILS"]
         season_map = {}
         params['append_to_response'] = 'credits,images'
         for season in show_info.get('seasons', []):
-            season_url = SEASON_URL.format(
+            theurl = settings.season_url().format(
                 show_id, season.get('season_number', 0))
             season_info = api_utils.load_info(
-                season_url, params=params, default={}, verboselog=source_settings["VERBOSELOG"])
+                theurl, params=params, default={}, verboselog=source_settings["VERBOSELOG"])
             if (season_info.get('overview', '') == '' or season_info.get('name', '').lower().startswith('season')) and source_settings["LANG_DETAILS"] != 'en-US':
                 params['language'] = 'en-US'
                 season_info_backup = api_utils.load_info(
-                    season_url, params=params, default={}, verboselog=source_settings["VERBOSELOG"])
+                    theurl, params=params, default={}, verboselog=source_settings["VERBOSELOG"])
                 params['language'] = source_settings["LANG_DETAILS"]
                 if season_info.get('overview', '') == '':
                     season_info['overview'] = season_info_backup.get(
@@ -275,7 +268,7 @@ def load_episode_info(show_id, episode_id):
         except KeyError:
             return None
         # this ensures we are using the season/ep from the episode grouping if provided
-        ep_url = EPISODE_URL.format(
+        ep_url = settings.episode_url().format(
             show_info['id'], episode_info['org_seasonnum'], episode_info['org_epnum'])
         params = _get_params()
         params['append_to_response'] = 'credits,external_ids,images'

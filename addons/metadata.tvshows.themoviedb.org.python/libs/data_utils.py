@@ -38,8 +38,6 @@ except ImportError:
 
 
 SOURCE_SETTINGS = settings.getSourceSettings()
-BASE_URL = 'https://api.themoviedb.org/3/{}'
-FIND_URL = BASE_URL.format('find/{}')
 TAG_RE = re.compile(r'<[^>]+>')
 
 # Regular expressions are listed in order of priority.
@@ -404,7 +402,7 @@ def _convert_ext_id(ext_provider, ext_id):
     providers_dict = {'imdb': 'imdb_id',
                       'thetvdb': 'tvdb_id',
                       'tvdb': 'tvdb_id'}
-    show_url = FIND_URL.format(ext_id)
+    show_url = settings.find_url().format(ext_id)
     params = {'api_key': settings.TMDB_CLOWNCAR,
               'language': SOURCE_SETTINGS["LANG_DETAILS"]}
     provider = providers_dict.get(ext_provider)
