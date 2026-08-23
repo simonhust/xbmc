@@ -2192,6 +2192,15 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
 
+  // OSD plane policy under HDR output: the DV core must leave the OSD to
+  // the amvecm HDR2 core, which converts sRGB GUI/PGS content into the PQ
+  // domain (EOTF->OOTF->OETF) while keeping BT.709 gamut (no 709->2020
+  // matrix - Kodi bakes/renders OSD in 709 and double conversion shifts
+  // hues). Inert during SDR playback where SDR_HDR is not armed.
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 1);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 1);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
+
   switch(am_private->video_format)
   {
     default:
