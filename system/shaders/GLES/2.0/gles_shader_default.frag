@@ -42,7 +42,7 @@ void main ()
   const mat3 bt709_to_bt2020 = mat3(0.6274, 0.0691, 0.0164, 0.3293, 0.9195, 0.0880,
                                     0.0433, 0.0114, 0.8956);
   rgb.rgb = bt709_to_bt2020 * rgb.rgb;
-  const vec3 luma = vec3(dot(rgb.rgb, vec3(0.2627, 0.6780, 0.0593)));
+  vec3 luma = vec3(dot(rgb.rgb, vec3(0.2627, 0.6780, 0.0593)));
   rgb.rgb = mix(luma, rgb.rgb, m_sdrSaturation);
 #endif
 
