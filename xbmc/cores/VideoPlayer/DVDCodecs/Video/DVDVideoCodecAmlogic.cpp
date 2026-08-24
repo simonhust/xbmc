@@ -943,12 +943,15 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
     // configure a P7 FEL stream as MEL and drop the enhancement layer.
     if (!m_opened && pData && iSize > 0)
     {
-      if (packet.m_seekTime != DVD_NOPTS_VALUE && m_resume_pair_count < 5 && pData && iSize > 0)
+      if (packet.m_seekTime != DVD_NOPTS_VALUE && packet.isDualStream &&
+          m_resume_pair_count < 5 && pData && iSize > 0)
       {
         /* Accumulate 5 BL+EL Convert outputs before opening decoder.
-         * Only active on dual-stream DV resume (seekTime != NOPTS).
+         * Only active on dual-stream DV resume (seekTime + dual-track flag).
          * After 5 pairs, the valve opens: queue starts draining
-         * one frame per AddData call to the decoder. */
+         * one frame per AddData call to the decoder.
+         * Single-track streams (incl. VS10 conversions like cuva2dv)
+         * never queue: their Convert output goes straight to the decoder. */
         uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
         if (buf)
         {
@@ -1037,12 +1040,13 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       }
     }
 
-    /* While resume queue is active, push current Convert output to queue
-     * instead of sending directly to decoder. This ensures DTS order:
-     * the decoder always receives frames in queue order, never interleaved
-     * with direct frames. The queue is drained one per AddData call and
-     * an extra one per GetPicture call, so it eventually goes to 0. */
-    if (m_resume_pair_count > 0 && pData && iSize > 0)
+    /* The resume queue is a one-time warm-up buffer: it fills with the
+     * first 5 Convert outputs (accumulate branch above), after which the
+     * current Convert output goes straight to the decoder and the queue
+     * drains one frame per AddData/GetPicture call to zero. Replenishing
+     * it (count > 0) would keep the queue alive forever and could stall
+     * the decoder when one drain AddData fails (ring buffer full). */
+    if (m_resume_pair_count < 5 && pData && iSize > 0)
     {
       uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
       if (buf)
