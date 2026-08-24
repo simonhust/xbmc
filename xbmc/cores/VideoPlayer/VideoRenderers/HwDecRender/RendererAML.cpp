@@ -37,6 +37,16 @@ CRendererAML::~CRendererAML()
 {
   Reset();
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
+
+  // Restore kernel OSD pipeline to SDR defaults. OpenDecoder writes
+  // HDR-output values (osd_pq_bypass=0, osd_gamut_bypass=1) that must
+  // be reverted when the renderer is torn down, otherwise the GUI
+  // appears washed out (PQ-encoded GUI on SDR gamma) or shows wrong
+  // colours when the next video's OpenDecoder runs before the new
+  // RendererAML::Configure has a chance to correct them.
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
 }
 
 CBaseRenderer* CRendererAML::Create(CVideoBuffer *buffer)

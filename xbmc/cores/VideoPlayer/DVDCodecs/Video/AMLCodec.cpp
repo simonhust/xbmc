@@ -2196,10 +2196,23 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   // the amvecm HDR2 core, which converts sRGB GUI/PGS content into the PQ
   // domain (EOTF->OOTF->OETF) while keeping BT.709 gamut (no 709->2020
   // matrix - Kodi bakes/renders OSD in 709 and double conversion shifts
-  // hues). Inert during SDR playback where SDR_HDR is not armed.
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 1);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 1);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
+  // hues). On SDR display the output is always SDR — write SDR defaults
+  // so the OSD stays in sRGB.  The RendererAML::Configure refines the
+  // values for HDR display once the renderer is created; gating here
+  // prevents stale HDR values persisting on quick DV→DV switches where
+  // Configure does not re-run.
+  const bool dvIsUsed = aml_support_dolby_vision() &&
+                         !CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+                             CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE) &&
+                         hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION &&
+                         aml_display_support_dv();
+  const bool hdrIsUsed = (hints.hdrType == StreamHdrType::HDR_TYPE_HLG ||
+                          hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084) &&
+                         CServiceBroker::GetWinSystem()->IsHDRDisplay();
+  const bool hdrOutput = dvIsUsed | hdrIsUsed;
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", hdrOutput ? 1 : 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOutput ? 1 : 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrOutput ? 0 : 1);
 
   switch(am_private->video_format)
   {
