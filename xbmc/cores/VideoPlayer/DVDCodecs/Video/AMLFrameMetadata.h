@@ -41,6 +41,7 @@ struct AMLFrameMetadata
   std::string structure;
   std::string doviRpu;
   std::string hdr10pSei;
+  std::string cuvaSei;
   std::string hdrMdcv;
   std::string hdrCll;
 
@@ -54,6 +55,8 @@ struct AMLFrameMetadata
       doviRpu = prev.doviRpu;
     if (hdr10pSei.empty())
       hdr10pSei = prev.hdr10pSei;
+    if (cuvaSei.empty())
+      cuvaSei = prev.cuvaSei;
     if (hdrMdcv.empty())
       hdrMdcv = prev.hdrMdcv;
     if (hdrCll.empty())
@@ -77,7 +80,8 @@ struct AMLFrameMetadata
     const std::pair<const char*, const std::string*> entries[] = {
         {"dovi.config", &doviConfig}, {"structure", &structure},
         {"dovi.rpu", &doviRpu},       {"hdr10plus", &hdr10pSei},
-        {"mdcv", &hdrMdcv},           {"cll", &hdrCll}};
+        {"cuva", &cuvaSei},           {"mdcv", &hdrMdcv},
+        {"cll", &hdrCll}};
     std::string json;
     if (!flagsJson.empty())
     {
@@ -261,12 +265,27 @@ inline bool AMLIsHdr10PlusT35(const uint8_t* data, size_t size)
          data[3] == 0x00 && data[4] == 0x01 && data[5] == 0x04;
 }
 
+// CUVA/HDR Vivid T.35 header: country 0x26 (China), terminal provider 0x0004,
+// provider oriented code 0x0005 (CUVA HDR Vivid standard)
+inline bool AMLIsCuvaT35(const uint8_t* data, size_t size)
+{
+  return size >= 6 && data[0] == 0x26 && data[1] == 0x00 && data[2] == 0x04 &&
+         data[3] == 0x00 && data[4] == 0x05;
+}
+
 // the payload layout shared by the HEVC SEI, the AV1 metadata OBU and the MKV
 // block addition side data
 inline void AMLLatchHdr10PlusT35(const uint8_t* data, size_t size, AMLFrameMetadata& meta)
 {
   if (data && AMLIsHdr10PlusT35(data, size))
     meta.hdr10pSei =
+        Base64::Encode(reinterpret_cast<const char*>(data), static_cast<unsigned int>(size));
+}
+
+inline void AMLLatchCuvaT35(const uint8_t* data, size_t size, AMLFrameMetadata& meta)
+{
+  if (data && AMLIsCuvaT35(data, size))
+    meta.cuvaSei =
         Base64::Encode(reinterpret_cast<const char*>(data), static_cast<unsigned int>(size));
 }
 
@@ -389,7 +408,10 @@ inline void AMLLatchHevcSei(const uint8_t* data,
         break;
 
       if (type == SEI_PAYLOAD_REGISTERED_ITU_T_T35)
+      {
         AMLLatchHdr10PlusT35(rbsp.data() + p, payload, meta);
+        AMLLatchCuvaT35(rbsp.data() + p, payload, meta);
+      }
       else if (type == SEI_PAYLOAD_MASTERING_DISPLAY_COLOUR_VOLUME && payload >= 24)
         meta.hdrMdcv = Base64::Encode(reinterpret_cast<const char*>(rbsp.data() + p), payload);
       else if (type == SEI_PAYLOAD_CONTENT_LIGHT_LEVEL_INFO && payload >= 4)
@@ -514,7 +536,10 @@ inline void AMLLatchAv1Metadata(const uint8_t* data, size_t size, AMLFrameMetada
                                         static_cast<unsigned int>(len));
         }
         else
+        {
           AMLLatchHdr10PlusT35(data + p, AMLAv1T35PayloadLength(data + p, len), meta);
+          AMLLatchCuvaT35(data + p, AMLAv1T35PayloadLength(data + p, len), meta);
+        }
       }
     }
     pos += obuSize;
