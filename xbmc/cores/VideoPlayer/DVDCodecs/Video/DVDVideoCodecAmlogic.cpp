@@ -1043,13 +1043,15 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       }
     }
 
-    /* The resume queue is a one-time warm-up buffer: it fills with the
-     * first 5 Convert outputs (accumulate branch above), after which the
-     * current Convert output goes straight to the decoder and the queue
-     * drains one frame per AddData/GetPicture call to zero. Replenishing
-     * it (count > 0) would keep the queue alive forever and could stall
-     * the decoder when one drain AddData fails (ring buffer full). */
-    if (m_resume_pair_count < 5 && pData && iSize > 0)
+    /* While the warm-up queue is active (accumulate ran, count > 0), push
+     * the current Convert output to its tail so the decoder receives frames
+     * strictly in DTS order while the queue drains one per AddData/GetPicture
+     * call to zero. A count of 0 means the queue is inert for this stream
+     * (single-track always, dual-stream without resume seekTime): data must
+     * pass straight through below. Gating on "< 5" instead left such streams
+     * queuing forever with both drain gates (>= 5) closed, starving the
+     * decoder to zero output. */
+    if (m_resume_pair_count > 0 && pData && iSize > 0)
     {
       uint8_t *buf = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(iSize, 16));
       if (buf)
