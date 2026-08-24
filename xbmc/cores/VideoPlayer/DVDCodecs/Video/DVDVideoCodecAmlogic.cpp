@@ -411,19 +411,9 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
 
   m_has_keyframe = false;
 
-  // Pre-configure the multi HDR stream filter from the demuxer first-packet
-  // side data, so SEI stripping applies from the very first frame. The first
-  // frame detection in AddData refines this when side data was unavailable.
-  if (m_bitstream)
-  {
-    const AMLHdrPath initPath = aml_get_hdr_path(
-        m_hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION, m_hints.hdr10Plus,
-        m_hints.hdrVivid, m_hints.hdrType);
-    if (initPath.removeHdr10Plus)
-      m_bitstream->SetRemoveHdr10Plus(true);
-    if (initPath.removeCuva)
-      m_bitstream->SetRemoveCuva(true);
-  }
+  // No SEI stripping at open time: the multi-HDR filter (AddData) decides
+  // after the first frame's bitstream detection. All SEIs pass through to
+  // the decoder by default so the kernel can natively detect HDR formats.
 
   if (m_hints.contentLightMetadata)
     m_streamMeta.hdrCll = AMLSerializeContentLight(*m_hints.contentLightMetadata);
@@ -909,23 +899,25 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         IsHdr10Plus = m_bitstream->GetIsHdrPlus();
         IsHdrVivid = m_bitstream->GetIsHdrVivid();
 
-        // Resolve the multi HDR stream path: target format follows the configured
-        // priority, SEI of non-target formats is stripped so the decoder sees
-        // a clean single-format stream. DV RPU cannot be stripped here, it is
-        // handled through the kernel gate below. Demuxer side data (first
-        // packet) is merged with the real-time detection.
+        // Resolve the multi HDR stream path. SEI stripping only applies
+        // when converting via VS-Engine (hdr10plus2dv/cuva2dv/hdr2dv):
+        // the DV engine needs a clean single-format stream. For native
+        // processing (amvecm/VPP HDR2) all metadata passes through so the
+        // kernel can detect and use every available format natively.
         hasDv = m_hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
         hdrPath = aml_get_hdr_path(
             hasDv,
             m_hints.hdr10Plus || IsHdr10Plus, m_hints.hdrVivid || IsHdrVivid, m_hints.hdrType);
-        if (hdrPath.removeHdr10Plus)
-          m_bitstream->SetRemoveHdr10Plus(true);
+        if (hdrPath.vs10)
+        {
+          m_bitstream->SetRemoveHdr10Plus(hdrPath.target != StreamHdrType::HDR_TYPE_HDR10PLUS);
+          m_bitstream->SetRemoveCuva(hdrPath.target != StreamHdrType::HDR_TYPE_HDRVIVID);
+        }
         else
+        {
           m_bitstream->SetRemoveHdr10Plus(false);
-        if (hdrPath.removeCuva)
-          m_bitstream->SetRemoveCuva(true);
-        else
           m_bitstream->SetRemoveCuva(false);
+        }
       }
     }
     else if (!m_has_keyframe && m_bitparser)
