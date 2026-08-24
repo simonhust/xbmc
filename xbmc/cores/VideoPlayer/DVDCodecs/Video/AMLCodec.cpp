@@ -2192,24 +2192,29 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
 
-  // OSD plane policy under HDR output: the DV core must leave the OSD to
+  // OSD plane policy under HDR/DV output: the DV core must leave the OSD to
   // the amvecm HDR2 core, which converts sRGB GUI/PGS content into the PQ
   // domain (EOTF->OOTF->OETF) while keeping BT.709 gamut (no 709->2020
   // matrix - Kodi bakes/renders OSD in 709 and double conversion shifts
-  // hues). On SDR display the output is always SDR — write SDR defaults
-  // so the OSD stays in sRGB.  The RendererAML::Configure refines the
-  // values for HDR display once the renderer is created; gating here
-  // prevents stale HDR values persisting on quick DV→DV switches where
-  // Configure does not re-run.
-  const bool dvIsUsed = aml_support_dolby_vision() &&
-                         !CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
-                             CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE) &&
-                         hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION &&
-                         aml_display_support_dv();
-  const bool hdrIsUsed = (hints.hdrType == StreamHdrType::HDR_TYPE_HLG ||
-                          hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084) &&
-                         CServiceBroker::GetWinSystem()->IsHDRDisplay();
-  const bool hdrOutput = dvIsUsed | hdrIsUsed;
+  // hues).  When the DV engine is active (DV content played, regardless of
+  // display support — the engine converts DV→SDR10 on SDR sinks) or the
+  // display is in HDR mode, write the HDR-safe values.  On plain SDR output
+  // (no DV engine, no HDR display) write SDR defaults so the OSD pipeline
+  // is not left in PQ mode after playback.  gating here prevents stale HDR
+  // values persisting on quick DV→DV switches where Configure does not
+  // re-run.  Note: aml_display_support_dv() is deliberately NOT checked
+  // here — the DV engine runs for any DV content even on a SDR sink, and
+  // the OSD bypass must be set when the engine is active.
+  const bool dvContent = hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  const bool dvUserDisabled = CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+      CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE);
+  const bool dvEngineActive =
+      aml_support_dolby_vision() && !dvUserDisabled && dvContent;
+  const bool hdrDisplayActive =
+      (hints.hdrType == StreamHdrType::HDR_TYPE_HLG ||
+       hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084) &&
+      CServiceBroker::GetWinSystem()->IsHDRDisplay();
+  const bool hdrOutput = dvEngineActive | hdrDisplayActive;
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", hdrOutput ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOutput ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrOutput ? 0 : 1);
