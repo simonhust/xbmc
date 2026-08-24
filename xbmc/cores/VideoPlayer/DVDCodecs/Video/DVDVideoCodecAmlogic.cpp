@@ -920,8 +920,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
             m_hints.hdr10Plus || IsHdr10Plus, m_hints.hdrVivid || IsHdrVivid, m_hints.hdrType);
         if (hdrPath.removeHdr10Plus)
           m_bitstream->SetRemoveHdr10Plus(true);
+        else
+          m_bitstream->SetRemoveHdr10Plus(false);
         if (hdrPath.removeCuva)
           m_bitstream->SetRemoveCuva(true);
+        else
+          m_bitstream->SetRemoveCuva(false);
       }
     }
     else if (!m_has_keyframe && m_bitparser)
