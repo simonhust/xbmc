@@ -418,8 +418,12 @@ void aml_set_hdr_gate(StreamHdrType hdrType, bool hasDv)
   {
     case StreamHdrType::HDR_TYPE_DOLBYVISION:
       // DV: AMLCodec already enabled DV, ensure HDR10+ policy is correct.
+      // Also ensure dolby_vision_enable=1 (critical for VS10-converted
+      // content where hdrType becomes DOLBYVISION: the gate was called
+      // with the unconverted type and may have written enable=0).
       // HDR10+ is NOT absorbed (bit 2 clear), goes to VPP HDR2 core.
       // HDR_BY_DV_F_SRC(0x02) | HLG_BY_DV_F_SRC(0x10) | SDR_BY_DV_F_SRC(0x40)
+      CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_enable", 1);
       CSysfsPath("/sys/module/amdolby_vision/parameters/dolby_vision_hdr10_policy", 0x52);
       break;
 

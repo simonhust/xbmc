@@ -995,11 +995,18 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       aml_set_hdr_gate(m_hints.hdrType, hasDv);
 
       // vs10 path: hand the clean single-format stream to DV so the decoder
-      // enables the kernel DV / VS-Engine path.
+      // enables the kernel DV / VS-Engine path (IPT colour space for tone
+      // mapping, same hardware pipeline used for native DV content).
       if (hdrPath.vs10)
       {
         m_hints.hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
         m_videobuffer.hdrType = m_hints.hdrType;
+
+        // Re-arm the gate with the DV target so dolby_vision_enable is set
+        // to "Y" and the dv_mode/IPM path is enabled. The gate was called
+        // above with the unconverted hdrType (e.g. HDR10) which wrote
+        // enable=0; without this re-arm the DV engine stays off.
+        aml_set_hdr_gate(m_hints.hdrType, hasDv);
       }
 
       // Report the resolved output format (multi-HDR priority target, SEI
