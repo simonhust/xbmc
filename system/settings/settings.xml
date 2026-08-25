@@ -4037,6 +4037,32 @@
             <dependency type="enable" setting="coreelec.amlogic.disabledolbyvision" operator="is">false</dependency>
           </dependencies>
         </setting>
+        <setting id="coreelec.amlogic.dolbyvision.hdr10plus.convert" type="boolean" label="60101" help="60102">
+          <requirement>HAVE_AMCODEC</requirement>
+          <default>false</default>
+          <dependencies>
+            <dependency type="enable" setting="coreelec.amlogic.disabledolbyvision" operator="is">false</dependency>
+          </dependencies>
+          <control type="toggle" />
+        </setting>
+        <setting id="coreelec.amlogic.dolbyvision.hdr10plus.peak.brightness.source" type="integer" label="60103" help="60104">
+          <requirement>HAVE_AMCODEC</requirement>
+          <default>4</default>
+          <dependencies>
+            <dependency type="visible" setting="coreelec.amlogic.dolbyvision.hdr10plus.convert" operator="is">true</dependency>
+            <dependency type="enable" setting="coreelec.amlogic.disabledolbyvision" operator="is">false</dependency>
+          </dependencies>
+          <constraints>
+            <options>
+              <option label="60105">0</option> <!-- histogram -->
+              <option label="60106">1</option> <!-- histogram99 -->
+              <option label="60107">2</option> <!-- max-scl -->
+              <option label="60108">3</option> <!-- max-scl-Luminance -->
+              <option label="60109">4</option> <!-- histogram-plus -->
+            </options>
+          </constraints>
+          <control type="spinner" format="string" />
+        </setting>
         <setting id="coreelec.amlogic.disabledolbyvision" type="boolean" label="14422" help="14423">
           <requirement>HAVE_AMCODEC</requirement>
           <default>false</default>

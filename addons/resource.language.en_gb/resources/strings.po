@@ -25571,3 +25571,57 @@ msgstr ""
 msgctxt "#40813"
 msgid "Full sync"
 msgstr ""
+
+#. Label for setting "HDR10+ to Dolby Vision RPU conversion" of label #60101
+#: system/settings/settings.xml
+msgctxt "#60101"
+msgid "Generate Dolby Vision RPU from HDR10+"
+msgstr ""
+
+#. Help text for setting #60101
+#: system/settings/settings.xml
+msgctxt "#60102"
+msgid "Synthesizes a Dolby Vision profile 8.1 RPU NAL from the HDR10+ ST 2094-40 metadata in userspace and appends it to the access unit, so the stream carries true DV dynamic metadata instead of relying on the kernel-side absorption path."
+msgstr ""
+
+#. Label for HDR10+ RPU peak brightness source setting of label #60103
+#: system/settings/settings.xml
+msgctxt "#60103"
+msgid "HDR10+ peak brightness source"
+msgstr ""
+
+#. Help text for setting #60103
+#: system/settings/settings.xml
+msgctxt "#60104"
+msgid "Selects which HDR10+ luminance distribution values feed the DV L1 max/avg PQ. Histogram uses the peak distribution entry, Histogram99 the 99th percentile, Max-SCL the maximum of the maxscl triple, Max-SCL-Luminance the BT.2020 luma of maxscl, Histogram-Plus a weighted mean of the distribution bins (recommended)."
+msgstr ""
+
+#. Option label for #60103 "Histogram"
+#: system/settings/settings.xml
+msgctxt "#60105"
+msgid "Histogram"
+msgstr ""
+
+#. Option label for #60103 "Histogram99"
+#: system/settings/settings.xml
+msgctxt "#60106"
+msgid "Histogram 99%"
+msgstr ""
+
+#. Option label for #60103 "Max-SCL"
+#: system/settings/settings.xml
+msgctxt "#60107"
+msgid "Max-SCL"
+msgstr ""
+
+#. Option label for #60103 "Max-SCL-Luminance"
+#: system/settings/settings.xml
+msgctxt "#60108"
+msgid "Max-SCL Luminance"
+msgstr ""
+
+#. Option label for #60103 "Histogram-Plus"
+#: system/settings/settings.xml
+msgctxt "#60109"
+msgid "Histogram+"
+msgstr ""

@@ -467,6 +467,8 @@ public:
   static constexpr auto SETTING_COREELEC_AMLOGIC_HDR2DV = "coreelec.amlogic.hdr2dv";
   static constexpr auto SETTING_COREELEC_AMLOGIC_CUVA2DV = "coreelec.amlogic.cuva2dv";
   static constexpr auto SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV = "coreelec.amlogic.hdr10plus2dv";
+  static constexpr auto SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_CONVERT = "coreelec.amlogic.dolbyvision.hdr10plus.convert";
+  static constexpr auto SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_PEAK_BRIGHTNESS_SOURCE = "coreelec.amlogic.dolbyvision.hdr10plus.peak.brightness.source";
   static constexpr auto SETTING_COREELEC_AMLOGIC_LIMIT_CD = "coreelec.amlogic.limitcd";
   static constexpr auto SETTING_COREELEC_AMLOGIC_FORCE_CS = "coreelec.amlogic.forcecs";
   static constexpr auto SETTING_COREELEC_AMLOGIC_DISABLEGUISCALING = "coreelec.amlogic.disableguiscaling";
