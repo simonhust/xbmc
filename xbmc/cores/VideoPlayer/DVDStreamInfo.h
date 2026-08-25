@@ -25,6 +25,18 @@ extern "C"
 class CDemuxStream;
 struct DemuxCryptoSession;
 
+struct HDRStaticMetadataInfo
+{
+  bool has_mdcv_metadata = false;
+  uint32_t max_lum = 0;
+  uint32_t min_lum = 0;
+  std::string colour_primaries = "";
+
+  bool has_cll_metadata = false;
+  uint16_t max_cll = 0;
+  uint16_t max_fall = 0;
+};
+
 class CDVDStreamInfo
 {
 public:

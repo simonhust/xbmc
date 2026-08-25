@@ -9,9 +9,16 @@
 #pragma once
 
 #include "BitstreamReader.h"
+#include "HDR10Plus.h"
 
 #include <optional>
 #include <vector>
+
+/*!
+ * \brief Clears start code emulation prevention 3 bytes when generating an
+ * output NALU from a raw SEI payload.
+ */
+void HevcAddStartCodeEmulationPrevention3Byte(std::vector<uint8_t>& buf);
 
 /*!
  * \brief Parses HEVC SEI messages for supplemental video information.
@@ -52,6 +59,12 @@ public:
   // Returns true if NALU SEI payload contains a HDR10+ SEI message.
   static bool ContainsHdr10Plus(
       const uint8_t* inData, const size_t inDataLen);
+
+  // Parses the ST 2094-40 HDR10+ metadata out of the SEI messages list.
+  // Returns a fully decoded Hdr10PlusMetadata or nullopt when the list
+  // carries no recognised HDR10+ payload (country 0xB5 / Samsung 0x003C).
+  static const std::optional<const Hdr10PlusMetadata> ExtractHdr10Plus(
+      const std::vector<CHevcSei>& messages, const std::vector<uint8_t>& buf);
 
   // Returns a CUVA HDR Vivid SEI message if present in the list
   static std::optional<const CHevcSei*> FindCuvaSeiMessage(

@@ -94,6 +94,13 @@ void Crc32::Compute(const char* buffer, size_t count)
       m_crc = (m_crc << 8) ^ crc_tab[((m_crc >> 24) ^ *buffer++) & 0xFF];
 }
 
+uint32_t Crc32::Compute(const uint8_t* buffer, size_t count)
+{
+  Crc32 crc;
+  crc.Compute(reinterpret_cast<const char*>(buffer), count);
+  return crc;
+}
+
 uint32_t Crc32::Compute(const std::string& strValue)
 {
   Crc32 crc;

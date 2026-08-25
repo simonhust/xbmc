@@ -195,6 +195,41 @@ bool CHevcSei::ContainsHdr10Plus(const uint8_t* inData, const size_t inDataLen)
   return CHevcSei::FindHdr10Plus(inData, inDataLen).has_value();
 }
 
+const std::optional<const Hdr10PlusMetadata> CHevcSei::ExtractHdr10Plus(
+    const std::vector<CHevcSei>& messages, const std::vector<uint8_t>& buf)
+{
+  for (const CHevcSei& sei : messages)
+  {
+    // User Data Registered ITU-T T.35
+    if (sei.m_payloadType == 4 && sei.m_payloadSize >= 7)
+    {
+      const unsigned char* data = buf.data() + sei.m_payloadOffset;
+      size_t size = sei.m_payloadSize;
+
+      CBitstreamReader br(data, size);
+      const auto itu_t_t35_country_code = br.ReadBits(8);
+      const auto itu_t_t35_terminal_provider_code = br.ReadBits(16);
+      const auto itu_t_t35_terminal_provider_oriented_code = br.ReadBits(16);
+
+      // United States, Samsung Electronics America, ST 2094-40
+      if (itu_t_t35_country_code == 0xB5 && itu_t_t35_terminal_provider_code == 0x003C &&
+          itu_t_t35_terminal_provider_oriented_code == 0x0001)
+      {
+        const auto application_identifier = br.ReadBits(8);
+        const auto application_version = br.ReadBits(8);
+
+        if (application_identifier == 4 && application_version <= 1)
+        {
+          CBitstreamReader br2(data, size);
+          return hdr10plus_sei_to_metadata(br2);
+        }
+      }
+    }
+  }
+
+  return std::nullopt;
+}
+
 bool CHevcSei::ContainsCuva(const uint8_t* inData, const size_t inDataLen)
 {
   std::vector<uint8_t> buf;

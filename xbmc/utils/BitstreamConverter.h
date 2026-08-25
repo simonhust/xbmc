@@ -8,9 +8,16 @@
 
 #pragma once
 
+#include "HDR10Plus.h"
+#include "HDR10PlusConvert.h"
+
 #include "cores/FFmpeg.h"
 
 #include <stdint.h>
+
+#include <optional>
+
+class CDVDStreamInfo;
 
 extern "C"
 {
@@ -117,6 +124,16 @@ public:
   
   void SetRemoveHdr10Plus(bool value) { m_removeHdr10Plus = value; }
   void SetRemoveCuva(bool value) { m_removeCuva = value; }
+  void SetHints(CDVDStreamInfo* hints) { m_hints = hints; }
+  void SetConvertHdr10Plus(bool value) { m_convertHdr10Plus = value; }
+  void SetHdr10PlusPeakBrightnessSource(PeakBrightnessSource source)
+  {
+    m_hdr10PlusPeakBrightnessSource = source;
+  }
+  void SetHdrStaticMetadataInfo(const HDRStaticMetadataInfo& info)
+  {
+    m_hdrStaticMetadataInfo = info;
+  }
   void SetDoviZeroLevel5(bool value) { m_setDoviZeroLevel5 = value; }
   bool GetDoviIsFEL() const { return m_doviIsFEL; }
   void SetDoviIsFEL(bool fel) { m_doviIsFEL = fel; }
@@ -186,6 +203,13 @@ protected:
   
   bool m_removeHdr10Plus;
   bool m_removeCuva;
+  bool m_convertHdr10Plus{false};
+  PeakBrightnessSource m_hdr10PlusPeakBrightnessSource{PeakBrightnessSource::HistogramPlus};
+  HDRStaticMetadataInfo m_hdrStaticMetadataInfo{};
+  std::optional<Hdr10PlusMetadata> m_pendingHdr10PlusMeta;
+  bool m_pendingHdr10PlusConvert{false};
+  CDVDStreamInfo* m_hints{nullptr};
+  bool m_firstFrame{true};
   bool m_setDoviZeroLevel5;
   bool m_doviIsFEL{false};
   bool m_doviELTested{false};

@@ -309,7 +309,23 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
       }
       m_pFormatName = "am-h265";
       m_bitstream = new CBitstreamConverter();
+      m_bitstream->SetHints(&m_hints);
       m_bitstream->Open(m_hints.codec, m_hints.extradata.GetData(), m_hints.extradata.GetSize(), true);
+
+      // HDR10+ -> Dolby Vision RPU synthesis: when enabled and the stream
+      // turns out to carry HDR10+ ST 2094-40 SEI, the converter generates a
+      // true DV profile 8.1 RPU NAL per access unit instead of relying on the
+      // kernel-side absorption (which loses the DV dynamic metadata).
+      {
+        const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+        if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_CONVERT))
+        {
+          const auto peakBrightnessSource = static_cast<PeakBrightnessSource>(
+              settings->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_PEAK_BRIGHTNESS_SOURCE));
+          m_bitstream->SetConvertHdr10Plus(true);
+          m_bitstream->SetHdr10PlusPeakBrightnessSource(peakBrightnessSource);
+        }
+      }
 
       // length-prefix size from the original hvcC, read before the extradata
       // below becomes Annex-B. Stays 0 for Annex-B input

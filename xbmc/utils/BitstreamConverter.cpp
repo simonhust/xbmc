@@ -17,6 +17,7 @@
 #include "BitstreamConverter.h"
 #include "utils/StringUtils.h"
 #include "HevcSei.h"
+#include "cores/VideoPlayer/DVDStreamInfo.h"
 
 #include <algorithm>
 
@@ -1376,6 +1377,11 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
   // detection window before any SEI arrives.
   bool idr_seen = false;
 
+  // Reset the pending HDR10+->DV RPU conversion state per access unit so a
+  // metadata burst cannot leak into a later AU without fresh HDR10+ SEI.
+  m_pendingHdr10PlusConvert = false;
+  m_pendingHdr10PlusMeta.reset();
+
   do
   {
     if (buf + m_sps_pps_context.length_size > buf_end)
@@ -1449,6 +1455,21 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
           else
           {
             write_buf = false;
+          }
+        }
+
+        // HDR10+ -> Dolby Vision RPU synthesis: parse the ST 2094-40 payload
+        // on the first HDR10+ SEI of the access unit and hold it until the
+        // end of the AU where the generated DoVi RPU (profile 8.1) NAL is
+        // appended.
+        if (write_buf && m_convertHdr10Plus && m_IsHdr10Plus && !m_pendingHdr10PlusConvert)
+        {
+          std::vector<uint8_t> clearBuf;
+          std::vector<CHevcSei> messages = CHevcSei::ParseSeiRbspUnclearedEmulation(buf, nal_size, clearBuf);
+          if (auto res = CHevcSei::ExtractHdr10Plus(messages, clearBuf))
+          {
+            m_pendingHdr10PlusMeta = *res;
+            m_pendingHdr10PlusConvert = true;
           }
         }
       }
@@ -1530,6 +1551,39 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
     buf += nal_size;
     cumul_size += nal_size + m_sps_pps_context.length_size;
   } while (cumul_size < buf_size);
+
+  // Append the synthesized Dolby Vision RPU (profile 8.1) NAL at the end of
+  // the access unit when HDR10+ metadata was seen and conversion is enabled.
+  if (m_pendingHdr10PlusConvert && m_pendingHdr10PlusMeta.has_value())
+  {
+    auto rpuNalu = create_dovi_rpu_nalu_from_hdr10plus(*m_pendingHdr10PlusMeta,
+                                                       m_hdr10PlusPeakBrightnessSource,
+                                                       m_hdrStaticMetadataInfo);
+    if (!rpuNalu.empty())
+    {
+      BitstreamAllocAndCopy(poutbuf, poutbuf_size, nullptr, 0, rpuNalu.data(),
+                            static_cast<uint32_t>(rpuNalu.size()), HEVC_NAL_UNSPEC62);
+
+      // First frame with a generated RPU: tell the decoder this is now a DV
+      // profile 8.1 stream (BL = HDR10 base + synthesized RPU) so AMLCodec
+      // opens the kernel DV path with the right profile config.
+      if (m_firstFrame && m_hints)
+      {
+        m_hints->hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
+        m_hints->dovi.dv_version_major = 1;
+        m_hints->dovi.dv_version_minor = 0;
+        m_hints->dovi.dv_profile = 8;
+        m_hints->dovi.dv_level = 6;
+        m_hints->dovi.rpu_present_flag = 1;
+        m_hints->dovi.el_present_flag = 0;
+        m_hints->dovi.bl_present_flag = 1;
+        m_hints->dovi.dv_bl_signal_compatibility_id = 1;
+        m_firstFrame = false;
+      }
+    }
+    m_pendingHdr10PlusConvert = false;
+    m_pendingHdr10PlusMeta.reset();
+  }
 
   if (idr_seen)
   {
