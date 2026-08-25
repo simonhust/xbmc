@@ -908,16 +908,8 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         hdrPath = aml_get_hdr_path(
             hasDv,
             m_hints.hdr10Plus || IsHdr10Plus, m_hints.hdrVivid || IsHdrVivid, m_hints.hdrType);
-        if (hdrPath.vs10)
-        {
-          m_bitstream->SetRemoveHdr10Plus(hdrPath.target != StreamHdrType::HDR_TYPE_HDR10PLUS);
-          m_bitstream->SetRemoveCuva(hdrPath.target != StreamHdrType::HDR_TYPE_HDRVIVID);
-        }
-        else
-        {
-          m_bitstream->SetRemoveHdr10Plus(false);
-          m_bitstream->SetRemoveCuva(false);
-        }
+        m_bitstream->SetRemoveHdr10Plus(hdrPath.removeHdr10Plus);
+        m_bitstream->SetRemoveCuva(hdrPath.removeCuva);
       }
     }
     else if (!m_has_keyframe && m_bitparser)

@@ -1433,7 +1433,11 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         if (!m_Hdr10PlusTested && !m_removeHdr10Plus && !m_IsHdr10Plus)
           m_IsHdr10Plus = CHevcSei::ContainsHdr10Plus(buf, nal_size);
 
-        if (m_removeHdr10Plus)
+        // Preflight with Contains so a NAL without the target payload
+        // (MDCV, CLL, picture timing, ...) passes through untouched;
+        // Remove* returning empty then only means the NAL consisted
+        // solely of the target message, which is dropped with it.
+        if (m_removeHdr10Plus && CHevcSei::ContainsHdr10Plus(buf, nal_size))
         {
           finalPrefixSeiNalu = CHevcSei::RemoveHdr10PlusFromSeiNalu(buf, nal_size);
 
@@ -1470,7 +1474,8 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
       }
 
       // Remove CUVA SEI if user selected a different HDR format
-      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 && m_removeCuva)
+      if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 &&
+          m_removeCuva && CHevcSei::ContainsCuva(buf_to_write, final_nal_size))
       {
         auto removedNalu = CHevcSei::RemoveCuvaFromSeiNalu(buf_to_write, final_nal_size);
         if (!removedNalu.empty())

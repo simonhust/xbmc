@@ -341,6 +341,12 @@ AMLHdrPath aml_get_hdr_path(bool hasDv, bool hasHdr10Plus, bool hasCuva, StreamH
   // sources.
   const bool vs10Allowed = !hasDv;
 
+  // Multi-HDR selection (SEI stripping) only applies to genuinely mixed
+  // streams; a single-format stream must pass through untouched, otherwise
+  // the strip logic could mis-arm on a lone format present by chance.
+  const int presentFormats = (hasDv ? 1 : 0) + (hasHdr10Plus ? 1 : 0) + (hasCuva ? 1 : 0);
+  const bool mixedStream = presentFormats > 1;
+
   // Priority orders:
   //   DV:     DV > HDR10+ > CUVA
   //   HDR10+: HDR10+ > DV > CUVA
@@ -389,9 +395,11 @@ AMLHdrPath aml_get_hdr_path(bool hasDv, bool hasHdr10Plus, bool hasCuva, StreamH
   }
 
   // Strip the SEI of non-target formats so the decoder only sees the
-  // selected one. DV RPU cannot be stripped here, it goes to the gate.
-  path.removeHdr10Plus = path.target != StreamHdrType::HDR_TYPE_HDR10PLUS;
-  path.removeCuva = path.target != StreamHdrType::HDR_TYPE_HDRVIVID;
+  // selected one. Only armed for mixed streams (see mixedStream); a
+  // single-format stream passes untouched. DV RPU cannot be stripped here,
+  // it goes to the gate.
+  path.removeHdr10Plus = mixedStream && path.target != StreamHdrType::HDR_TYPE_HDR10PLUS;
+  path.removeCuva = mixedStream && path.target != StreamHdrType::HDR_TYPE_HDRVIVID;
 
   // vs10 policy: when the user enabled VS-Engine conversion for the target
   // format, hand the clean single-format stream to DV.
