@@ -2184,10 +2184,6 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   // DEC_CONTROL_FLAG_DISABLE_FAST_POC
   CSysfsPath("/sys/module/amvdec_h264/parameters/dec_control", 4);
 
-  // HDR Vivid passthrough delivery mode (0 auto/EDID, 1 force VSIF, 2 force EMDS)
-  int hdrvivid_mode = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
-      CSettings::SETTING_COREELEC_AMLOGIC_HDRVIVID_MODE);
-  CSysfsPath("/sys/module/amvecm/parameters/cuva_vsif_mode", hdrvivid_mode);
   // Enable VS10 dynamic HDR processing for HDR Vivid / HDR10+ content
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);

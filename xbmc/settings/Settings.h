@@ -472,7 +472,6 @@ public:
   static constexpr auto SETTING_COREELEC_AMLOGIC_DISABLEGUISCALING = "coreelec.amlogic.disableguiscaling";
   static constexpr auto SETTING_COREELEC_AMLOGIC_DV_DISABLE = "coreelec.amlogic.disabledolbyvision";
   static constexpr auto SETTING_COREELEC_AMLOGIC_DV_LED = "coreelec.amlogic.dolbyvisionled";
-  static constexpr auto SETTING_COREELEC_AMLOGIC_HDRVIVID_MODE = "coreelec.amlogic.hdrvividmode";
   static constexpr auto SETTING_COREELEC_AMLOGIC_MULTI_HDR_PRIORITY = "coreelec.amlogic.multihdrstreampriority";
   static constexpr auto SETTING_CACHE_HARDDISK = "cache.harddisk";
   static constexpr auto SETTING_CACHEVIDEO_DVDROM = "cachevideo.dvdrom";

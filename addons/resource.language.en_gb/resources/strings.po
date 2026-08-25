@@ -9143,36 +9143,6 @@ msgctxt "#14427"
 msgid "Player-Led"
 msgstr ""
 
-#. Label for setting "HDR Vivid mode" of label #14428
-#: system/settings/settings.xml
-msgctxt "#14428"
-msgid "HDR Vivid mode"
-msgstr ""
-
-#. Help text for setting "HDR Vivid mode" of label #14429
-#: system/settings/settings.xml
-msgctxt "#14429"
-msgid "Select the HDR Vivid metadata delivery mode. Auto lets the kernel decide via EDID; VSIF and EMDS force a specific delivery format."
-msgstr ""
-
-#. Option label for HDR Vivid mode "Auto" of label #14430
-#: system/settings/settings.xml
-msgctxt "#14430"
-msgid "Auto"
-msgstr ""
-
-#. Option label for HDR Vivid mode "VSIF" of label #14431
-#: system/settings/settings.xml
-msgctxt "#14431"
-msgid "VSIF"
-msgstr ""
-
-#. Option label for HDR Vivid mode "EMDS" of label #14432
-#: system/settings/settings.xml
-msgctxt "#14432"
-msgid "EMDS"
-msgstr ""
-
 #. Label for setting "Multi HDR stream priority" of label #14433
 #: system/settings/settings.xml
 msgctxt "#14433"
