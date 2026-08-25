@@ -311,6 +311,15 @@ bool aml_convert_to_dv_by_vs_engine(StreamHdrType hdrType)
     user_convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV);
   else if (hdrType == StreamHdrType::HDR_TYPE_HDRVIVID)
     user_convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_CUVA2DV);
+  else if (hdrType == StreamHdrType::HDR_TYPE_HLG)
+  {
+    /* HLG must never ride the SDR/HDR conversion knobs: the VS-Engine
+     * would apply SDR input assumptions (no inverse OETF) and the result
+     * is mis-tonemapped output. HLG reaches Dolby Vision through the
+     * kernel-native route instead (dv_hdr_policy HLG absorb) or stays
+     * on the amvecm HLG path when that policy bit is unset. */
+    return false;
+  }
   else
     user_convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR2DV);
 
