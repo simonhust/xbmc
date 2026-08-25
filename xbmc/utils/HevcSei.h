@@ -10,6 +10,7 @@
 
 #include "BitstreamReader.h"
 #include "HDR10Plus.h"
+#include "HDRVivid.h"
 
 #include <optional>
 #include <vector>
@@ -64,6 +65,12 @@ public:
   // Returns a fully decoded Hdr10PlusMetadata or nullopt when the list
   // carries no recognised HDR10+ payload (country 0xB5 / Samsung 0x003C).
   static const std::optional<const Hdr10PlusMetadata> ExtractHdr10Plus(
+      const std::vector<CHevcSei>& messages, const std::vector<uint8_t>& buf);
+
+  // Parses the CUVA 005.1 HDR Vivid metadata out of the SEI messages list.
+  // Returns a fully decoded HdrVividMetadata or nullopt when the list
+  // carries no recognised Vivid payload (country 0x26 / CUVA 0x0004:0x0005).
+  static const std::optional<const HdrVividMetadata> ExtractHdrVivid(
       const std::vector<CHevcSei>& messages, const std::vector<uint8_t>& buf);
 
   // Returns a CUVA HDR Vivid SEI message if present in the list

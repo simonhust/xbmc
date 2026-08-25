@@ -230,6 +230,51 @@ const std::optional<const Hdr10PlusMetadata> CHevcSei::ExtractHdr10Plus(
   return std::nullopt;
 }
 
+// Validates that a User-Data-Registered ITU-T T.35 SEI payload is HDR
+// Vivid (CUVA 005.1:2022). The reader is positioned at the start of the
+// payload (itu_t_t35_country_code) on entry and is consumed by this call.
+static bool IsHdrVividSeiPayload(CBitstreamReader& br, size_t payloadSize)
+{
+  // Minimum bytes needed to safely parse one window:
+  //   5  T.35 header (country + provider + oriented)
+  //   1  system_start_code
+  //   6  four 12-bit maxrgb values
+  //   1  tone_mapping_mode_flag
+  //   1  color_saturation_mapping_flag
+  // = 14 bytes total
+  if (payloadSize < 14)
+    return false;
+
+  const auto countryCode = br.ReadBits(8);
+  const auto providerCode = br.ReadBits(16);
+  const auto orientedCode = br.ReadBits(16);
+
+  if (countryCode != 0x26 || providerCode != 0x0004 || orientedCode != 0x0005)
+    return false;
+
+  const auto systemStartCode = br.ReadBits(8);
+  return systemStartCode >= 0x01 && systemStartCode <= 0x07;
+}
+
+const std::optional<const HdrVividMetadata> CHevcSei::ExtractHdrVivid(
+    const std::vector<CHevcSei>& messages, const std::vector<uint8_t>& buf)
+{
+  for (const CHevcSei& sei : messages)
+  {
+    if (sei.m_payloadType == 4)
+    {
+      CBitstreamReader br(buf.data() + sei.m_payloadOffset, sei.m_payloadSize);
+      if (IsHdrVividSeiPayload(br, sei.m_payloadSize))
+      {
+        CBitstreamReader br2(buf.data() + sei.m_payloadOffset, sei.m_payloadSize);
+        return hdr_vivid_sei_to_metadata(br2);
+      }
+    }
+  }
+
+  return std::nullopt;
+}
+
 bool CHevcSei::ContainsCuva(const uint8_t* inData, const size_t inDataLen)
 {
   std::vector<uint8_t> buf;

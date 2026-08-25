@@ -32,6 +32,8 @@ set(SOURCES ActorProtocol.cpp
             GroupUtils.cpp
             HDR10Plus.cpp
             HDR10PlusConvert.cpp
+            HDRVivid.cpp
+            HDRVividConvert.cpp
             HDRUtils.cpp
             HevcSei.cpp
             BitstreamIoWriter.cpp
@@ -124,6 +126,8 @@ set(HEADERS ActorProtocol.h
             GroupUtils.h
             HDR10Plus.h
             HDR10PlusConvert.h
+            HDRVivid.h
+            HDRVividConvert.h
             HDRCapabilities.h
             HDRUtils.h
             HevcSei.h

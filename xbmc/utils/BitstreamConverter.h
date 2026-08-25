@@ -10,6 +10,8 @@
 
 #include "HDR10Plus.h"
 #include "HDR10PlusConvert.h"
+#include "HDRVivid.h"
+#include "HDRVividConvert.h"
 
 #include "cores/FFmpeg.h"
 
@@ -134,6 +136,7 @@ public:
   {
     m_hdrStaticMetadataInfo = info;
   }
+  void SetConvertHdrVivid(bool value) { m_convertHdrVivid = value; }
   void SetDoviZeroLevel5(bool value) { m_setDoviZeroLevel5 = value; }
   bool GetDoviIsFEL() const { return m_doviIsFEL; }
   void SetDoviIsFEL(bool fel) { m_doviIsFEL = fel; }
@@ -208,6 +211,9 @@ protected:
   HDRStaticMetadataInfo m_hdrStaticMetadataInfo{};
   std::optional<Hdr10PlusMetadata> m_pendingHdr10PlusMeta;
   bool m_pendingHdr10PlusConvert{false};
+  bool m_convertHdrVivid{true};
+  std::optional<HdrVividMetadata> m_pendingHdrVividMeta;
+  bool m_pendingHdrVividConvert{false};
   CDVDStreamInfo* m_hints{nullptr};
   bool m_firstFrame{true};
   bool m_setDoviZeroLevel5;

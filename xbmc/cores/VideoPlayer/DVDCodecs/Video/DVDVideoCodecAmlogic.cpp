@@ -325,6 +325,12 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
           m_bitstream->SetConvertHdr10Plus(true);
           m_bitstream->SetHdr10PlusPeakBrightnessSource(peakBrightnessSource);
         }
+
+        // CUVA HDR Vivid -> Dolby Vision RPU synthesis: always on by default.
+        // When the stream carries CUVA 005.1 SEI the converter synthesises a
+        // true DV profile 8.1 RPU and strips the native Vivid SEI, so Vivid
+        // content plays as DV with real L1 dynamic metadata.
+        m_bitstream->SetConvertHdrVivid(true);
       }
 
       // length-prefix size from the original hvcC, read before the extradata

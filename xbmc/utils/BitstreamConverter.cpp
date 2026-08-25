@@ -1377,10 +1377,13 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
   // detection window before any SEI arrives.
   bool idr_seen = false;
 
-  // Reset the pending HDR10+->DV RPU conversion state per access unit so a
-  // metadata burst cannot leak into a later AU without fresh HDR10+ SEI.
+  // Reset the pending HDR10+->DV and CUVA->DV RPU conversion state per
+  // access unit so a metadata burst cannot leak into a later AU without
+  // fresh source SEI.
   m_pendingHdr10PlusConvert = false;
   m_pendingHdr10PlusMeta.reset();
+  m_pendingHdrVividConvert = false;
+  m_pendingHdrVividMeta.reset();
 
   do
   {
@@ -1494,9 +1497,29 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
         }
       }
 
-      // Remove CUVA SEI if user selected a different HDR format
+      // CUVA HDR Vivid -> Dolby Vision RPU synthesis: parse the CUVA 005.1
+      // payload on the first Vivid SEI of the access unit and hold it until
+      // the end of the AU where the generated DoVi RPU (profile 8.1) NAL is
+      // appended, mirroring the HDR10+ conversion path above.
+      if (write_buf && m_convertHdrVivid && m_IsHdrVivid && !m_pendingHdrVividConvert)
+      {
+        std::vector<uint8_t> vividClearBuf;
+        std::vector<CHevcSei> vividMessages =
+            CHevcSei::ParseSeiRbspUnclearedEmulation(buf_to_write, final_nal_size, vividClearBuf);
+        if (auto vividRes = CHevcSei::ExtractHdrVivid(vividMessages, vividClearBuf))
+        {
+          m_pendingHdrVividMeta = *vividRes;
+          m_pendingHdrVividConvert = true;
+        }
+      }
+
+      // Remove CUVA SEI if user selected a different HDR format, or when the
+      // CUVA->DV RPU conversion is active: the stream must carry only the
+      // synthesized DV metadata, otherwise the kernel DV engine would be
+      // bypassed by its own is_cuva check on every converted frame.
       if (write_buf && unit_type == HEVC_NAL_SEI_PREFIX && final_nal_size >= 7 &&
-          m_removeCuva && CHevcSei::ContainsCuva(buf_to_write, final_nal_size))
+          (m_removeCuva || (m_convertHdrVivid && m_pendingHdrVividConvert)) &&
+          CHevcSei::ContainsCuva(buf_to_write, final_nal_size))
       {
         auto removedNalu = CHevcSei::RemoveCuvaFromSeiNalu(buf_to_write, final_nal_size);
         if (!removedNalu.empty())
@@ -1583,6 +1606,36 @@ bool CBitstreamConverter::BitstreamConvert(uint8_t* pData,
     }
     m_pendingHdr10PlusConvert = false;
     m_pendingHdr10PlusMeta.reset();
+  }
+
+  // Append the synthesized Dolby Vision RPU (profile 8.1) NAL at the end of
+  // the access unit when CUVA HDR Vivid metadata was seen and conversion is
+  // enabled, mirroring the HDR10+ path above.
+  if (m_pendingHdrVividConvert && m_pendingHdrVividMeta.has_value())
+  {
+    auto vividRpuNalu = create_dovi_rpu_nalu_from_vivid(*m_pendingHdrVividMeta,
+                                                        m_hdrStaticMetadataInfo);
+    if (!vividRpuNalu.empty())
+    {
+      BitstreamAllocAndCopy(poutbuf, poutbuf_size, nullptr, 0, vividRpuNalu.data(),
+                            static_cast<uint32_t>(vividRpuNalu.size()), HEVC_NAL_UNSPEC62);
+
+      if (m_firstFrame && m_hints)
+      {
+        m_hints->hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
+        m_hints->dovi.dv_version_major = 1;
+        m_hints->dovi.dv_version_minor = 0;
+        m_hints->dovi.dv_profile = 8;
+        m_hints->dovi.dv_level = 6;
+        m_hints->dovi.rpu_present_flag = 1;
+        m_hints->dovi.el_present_flag = 0;
+        m_hints->dovi.bl_present_flag = 1;
+        m_hints->dovi.dv_bl_signal_compatibility_id = 1;
+        m_firstFrame = false;
+      }
+    }
+    m_pendingHdrVividConvert = false;
+    m_pendingHdrVividMeta.reset();
   }
 
   if (idr_seen)
