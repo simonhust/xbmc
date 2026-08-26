@@ -34,7 +34,10 @@ namespace
 {
 // UHD-BD HDR PGS is BT.2020/PQ authored; SDR PGS is SDR BT.709 (or SDR BT.2020).
 // Only the HDMV PGS codec carries PQ semantics; DVB/other palette subtitles
-// remain SDR even when the video stream is HDR.
+// remain SDR even when the video stream is HDR. HDR PGS handling triggers
+// exactly when the video is HDR10 / HDR10+ / Dolby Vision - content that
+// user-space pre-bakes to sRGB-encoded BT.2020 and the kernel OSD HDR2 core
+// converts sRGB->PQ on (see RendererAML::Configure).
 bool PgsIsPqAuthored(const CDVDStreamInfo& hints)
 {
   if (hints.codec != AV_CODEC_ID_HDMV_PGS_SUBTITLE)
@@ -45,7 +48,6 @@ bool PgsIsPqAuthored(const CDVDStreamInfo& hints)
     case StreamHdrType::HDR_TYPE_HDR10:
     case StreamHdrType::HDR_TYPE_HDR10PLUS:
     case StreamHdrType::HDR_TYPE_DOLBYVISION:
-    case StreamHdrType::HDR_TYPE_HDRVIVID: // CUVA HDR Vivid is PQ/HLG signed, base BT.2020
       return true;
     default:
       return false;

@@ -78,33 +78,27 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // Configure GUI/OSD for HDR PQ when display is in HDR PQ mode
-  bool device_support_dv(aml_support_dolby_vision());
-  bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
-  bool dv_is_used(device_support_dv && !user_dv_disable &&
-    picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION && aml_display_support_dv());
-  bool hdr_is_used((picture.hdrType == StreamHdrType::HDR_TYPE_HLG || picture.color_transfer == AVCOL_TRC_SMPTE2084) &&
-    CServiceBroker::GetWinSystem()->IsHDRDisplay());
-  CLog::Log(LOGDEBUG, "CRendererAML::Configure {}DV support, {}, DV system is {}, HDR is {}", device_support_dv ? "" : "no ",
-    user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled", hdr_is_used ? "used" : "not used");
+  // Configure GUI/OSD for HDR PGS: the trigger is the video being
+  // HDR10/HDR10+/DV content with PGS subtitles. Once triggered the whole
+  // OSD plane (pre-baked GUI + pre-baked PGS) must ride the kernel
+  // sRGB->PQ path regardless of sink capability or DV engine state; on
+  // any other content the OSD stays on the initial SDR path.
+  const bool hdrContent = picture.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                          picture.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                          picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  CLog::Log(LOGDEBUG,
+            "CRendererAML::Configure hdrType={} transfer={} HDR-PGS content={}",
+            static_cast<int>(picture.hdrType), picture.color_transfer, hdrContent);
 
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(dv_is_used | hdr_is_used);
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdrContent);
 
-  // GUI is pre-converted to BT.2020 in userspace (709->2020 shader matrix +
-  // HDR PGS palette pre-bake), while the kernel OSD HDR2 core applies its own
-  // 709->2020 gamut in the SDR_HDR path. Bypass it when outputting HDR so the
-  // gamut conversion is not applied twice.
-  const bool hdrOutput = dv_is_used | hdr_is_used;
-  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOutput ? "1" : "0");
-
-  // Prevent the Dolby Vision core from processing the OSD plane. When the DV
-  // core applies its own EOTF/matrix to the OSD, SDR OSD data is treated as PQ
-  // and saturation is driven to zero. Bypass the DV core and let the amvecm
-  // HDR2 pipeline handle all OSD processing uniformly.
-  // Note: amdv.o is linked into the aml_media module, so the parameter lives
-  // under /sys/module/aml_media (not amdolby_vision).
-  const bool dvActive = (picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", dvActive ? "1" : "0");
+  // OSD reaches amvecm HDR2 with sRGB->PQ transfer applied, and the
+  // 709->2020 gamut bypassed (GUI + PGS are pre-baked to BT.2020 in
+  // userspace). The DV core stays out of the OSD plane. On non-trigger
+  // content these are reset to the SDR passthrough defaults.
+  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrContent ? "1" : "0");
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrContent ? "0" : "1");
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", hdrContent ? "1" : "0");
 
   m_bConfigured = true;
 
