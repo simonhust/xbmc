@@ -2188,18 +2188,22 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
 
-  // OSD plane policy under HDR output. GUI and subtitles stay sRGB BT.709 in
-  // the GLES path (no 709->2020 bake), so the kernel owns all OSD colour
-  // conversion:
-  // - HDR10/HDR10+: the amvecm HDR2 core does the full 709->2020 gamut plus
-  //   sRGB->PQ transfer (osd_gamut_bypass=0, osd_pq_bypass=0).
-  // - Dolby Vision: the DV core handles the OSD (osd_bypass_enable=0).
-  // All three are written to their SDR defaults (0) at open time so a stale
-  // value from a prior playback (e.g. the renderer destructor leaving
-  // osd_pq_bypass=1) never leaks into this stream.
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
+  // OSD plane policy under HDR output (cpm style): the GLES GUI shader
+  // pre-computes the full sRGB->linear->BT.2020->PQ conversion into the OSD
+  // plane, so the kernel must leave the OSD untouched:
+  // - osd_pq_bypass=1 forces the amvecm HDR2 OSD LUT bypass regardless of the
+  //   routing decision (covers DV, where the per-frame amvecm OSD programming
+  //   is short-circuited by the is_amdv_on() early return).
+  // - osd_bypass_enable=1 for Dolby Vision so the DV core leaves the
+  //   GLES-rendered OSD alone as well (the DV core processes the video only).
+  // Non-HDR content stays at defaults (all kernel OSD conversions off).
+  const bool hdrOsd = hints.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                      hints.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                      hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable",
+             hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrOsd ? 1 : 0);
 
   switch(am_private->video_format)
   {

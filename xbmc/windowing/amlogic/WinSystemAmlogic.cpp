@@ -11,6 +11,9 @@
 #include <string.h>
 #include <float.h>
 
+#include <algorithm>
+#include <cmath>
+
 #include "ServiceBroker.h"
 #include "cores/RetroPlayer/process/amlogic/RPProcessInfoAmlogic.h"
 #include "cores/RetroPlayer/rendering/VideoRenderers/RPRendererOpenGLES.h"
@@ -487,6 +490,22 @@ float CWinSystemAmlogic::GetGuiSdrSaturation() const
 
   // UI 0-100, neutral at 50 -> 1.0.
   return saturation / 50.0f;
+}
+
+float CWinSystemAmlogic::GetGuiSdrPeakLuminance() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int guiSdrPeak = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRPEAKLUMINANCE);
+
+  // Shader expects "nits / 100". Exponential curve anchored to 30-1000 nits
+  // over the 0-100 setting, matching the GLES sRGB->PQ shader semantics.
+  constexpr float kMinNits = 30.0f;
+  constexpr float kMaxNits = 1000.0f;
+  const float exponent = std::log(kMaxNits / kMinNits) * (static_cast<float>(guiSdrPeak) / 100.0f);
+  const float sdrWhiteNits =
+      std::clamp(kMinNits * std::exp(exponent), kMinNits, kMaxNits);
+
+  return sdrWhiteNits / 100.0f;
 }
 
 HDR_STATUS CWinSystemAmlogic::GetOSHDRStatus()

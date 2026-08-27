@@ -77,17 +77,20 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // GUI and subtitles stay sRGB BT.709 in the GLES path: no KODI_TRANSFER_PQ
-  // (709->2020) bake is applied to the GUI/OSD plane, so the userspace does
-  // not pre-convert to BT.2020. All OSD colour conversion is owned by the
-  // kernel: the amvecm HDR2 core does the full 709->2020 gamut plus sRGB->PQ
-  // for HDR10/HDR10+, and the DV core handles the OSD for Dolby Vision. The
-  // corresponding kernel params (osd_pq_bypass/osd_gamut_bypass/
-  // osd_bypass_enable) are written in CAMLCodec::OpenDecoder; they are left at
-  // their SDR defaults here.
+  // cpm-style HDR output: the GLES GUI shader (KODI_TRANSFER_PQ) performs the
+  // full sRGB->linear->BT.2020->PQ conversion of the GUI/OSD plane, and the
+  // kernel is told (CAMLCodec::OpenDecoder osd_pq_bypass=1) plus routed
+  // (HDR_BYPASS for HDR sources) to leave the OSD untouched. SetTransferPQ
+  // drives the shader variant; it must be true for any HDR10/HDR10+/DV content
+  // so the OSD matches the HDR/PQ video output. On SDR content it stays false.
+  const bool hdrContent = picture.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                          picture.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                          picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
   CLog::Log(LOGDEBUG,
-            "CRendererAML::Configure hdrType={} transfer={}",
-            static_cast<int>(picture.hdrType), picture.color_transfer);
+            "CRendererAML::Configure hdrType={} transfer={} hdrContent={}",
+            static_cast<int>(picture.hdrType), picture.color_transfer, hdrContent);
+
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdrContent);
 
   m_bConfigured = true;
 

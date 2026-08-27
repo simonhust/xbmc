@@ -1015,6 +1015,7 @@
               <condition>HAS_DX</condition>
               <condition>HAS_MEDIACODEC</condition>
               <condition>HAVE_WEBOS</condition>
+              <condition>HAVE_AMCODEC</condition>
             </or>
           </requirement>
           <dependencies>
@@ -1027,7 +1028,37 @@
             </dependency>
           </dependencies>
           <level>2</level>
-          <default>40</default>
+          <default>50</default>
+          <control type="slider" format="percentage" range="0,100" />
+        </setting>
+        <setting id="subtitles.hdrpgspeakluminance" type="integer" label="39212" help="39213">
+          <requirement>
+            <or>
+              <condition>HAS_DX</condition>
+              <condition>HAS_MEDIACODEC</condition>
+              <condition>HAVE_WEBOS</condition>
+            </or>
+          </requirement>
+          <dependencies>
+            <dependency type="visible" on="property" name="ishdrdisplay"/>
+          </dependencies>
+          <level>2</level>
+          <default>50</default>
+          <control type="slider" format="percentage" range="0,100" />
+        </setting>
+        <setting id="subtitles.hdrpgssaturation" type="integer" label="39214" help="39215">
+          <requirement>
+            <or>
+              <condition>HAS_DX</condition>
+              <condition>HAS_MEDIACODEC</condition>
+              <condition>HAVE_WEBOS</condition>
+            </or>
+          </requirement>
+          <dependencies>
+            <dependency type="visible" on="property" name="ishdrdisplay"/>
+          </dependencies>
+          <level>2</level>
+          <default>50</default>
           <control type="slider" format="percentage" range="0,100" />
         </setting>
       </group>
