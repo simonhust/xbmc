@@ -24867,30 +24867,6 @@ msgctxt "#39211"
 msgid "HDR appearance"
 msgstr ""
 
-#. Label for setting "HDR PGS peak luminance" of label #39212
-#: system/settings/settings.xml
-msgctxt "#39212"
-msgid "HDR PGS peak luminance"
-msgstr ""
-
-#. Help text for setting "HDR PGS peak luminance" of label #39212
-#: system/settings/settings.xml
-msgctxt "#39213"
-msgid "Adjust the peak luminance of PGS subtitles in HDR mode."
-msgstr ""
-
-#. Label for setting "HDR PGS saturation" of label #39214
-#: system/settings/settings.xml
-msgctxt "#39214"
-msgid "HDR PGS saturation"
-msgstr ""
-
-#. Help text for setting "HDR PGS saturation" of label #39214
-#: system/settings/settings.xml
-msgctxt "#39215"
-msgid "Adjust the colour saturation of PGS subtitles in HDR mode."
-msgstr ""
-
 #. Label for setting "GUI SDR saturation" of label #39216
 #: system/settings/settings.xml
 msgctxt "#39216"

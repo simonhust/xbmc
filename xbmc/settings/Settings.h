@@ -184,8 +184,6 @@ public:
   static constexpr auto SETTING_SUBTITLES_DOWNLOADFIRST = "subtitles.downloadfirst";
   static constexpr auto SETTING_SUBTITLES_TV = "subtitles.tv";
   static constexpr auto SETTING_SUBTITLES_MOVIE = "subtitles.movie";
-  static constexpr auto SETTING_SUBTITLES_HDRPGSPEAKLUMINANCE = "subtitles.hdrpgspeakluminance";
-  static constexpr auto SETTING_SUBTITLES_HDRPGSSATURATION = "subtitles.hdrpgssaturation";
   static constexpr auto SETTING_SUBTITLES_GUISDRSATURATION = "subtitles.guisdrsaturation";
   static constexpr auto SETTING_SUBTITLES_GUISDRPEAKLUMINANCE = "subtitles.guisdrpeakluminance";
   static constexpr auto SETTING_DVDS_AUTORUN = "dvds.autorun";

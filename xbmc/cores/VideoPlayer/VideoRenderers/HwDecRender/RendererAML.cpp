@@ -92,13 +92,10 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
 
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdrContent);
 
-  // OSD reaches amvecm HDR2 with sRGB->PQ transfer applied, and the
-  // 709->2020 gamut bypassed (GUI + PGS are pre-baked to BT.2020 in
-  // userspace). The DV core stays out of the OSD plane. On non-trigger
-  // content these are reset to the SDR passthrough defaults.
-  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrContent ? "1" : "0");
-  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrContent ? "0" : "1");
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", hdrContent ? "1" : "0");
+  // The kernel OSD params (osd_pq_bypass, osd_gamut_bypass, osd_bypass_enable)
+  // are left at their defaults so the HDR2 core does the full 709->2020 gamut
+  // plus sRGB->PQ transfer when the video layer is BT.2020 (bypass_hdr_process
+  // gate). The userspace keeps GUI and PGS as sRGB BT.709.
 
   m_bConfigured = true;
 
