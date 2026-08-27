@@ -312,10 +312,14 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
       m_bitstream->SetHints(&m_hints);
       m_bitstream->Open(m_hints.codec, m_hints.extradata.GetData(), m_hints.extradata.GetSize(), true);
 
-      // HDR10+ -> Dolby Vision RPU synthesis: when enabled and the stream
-      // turns out to carry HDR10+ ST 2094-40 SEI, the converter generates a
-      // true DV profile 8.1 RPU NAL per access unit instead of relying on the
-      // kernel-side absorption (which loses the DV dynamic metadata).
+      // HDR -> Dolby Vision RPU synthesis: when enabled, the converter generates a
+      // true DV profile 8.1 RPU NAL per access unit from the HDR10+ ST 2094-40
+      // or CUVA HDR Vivid metadata instead of relying on the kernel-side
+      // absorption (which loses the DV dynamic metadata). The peak-brightness
+      // source selection applies to the HDR10+ conversion only; HDR Vivid uses
+      // the fixed MDCV-referenced strategy in HDRVividConvert. The legacy
+      // coreelec.amlogic.cuva2dv toggle remains an independent way to arm the
+      // HDR Vivid conversion.
       {
         const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
         if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_CONVERT))
@@ -324,6 +328,7 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
               settings->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_PEAK_BRIGHTNESS_SOURCE));
           m_bitstream->SetConvertHdr10Plus(true);
           m_bitstream->SetHdr10PlusPeakBrightnessSource(peakBrightnessSource);
+          m_bitstream->SetConvertHdrVivid(true);
         }
 
         // CUVA HDR Vivid -> Dolby Vision RPU synthesis. Only armed when the user
