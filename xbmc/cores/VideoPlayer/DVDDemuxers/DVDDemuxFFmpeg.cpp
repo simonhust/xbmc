@@ -1775,13 +1775,32 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
         // https://github.com/FFmpeg/FFmpeg/blob/release/7.0/doc/APIchanges
         const AVPacketSideData* sideData = nullptr;
 
+        // A genuine P7 enhancement layer is reduced resolution (typically
+        // half of the base layer in each dimension). A second full-resolution
+        // HEVC video track (e.g. the HDR10 alternative in a "DV.HDR" dual-track
+        // MKV) is NOT an EL: only treat it as the DV EL when it is lower-res
+        // than the first video track, so such files play the first (DV) track
+        // alone instead of marking every packet dual-stream and starving the
+        // paired decoders waiting for an EL that never arrives.
+        bool elLowerRes = false;
+        {
+          const CDemuxStream* bl_stream = GetStream(0);
+          if (bl_stream && bl_stream->type == StreamType::VIDEO)
+          {
+            const auto* bl_video = static_cast<const CDemuxStreamVideo*>(bl_stream);
+            elLowerRes = (st->iWidth < bl_video->iWidth || st->iHeight < bl_video->iHeight);
+          }
+        }
+
 if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY) && pStream->id == 0x1015) ||
     // Non-BluRay dual-track DV (e.g. MKV/MP4 DTDL, standalone M2TS):
-    // a second HEVC video stream is the DV enhancement layer
+    // a second HEVC video stream is the DV enhancement layer - and only then.
+    // A parallel full-resolution track must not mark the file dual-stream.
     (!(m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY)) &&
      pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
-     pStream->codecpar->codec_id == AV_CODEC_ID_HEVC)))
+     pStream->codecpar->codec_id == AV_CODEC_ID_HEVC &&
+     elLowerRes)))
 {
   m_dv_dual_stream = true;
   if (m_pInput && m_pInput->IsStreamType(DVDSTREAM_TYPE_BLURAY))
