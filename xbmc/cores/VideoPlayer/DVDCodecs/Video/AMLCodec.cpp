@@ -2188,17 +2188,17 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
 
-  // OSD plane policy under HDR output: the DV core must leave the OSD to
-  // the amvecm HDR2 core, which converts the sRGB-encoded GUI/PGS content
-  // into the PQ domain (EOTF->OETF). Kodi pre-converts the whole OSD to
-  // BT.2020 in userspace (709->2020 shader matrix for GUI, HDR PGS palette
-  // pre-bake), so osd_gamut_bypass skips the kernel's own 709->2020 matrix -
-  // applying both would shift hues. Written unconditionally at open time; the
-  // RendererAML::Configure refines them for the display mode. The RendererAML
-  // destructor restores them to SDR defaults when playback ends so stale HWR
-  // values do not persist on the SDR GUI.
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 1);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 1);
+  // OSD plane policy under HDR output. GUI and subtitles stay sRGB BT.709 in
+  // the GLES path (no 709->2020 bake), so the kernel owns all OSD colour
+  // conversion:
+  // - HDR10/HDR10+: the amvecm HDR2 core does the full 709->2020 gamut plus
+  //   sRGB->PQ transfer (osd_gamut_bypass=0, osd_pq_bypass=0).
+  // - Dolby Vision: the DV core handles the OSD (osd_bypass_enable=0).
+  // All three are written to their SDR defaults (0) at open time so a stale
+  // value from a prior playback (e.g. the renderer destructor leaving
+  // osd_pq_bypass=1) never leaks into this stream.
+  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
 
   switch(am_private->video_format)

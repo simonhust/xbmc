@@ -38,12 +38,11 @@ CRendererAML::~CRendererAML()
   Reset();
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
 
-  // Restore kernel OSD pipeline to SDR defaults. OpenDecoder writes
-  // HDR-output values (osd_pq_bypass=0, osd_gamut_bypass=1) that must
-  // be reverted when the renderer is torn down, otherwise the GUI
-  // appears washed out (PQ-encoded GUI on SDR gamma) or shows wrong
-  // colours when the next video's OpenDecoder runs before the new
-  // RendererAML::Configure has a chance to correct them.
+  // Restore the kernel OSD pipeline to the SDR state. OpenDecoder writes the
+  // OSD params at their SDR defaults (osd_pq_bypass=0, osd_gamut_bypass=0,
+  // osd_bypass_enable=0); on teardown we force osd_pq_bypass=1 so the GUI
+  // (sRGB BT.709, no GLES bake) passes through unconverted on the SDR sink
+  // instead of being washed out by a PQ encode on SDR gamma.
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
@@ -78,24 +77,17 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // Configure GUI/OSD for HDR PGS: the trigger is the video being
-  // HDR10/HDR10+/DV content with PGS subtitles. Once triggered the whole
-  // OSD plane (pre-baked GUI + pre-baked PGS) must ride the kernel
-  // sRGB->PQ path regardless of sink capability or DV engine state; on
-  // any other content the OSD stays on the initial SDR path.
-  const bool hdrContent = picture.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
-                          picture.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
-                          picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  // GUI and subtitles stay sRGB BT.709 in the GLES path: no KODI_TRANSFER_PQ
+  // (709->2020) bake is applied to the GUI/OSD plane, so the userspace does
+  // not pre-convert to BT.2020. All OSD colour conversion is owned by the
+  // kernel: the amvecm HDR2 core does the full 709->2020 gamut plus sRGB->PQ
+  // for HDR10/HDR10+, and the DV core handles the OSD for Dolby Vision. The
+  // corresponding kernel params (osd_pq_bypass/osd_gamut_bypass/
+  // osd_bypass_enable) are written in CAMLCodec::OpenDecoder; they are left at
+  // their SDR defaults here.
   CLog::Log(LOGDEBUG,
-            "CRendererAML::Configure hdrType={} transfer={} HDR-PGS content={}",
-            static_cast<int>(picture.hdrType), picture.color_transfer, hdrContent);
-
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdrContent);
-
-  // The kernel OSD params (osd_pq_bypass, osd_gamut_bypass, osd_bypass_enable)
-  // are left at their defaults so the HDR2 core does the full 709->2020 gamut
-  // plus sRGB->PQ transfer when the video layer is BT.2020 (bypass_hdr_process
-  // gate). The userspace keeps GUI and PGS as sRGB BT.709.
+            "CRendererAML::Configure hdrType={} transfer={}",
+            static_cast<int>(picture.hdrType), picture.color_transfer);
 
   m_bConfigured = true;
 
