@@ -211,7 +211,7 @@ protected:
   HDRStaticMetadataInfo m_hdrStaticMetadataInfo{};
   std::optional<Hdr10PlusMetadata> m_pendingHdr10PlusMeta;
   bool m_pendingHdr10PlusConvert{false};
-  bool m_convertHdrVivid{true};
+  bool m_convertHdrVivid{false};
   std::optional<HdrVividMetadata> m_pendingHdrVividMeta;
   bool m_pendingHdrVividConvert{false};
   CDVDStreamInfo* m_hints{nullptr};
