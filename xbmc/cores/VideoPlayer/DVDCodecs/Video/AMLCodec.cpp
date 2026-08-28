@@ -2200,9 +2200,16 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   // - osd_bypass_enable=1 for Dolby Vision so the DV core leaves the
   //   GLES-rendered OSD alone as well (the DV core processes the video only).
   // Non-HDR content stays at defaults (all kernel OSD conversions off).
-  const bool hdrOsd = hints.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
-                      hints.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
-                      hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  // The bake only matches the output when the sink actually displays PQ.
+  // Resolve the decision from the sink capability (EDID hdr_cap/dv_cap) like
+  // cpm's final-output-mode resolution: on an SDR-only sink the DV core
+  // converts the video to SDR8/SDR10 and the GLES-baked PQ OSD would be
+  // misread as SDR (green/washed OSD), so keep the GUI sRGB and let the
+  // kernel pass the OSD through untouched on the SDR path.
+  const bool sourceHdr = hints.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                         hints.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                         hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  const bool hdrOsd = sourceHdr && CServiceBroker::GetWinSystem()->IsHDRDisplay();
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable",
              hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOsd ? 1 : 0);

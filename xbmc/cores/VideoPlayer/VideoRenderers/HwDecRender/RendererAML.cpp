@@ -81,11 +81,14 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   // full sRGB->linear->BT.2020->PQ conversion of the GUI/OSD plane, and the
   // kernel is told (CAMLCodec::OpenDecoder osd_pq_bypass=1) plus routed
   // (HDR_BYPASS for HDR sources) to leave the OSD untouched. SetTransferPQ
-  // drives the shader variant; it must be true for any HDR10/HDR10+/DV content
-  // so the OSD matches the HDR/PQ video output. On SDR content it stays false.
-  const bool hdrContent = picture.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
-                          picture.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
-                          picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  // drives the shader variant; it must only be true when the sink actually
+  // outputs PQ (HDR sink). On an SDR-only sink the DV core / amvecm convert
+  // the video to SDR, so the OSD must stay plain sRGB (a baked PQ OSD would
+  // be misread as SDR and show a green/washed cast).
+  const bool sourceHdr = picture.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                         picture.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                         picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
+  const bool hdrContent = sourceHdr && CServiceBroker::GetWinSystem()->IsHDRDisplay();
   CLog::Log(LOGDEBUG,
             "CRendererAML::Configure hdrType={} transfer={} hdrContent={}",
             static_cast<int>(picture.hdrType), picture.color_transfer, hdrContent);
