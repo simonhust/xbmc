@@ -2194,6 +2194,9 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   // - osd_pq_bypass=1 forces the amvecm HDR2 OSD LUT bypass regardless of the
   //   routing decision (covers DV, where the per-frame amvecm OSD programming
   //   is short-circuited by the is_amdv_on() early return).
+  // - osd_gamut_bypass=1 skips the HDR2 gamut matrix, which would otherwise
+  //   re-apply a 709->2020 conversion on the already BT.2020-baked plane
+  //   (double gamut -> green OSD once the plane carries visible content).
   // - osd_bypass_enable=1 for Dolby Vision so the DV core leaves the
   //   GLES-rendered OSD alone as well (the DV core processes the video only).
   // Non-HDR content stays at defaults (all kernel OSD conversions off).
@@ -2202,7 +2205,7 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
                       hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable",
              hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION ? 1 : 0);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOsd ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrOsd ? 1 : 0);
 
   switch(am_private->video_format)
