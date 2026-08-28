@@ -821,12 +821,19 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
             /* EL has EP_map: use simple single-queue pairing */
             bool dual_layer_converted = false;
 
+            // qData/qSize/qIsEL need to outlive the front() scope: the pair
+            // latch below uses them after the block, before pop_front frees the
+            // underlying buffer. Kept non-const for Convert(uint8_t*,...).
+            uint8_t *qData = nullptr;
+            uint32_t qSize = 0;
+            bool qIsEL = false;
+
             if (!m_packages.empty())
             {
               DLDemuxPacket queued = m_packages.front();
-              uint8_t *qData = std::get<0>(queued);
-              uint32_t qSize = std::get<1>(queued);
-              bool qIsEL = std::get<2>(queued);
+              qData = std::get<0>(queued);
+              qSize = std::get<1>(queued);
+              qIsEL = std::get<2>(queued);
 
               if (qIsEL != packet.isELPackage)
               {
@@ -909,12 +916,19 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
             bool dual_layer_converted = false;
 
+            // qData/qSize/qIsEL need to outlive the front() scope: the pair
+            // latch below uses them after the block, before pop_front frees the
+            // underlying buffer. Kept non-const for Convert(uint8_t*,...).
+            uint8_t *qData = nullptr;
+            uint32_t qSize = 0;
+            bool qIsEL = false;
+
             if (!m_packages.empty())
             {
               DLDemuxPacket queued = m_packages.front();
-              uint8_t *qData = std::get<0>(queued);
-              uint32_t qSize = std::get<1>(queued);
-              bool qIsEL = std::get<2>(queued);
+              qData = std::get<0>(queued);
+              qSize = std::get<1>(queued);
+              qIsEL = std::get<2>(queued);
 
               if (qIsEL != packet.isELPackage)
               {
