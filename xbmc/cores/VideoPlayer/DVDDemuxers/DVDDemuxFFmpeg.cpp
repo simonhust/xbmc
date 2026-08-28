@@ -21,6 +21,7 @@
 #include "cores/MenuType.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h" // for DVD_TIME_BASE
 #include "DVDCodecs/DVDCodecUtils.h"
+#include "DVDCodecs/Video/AMLMetaLatch.h"
 #include "DemuxMVC.h"
 #include "filesystem/CurlFile.h"
 #include "filesystem/Directory.h"
@@ -1223,6 +1224,48 @@ if (m_pFormatContext->streams[pPacket->iStreamId]->codecpar &&
         pPacket->isDualStream = m_dv_dual_stream;
         pPacket->isELPackage = (stream->uniqueId > 0) ? m_dv_dual_stream : false;
         pPacket->isNoElEpMap = m_dv_no_el_epmap;
+
+        // Latch live DV/HDR metadata from the untouched demuxer payload, before
+        // the codec's bitstream conversion can rewrite (zero L5, convert to
+        // 8.1) or strip it. Every packet - single track, BL and EL of a dual
+        // track - passes through here exactly once, so this is the single grab
+        // point; the Amlogic codec folds the attached values into its
+        // per-frame metadata. The RPU is latched whole: the full NAL carries
+        // the L1/L5/L6 levels the sidedata consumer parses with libdovi.
+        CDemuxStreamVideo* videoStream = static_cast<CDemuxStreamVideo*>(stream);
+        // isDualStream covers DT-DL: the EL track's own hdr_type can be NONE
+        // even though the pair is Dolby Vision, and the EL packet carries the
+        // RPU that must be latched for the sidedata consumer.
+        if (pPacket->pData && pPacket->iSize > 0 &&
+            (pPacket->isDualStream || videoStream->hdr_type != StreamHdrType::HDR_TYPE_NONE))
+        {
+          AMLMetaLatch meta;
+          if (stream->codec == AV_CODEC_ID_HEVC)
+          {
+            // length-prefix size from the original hvcC, stays 0 for Annex-B
+            int nalLengthSize = 0;
+            if (stream->extraData.GetSize() > 21 && stream->extraData.GetData()[0] == 1)
+              nalLengthSize = (stream->extraData.GetData()[21] & 0x3) + 1;
+            AMLLatchHevcDoviRpu(pPacket->pData, pPacket->iSize, nalLengthSize, meta);
+            AMLLatchHevcSei(pPacket->pData, pPacket->iSize, nalLengthSize, meta);
+          }
+          else if (stream->codec == AV_CODEC_ID_AV1)
+            AMLLatchAv1Metadata(pPacket->pData, pPacket->iSize, meta);
+
+          // HDR10+ carried as packet side data, in addition to any in-band
+          // prefix SEI already covered by AMLLatchHevcSei
+          const AVPacketSideData* hdr10p = av_packet_side_data_get(
+              static_cast<AVPacketSideData*>(pPacket->pSideData), pPacket->iSideDataElems,
+              AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW);
+          if (hdr10p && hdr10p->size)
+            AMLLatchHdr10PlusT35(hdr10p->data, hdr10p->size, meta);
+
+          pPacket->doviRpu = std::move(meta.doviRpu);
+          pPacket->hdr10pSei = std::move(meta.hdr10pSei);
+          pPacket->cuvaSei = std::move(meta.cuvaSei);
+          pPacket->hdrMdcv = std::move(meta.hdrMdcv);
+          pPacket->hdrCll = std::move(meta.hdrCll);
+        }
       }
       /* Non-video-specific flags: set for all packet types (audio, subtitle, etc.) */
       pPacket->isMultiClip = m_dv_multi_clip;
