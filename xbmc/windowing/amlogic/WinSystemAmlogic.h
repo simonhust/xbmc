@@ -47,6 +47,8 @@ public:
   float GetHdrPgsPeakLuminance() const override;
   HDR_STATUS GetOSHDRStatus() override;
 
+  CAMLDisplay* GetAmlDisplay() const { return m_amlDisplay.get(); }
+
   bool Hide() override;
   bool Show(bool show = true) override;
   virtual void Register(IDispResource *resource);
