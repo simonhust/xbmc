@@ -11,6 +11,8 @@
 #include "TimingConstants.h"
 #include "addons/kodi-dev-kit/include/kodi/c-api/addon-instance/inputstream/demux_packet.h"
 
+#include <string>
+
 #define DMX_SPECIALID_STREAMINFO DEMUX_SPECIALID_STREAMINFO
 #define DMX_SPECIALID_STREAMCHANGE DEMUX_SPECIALID_STREAMCHANGE
 
@@ -69,6 +71,13 @@ extern "C"
     double m_seekTime;
     /// @brief The 3D MVC subtitle plane
     int subtitlePlane;
+    //! @brief Live DV/HDR metadata latched by the demuxer from the untouched
+    //! payload (base64-encoded, empty when the packet carried none).
+    std::string doviRpu;
+    std::string hdr10pSei;
+    std::string cuvaSei;
+    std::string hdrMdcv;
+    std::string hdrCll;
   };
 
 #ifdef __cplusplus

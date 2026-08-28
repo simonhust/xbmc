@@ -116,7 +116,6 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
   m_hints = hints;
   m_hints.pClock = hints.pClock;
 
-  m_nalLengthSize = 0;
   m_streamMeta = {};
   m_stripHdr10Plus = false;
   m_metadataSequencer.Reset();
@@ -340,11 +339,6 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
         if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_CUVA2DV))
           m_bitstream->SetConvertHdrVivid(true);
       }
-
-      // length-prefix size from the original hvcC, read before the extradata
-      // below becomes Annex-B. Stays 0 for Annex-B input
-      if (m_hints.extradata.GetSize() > 21 && m_hints.extradata.GetData()[0] == 1)
-        m_nalLengthSize = (m_hints.extradata.GetData()[21] & 0x3) + 1;
 
       // check for hevc-hvcC and convert to h265-annex-b
       if (m_hints.extradata && !m_hints.cryptoSession)
@@ -629,17 +623,6 @@ bool CDVDVideoCodecAmlogic::DualLayerTryPair()
 
   if (converted)
   {
-    // Latch at pair completion, matching upstream: for DT-DL the DV RPU rides
-    // the EL package and the static SEIs (MDCV/CLL/HDR10+) ride the BL one.
-    // Latching from BL at ingress only would leave doviRpu empty for dual-track
-    // streams and the sidedata consumer would see no cm_version / EL / L1.
-    AMLLatchHevcDoviRpu(el_data, el_size, m_nalLengthSize, m_pendingMeta);
-    AMLLatchHevcSei(bl_data, bl_size, m_nalLengthSize, m_pendingMeta);
-    if (!m_pendingMeta.hdrMdcv.empty())
-      m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
-    if (!m_pendingMeta.hdrCll.empty())
-      m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
-
     KODI::MEMORY::AlignedFree(bl_data);
     KODI::MEMORY::AlignedFree(el_data);
 
@@ -695,52 +678,29 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
       m_pendingMeta.structure = m_streamMeta.structure;
     }
 
-    // latch from the original demuxer payload, before Convert() can strip or
-    // rewrite it. For dual-track streams the RPU lives in the base layer, so
-    // it is latched from the BL packets as they arrive (the EL carries its
-    // own static SEIs with different values); this covers both the single
-    // queue (m_packages) and the dual queue (m_bl_packages/m_el_packages)
-    // pairing paths, which share this entry point.
-    if (!packet.isDualStream && m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE)
+    // The demuxer latched live DV/HDR metadata (whole RPU NAL with L1/L5/L6,
+    // static SEIs, HDR10+/CUVA T.35) from the untouched payload and attached
+    // it to the packet; fold it into the per-frame metadata here. The
+    // persistent statics repeat rarely, so they also land on the stream meta
+    // where a skip cannot drop them; empty fields keep their carried value via
+    // the Inherit below.
+    if (m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE)
     {
-      switch(m_hints.codec)
+      if (!packet.doviRpu.empty())
+        m_pendingMeta.doviRpu = packet.doviRpu;
+      if (!packet.hdr10pSei.empty())
+        m_pendingMeta.hdr10pSei = packet.hdr10pSei;
+      if (!packet.cuvaSei.empty())
+        m_pendingMeta.cuvaSei = packet.cuvaSei;
+      if (!packet.hdrMdcv.empty())
       {
-        case AV_CODEC_ID_HEVC:
-          AMLLatchHevcDoviRpu(pData, iSize, m_nalLengthSize, m_pendingMeta);
-          AMLLatchHevcSei(pData, iSize, m_nalLengthSize, m_pendingMeta);
-          // the statics repeat rarely, so they persist where a skip cannot drop them
-          if (!m_pendingMeta.hdrMdcv.empty())
-            m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
-          if (!m_pendingMeta.hdrCll.empty())
-            m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
-          break;
-        case AV_CODEC_ID_AV1:
-          AMLLatchAv1Metadata(pData, iSize, m_pendingMeta);
-          break;
-        default:
-          break;
+        m_pendingMeta.hdrMdcv = packet.hdrMdcv;
+        m_streamMeta.hdrMdcv = packet.hdrMdcv;
       }
-    }
-    else if (packet.isDualStream && !packet.isELPackage &&
-             m_hints.hdrType != StreamHdrType::HDR_TYPE_NONE)
-    {
-      // latch from packet.pData, the untouched demuxer payload, before the
-      // packet is queued for either pairing path
-      switch(m_hints.codec)
+      if (!packet.hdrCll.empty())
       {
-        case AV_CODEC_ID_HEVC:
-          AMLLatchHevcDoviRpu(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
-          AMLLatchHevcSei(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
-          if (!m_pendingMeta.hdrMdcv.empty())
-            m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
-          if (!m_pendingMeta.hdrCll.empty())
-            m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
-          break;
-        case AV_CODEC_ID_AV1:
-          AMLLatchAv1Metadata(packet.pData, packet.iSize, m_pendingMeta);
-          break;
-        default:
-          break;
+        m_pendingMeta.hdrCll = packet.hdrCll;
+        m_streamMeta.hdrCll = packet.hdrCll;
       }
     }
 
@@ -821,19 +781,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
             /* EL has EP_map: use simple single-queue pairing */
             bool dual_layer_converted = false;
 
-            // qData/qSize/qIsEL need to outlive the front() scope: the pair
-            // latch below uses them after the block, before pop_front frees the
-            // underlying buffer. Kept non-const for Convert(uint8_t*,...).
-            uint8_t *qData = nullptr;
-            uint32_t qSize = 0;
-            bool qIsEL = false;
-
             if (!m_packages.empty())
             {
               DLDemuxPacket queued = m_packages.front();
-              qData = std::get<0>(queued);
-              qSize = std::get<1>(queued);
-              qIsEL = std::get<2>(queued);
+              uint8_t *qData = std::get<0>(queued);
+              uint32_t qSize = std::get<1>(queued);
+              bool qIsEL = std::get<2>(queued);
 
               if (qIsEL != packet.isELPackage)
               {
@@ -846,24 +799,6 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
             if (dual_layer_converted)
             {
-              // Latch at pair completion, mirroring upstream: the DV RPU rides
-              // the EL package, the static SEIs (MDCV/CLL/HDR10+) the BL one.
-              const bool curIsEL = packet.isELPackage;
-              if (curIsEL)
-              {
-                AMLLatchHevcDoviRpu(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
-                AMLLatchHevcSei(qData, qSize, m_nalLengthSize, m_pendingMeta);
-              }
-              else
-              {
-                AMLLatchHevcDoviRpu(qData, qSize, m_nalLengthSize, m_pendingMeta);
-                AMLLatchHevcSei(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
-              }
-              if (!m_pendingMeta.hdrMdcv.empty())
-                m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
-              if (!m_pendingMeta.hdrCll.empty())
-                m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
-
               KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
               m_packages.pop_front();
             }
@@ -916,19 +851,12 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
             bool dual_layer_converted = false;
 
-            // qData/qSize/qIsEL need to outlive the front() scope: the pair
-            // latch below uses them after the block, before pop_front frees the
-            // underlying buffer. Kept non-const for Convert(uint8_t*,...).
-            uint8_t *qData = nullptr;
-            uint32_t qSize = 0;
-            bool qIsEL = false;
-
             if (!m_packages.empty())
             {
               DLDemuxPacket queued = m_packages.front();
-              qData = std::get<0>(queued);
-              qSize = std::get<1>(queued);
-              qIsEL = std::get<2>(queued);
+              uint8_t *qData = std::get<0>(queued);
+              uint32_t qSize = std::get<1>(queued);
+              bool qIsEL = std::get<2>(queued);
 
               if (qIsEL != packet.isELPackage)
               {
@@ -941,24 +869,6 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
             if (dual_layer_converted)
             {
-              // Latch at pair completion, mirroring upstream: the DV RPU rides
-              // the EL package, the static SEIs (MDCV/CLL/HDR10+) the BL one.
-              const bool curIsEL = packet.isELPackage;
-              if (curIsEL)
-              {
-                AMLLatchHevcDoviRpu(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
-                AMLLatchHevcSei(qData, qSize, m_nalLengthSize, m_pendingMeta);
-              }
-              else
-              {
-                AMLLatchHevcDoviRpu(qData, qSize, m_nalLengthSize, m_pendingMeta);
-                AMLLatchHevcSei(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
-              }
-              if (!m_pendingMeta.hdrMdcv.empty())
-                m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
-              if (!m_pendingMeta.hdrCll.empty())
-                m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
-
               KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
               m_packages.pop_front();
               /* First BL+EL pair succeeded - disable seek filter */
@@ -1160,13 +1070,10 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
                                                                  packet.iSideDataElems,
                                                                  AV_PKT_DATA_DYNAMIC_HDR10_PLUS_RAW);
 
-      if (sideData && sideData->size)
-      {
-        AMLLatchHdr10PlusT35(sideData->data, sideData->size, m_pendingMeta);
-        if (m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
-          CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr10p data with size {}", __FUNCTION__,
-            sideData->size);
-      }
+      if (sideData && sideData->size &&
+          m_Codec->AddHDR10PData(sideData->data, sideData->size) < 0)
+        CLog::Log(LOGWARNING, "CDVDVideoCodecAmlogic::{}: failed to set hdr10p data with size {}", __FUNCTION__,
+          sideData->size);
     }
 
     double used_dts = (m_last_dts != DVD_NOPTS_VALUE) ? m_last_dts : packet.dts;
