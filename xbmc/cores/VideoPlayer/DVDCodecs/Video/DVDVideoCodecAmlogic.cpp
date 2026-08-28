@@ -626,17 +626,32 @@ bool CDVDVideoCodecAmlogic::DualLayerTryPair()
   uint32_t el_size = std::get<1>(el_pkt);
 
   bool converted = m_bitstream->Convert(bl_data, bl_size, el_data, el_size);
-  KODI::MEMORY::AlignedFree(bl_data);
-  KODI::MEMORY::AlignedFree(el_data);
 
   if (converted)
   {
+    // Latch at pair completion, matching upstream: for DT-DL the DV RPU rides
+    // the EL package and the static SEIs (MDCV/CLL/HDR10+) ride the BL one.
+    // Latching from BL at ingress only would leave doviRpu empty for dual-track
+    // streams and the sidedata consumer would see no cm_version / EL / L1.
+    AMLLatchHevcDoviRpu(el_data, el_size, m_nalLengthSize, m_pendingMeta);
+    AMLLatchHevcSei(bl_data, bl_size, m_nalLengthSize, m_pendingMeta);
+    if (!m_pendingMeta.hdrMdcv.empty())
+      m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
+    if (!m_pendingMeta.hdrCll.empty())
+      m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
+
+    KODI::MEMORY::AlignedFree(bl_data);
+    KODI::MEMORY::AlignedFree(el_data);
+
     m_last_pData = m_bitstream->GetConvertBuffer();
     m_last_iSize = m_bitstream->GetConvertSize();
     m_last_dts = bl_dts;
     m_last_added = true;
     return true;
   }
+
+  KODI::MEMORY::AlignedFree(bl_data);
+  KODI::MEMORY::AlignedFree(el_data);
 
   return false;
 }
@@ -824,6 +839,24 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
             if (dual_layer_converted)
             {
+              // Latch at pair completion, mirroring upstream: the DV RPU rides
+              // the EL package, the static SEIs (MDCV/CLL/HDR10+) the BL one.
+              const bool curIsEL = packet.isELPackage;
+              if (curIsEL)
+              {
+                AMLLatchHevcDoviRpu(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
+                AMLLatchHevcSei(qData, qSize, m_nalLengthSize, m_pendingMeta);
+              }
+              else
+              {
+                AMLLatchHevcDoviRpu(qData, qSize, m_nalLengthSize, m_pendingMeta);
+                AMLLatchHevcSei(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
+              }
+              if (!m_pendingMeta.hdrMdcv.empty())
+                m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
+              if (!m_pendingMeta.hdrCll.empty())
+                m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
+
               KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
               m_packages.pop_front();
             }
@@ -894,6 +927,24 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
             if (dual_layer_converted)
             {
+              // Latch at pair completion, mirroring upstream: the DV RPU rides
+              // the EL package, the static SEIs (MDCV/CLL/HDR10+) the BL one.
+              const bool curIsEL = packet.isELPackage;
+              if (curIsEL)
+              {
+                AMLLatchHevcDoviRpu(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
+                AMLLatchHevcSei(qData, qSize, m_nalLengthSize, m_pendingMeta);
+              }
+              else
+              {
+                AMLLatchHevcDoviRpu(qData, qSize, m_nalLengthSize, m_pendingMeta);
+                AMLLatchHevcSei(packet.pData, packet.iSize, m_nalLengthSize, m_pendingMeta);
+              }
+              if (!m_pendingMeta.hdrMdcv.empty())
+                m_streamMeta.hdrMdcv = m_pendingMeta.hdrMdcv;
+              if (!m_pendingMeta.hdrCll.empty())
+                m_streamMeta.hdrCll = m_pendingMeta.hdrCll;
+
               KODI::MEMORY::AlignedFree(std::get<0>(m_packages.front()));
               m_packages.pop_front();
               /* First BL+EL pair succeeded - disable seek filter */
