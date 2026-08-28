@@ -8981,7 +8981,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14315"
-msgid "HDR10+ is absorbed by the Dolby Vision VS-Engine and tone mapped to Dolby Vision on DV capable displays."
+msgid "Converts HDR10+ (and HDR Vivid) to Dolby Vision: a Dolby Vision profile 8.1 RPU is generated from the HDR10+ metadata per access unit, and HDR10+ sources are absorbed by the DV VS-Engine for tone mapping on DV capable displays."
 msgstr ""
 
 #: system/settings/settings.xml
@@ -25570,18 +25570,6 @@ msgstr ""
 #: system/settings/settings.xml
 msgctxt "#40813"
 msgid "Full sync"
-msgstr ""
-
-#. Label for setting "HDR10+ to Dolby Vision RPU conversion" of label #60101
-#: system/settings/settings.xml
-msgctxt "#60101"
-msgid "Generate Dolby Vision RPU from HDR10+"
-msgstr ""
-
-#. Help text for setting #60101
-#: system/settings/settings.xml
-msgctxt "#60102"
-msgid "Synthesizes a Dolby Vision profile 8.1 RPU NAL from the HDR10+ ST 2094-40 metadata in userspace and appends it to the access unit, so the stream carries true DV dynamic metadata instead of relying on the kernel-side absorption path."
 msgstr ""
 
 #. Label for HDR10+ RPU peak brightness source setting of label #60103

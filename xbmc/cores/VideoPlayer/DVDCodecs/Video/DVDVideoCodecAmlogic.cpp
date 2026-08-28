@@ -314,14 +314,15 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
       // HDR -> Dolby Vision RPU synthesis: when enabled, the converter generates a
       // true DV profile 8.1 RPU NAL per access unit from the HDR10+ ST 2094-40
       // or CUVA HDR Vivid metadata instead of relying on the kernel-side
-      // absorption (which loses the DV dynamic metadata). The peak-brightness
-      // source selection applies to the HDR10+ conversion only; HDR Vivid uses
-      // the fixed MDCV-referenced strategy in HDRVividConvert. The legacy
+      // absorption (which loses the DV dynamic metadata). coreelec.amlogic.
+      // hdr10plus2dv is the single HDR->DV switch; the peak-brightness source
+      // selection applies to the HDR10+ conversion only, HDR Vivid uses the
+      // fixed MDCV-referenced strategy in HDRVividConvert. The legacy
       // coreelec.amlogic.cuva2dv toggle remains an independent way to arm the
       // HDR Vivid conversion.
       {
         const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-        if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_CONVERT))
+        if (settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR10PLUS2DV))
         {
           const auto peakBrightnessSource = static_cast<PeakBrightnessSource>(
               settings->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_HDR10PLUS_PEAK_BRIGHTNESS_SOURCE));

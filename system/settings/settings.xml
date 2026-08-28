@@ -4036,19 +4036,11 @@
             <dependency type="enable" setting="coreelec.amlogic.disabledolbyvision" operator="is">false</dependency>
           </dependencies>
         </setting>
-        <setting id="coreelec.amlogic.dolbyvision.hdr10plus.convert" type="boolean" label="60101" help="60102">
-          <requirement>HAVE_AMCODEC</requirement>
-          <default>false</default>
-          <dependencies>
-            <dependency type="enable" setting="coreelec.amlogic.disabledolbyvision" operator="is">false</dependency>
-          </dependencies>
-          <control type="toggle" />
-        </setting>
         <setting id="coreelec.amlogic.dolbyvision.hdr10plus.peak.brightness.source" type="integer" label="60103" help="60104">
           <requirement>HAVE_AMCODEC</requirement>
           <default>4</default>
           <dependencies>
-            <dependency type="visible" setting="coreelec.amlogic.dolbyvision.hdr10plus.convert" operator="is">true</dependency>
+            <dependency type="visible" setting="coreelec.amlogic.hdr10plus2dv" operator="is">true</dependency>
             <dependency type="enable" setting="coreelec.amlogic.disabledolbyvision" operator="is">false</dependency>
           </dependencies>
           <constraints>
