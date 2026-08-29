@@ -2210,8 +2210,13 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
                          hints.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
                          hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION;
   const bool hdrOsd = sourceHdr && CServiceBroker::GetWinSystem()->IsHDRDisplay();
+  // On a PQ output the baked PQ OSD must bypass the DV core2 graphics path;
+  // on an SDR output the GUI stays sRGB and the DV core2 graphics path
+  // (is_amdv_graphic_on) must stay enabled so the DV engine converts the
+  // OSD into the SDR10/SDR8 output domain - with the graphics path off the
+  // raw BT.709 OSD lands in the BT.2020 output matrix and shows a green cast.
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable",
-             hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION ? 1 : 0);
+             hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION && hdrOsd ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", hdrOsd ? 1 : 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", hdrOsd ? 1 : 0);
 
