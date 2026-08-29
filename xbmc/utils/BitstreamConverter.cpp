@@ -924,7 +924,15 @@ bool CBitstreamConverter::Convert(uint8_t *pData_bl, int iSize_bl, uint8_t *pDat
       }
       else
       {
-        if (!m_convert_dovi)
+        /* mkv remuxed EL tracks are complete HEVC streams: keyframes carry
+         * their own VPS/SPS/PPS plus AUD/SEI NALs. Only slice NALs may be
+         * rewritten as EL (unspec63) payloads behind the BL frame - splicing
+         * a second 1080p parameter set into the 4K BL stream makes the
+         * Amlogic decoder drop every frame ("h265 data skipped" loop).
+         * Disc EL packets carry slices only and are unaffected. */
+        if (!m_convert_dovi &&
+            ((nal_type >= HEVC_NAL_TRAIL_N && nal_type <= HEVC_NAL_RASL_R) ||
+             (nal_type >= HEVC_NAL_BLA_W_LP && nal_type <= HEVC_NAL_CRA_NUT)))
           BitstreamAllocAndCopy(&m_convertBuffer, &offset, buf, size, HEVC_NAL_UNSPEC63);
       }
       if (!m_convert_dovi || nal_type == HEVC_NAL_UNSPEC62)
