@@ -2181,6 +2181,10 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
     }
   }
 
+  // When the GUI is rendered (baked) into PQ by GLES for HDR10/HDR10+,
+  // ask the kernel to bypass the OSD HDR2 processing of OSD1.
+  aml_set_osd_pq_bypass(hints.hdrType);
+
   // DEC_CONTROL_FLAG_DISABLE_FAST_POC
   CSysfsPath("/sys/module/amvdec_h264/parameters/dec_control", 4);
 
@@ -2462,6 +2466,9 @@ void CAMLCodec::CloseDecoder()
 
     dolby_vision_enable.Set('N');
   }
+
+  // Restore kernel OSD HDR2 processing when leaving HDR playback.
+  aml_set_osd_pq_bypass(StreamHdrType::HDR_TYPE_NONE);
 
   CSysfsPath amdolby_vision_debug{"/sys/class/amdolby_vision/debug"};
   if (amdolby_vision_debug.Exists())

@@ -107,12 +107,32 @@ bool CDVDOverlayCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &optio
     delete[] parse_extra;
   }
 
-  if (avcodec_open2(m_pCodecContext, pCodec, NULL) < 0)
+  AVDictionary* codecOpts = nullptr;
+  if (m_pCodecContext->codec_id == AV_CODEC_ID_HDMV_PGS_SUBTITLE)
+  {
+    // UHD-BD HDR PGS is BT.2020 PQ, SDR PGS is SDR BT.709 or SDR BT.2020.
+    StreamHdrType videoHdrType = hints.hdrType;
+
+    // Note: HDR10+ is not identified currently upstream - will though be caught as HDR10.
+    m_pgsIsPqAuthored = (videoHdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                         videoHdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                         videoHdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+
+    // TODO: identify SDR BT.2020 and do the right thing for the PGS matrix, currently will treat as BT.709.
+    const char* matrix = m_pgsIsPqAuthored ? "bt2020" : "auto";
+
+    av_dict_set(&codecOpts, "pgs_matrix", matrix, 0);
+  }
+
+  if (avcodec_open2(m_pCodecContext, pCodec, &codecOpts) < 0)
   {
     CLog::Log(LOGDEBUG,"CDVDVideoCodecFFmpeg::Open() Unable to open codec");
+    av_dict_free(&codecOpts);
     avcodec_free_context(&m_pCodecContext);
     return false;
   }
+
+  av_dict_free(&codecOpts);
 
   if (pCodec->name != nullptr)
     SetName("ff-" + std::string(pCodec->name));
@@ -270,6 +290,15 @@ std::shared_ptr<CDVDOverlay> CDVDOverlayCodecFFmpeg::GetOverlay()
     overlay->iPTSStartTime = m_StartTime;
     overlay->iPTSStopTime = m_StopTime;
     overlay->replace = true;
+
+    if (m_pCodecContext->codec_id == AV_CODEC_ID_HDMV_PGS_SUBTITLE)
+    {
+      // UHD-BD PGS subtitles for HDR content are authored as BT.2020 + ST2084 code values.
+      // Treat them as already PQ-coded to avoid applying the GUI PQ conversion a second
+      // time during composition. The decision is made at render time based on output state.
+      overlay->m_isHdrPq = m_pgsIsPqAuthored;
+    }
+
     overlay->linesize = rect.w;
     overlay->pixels.resize(rect.w * rect.h);
     overlay->palette.resize(rect.nb_colors);

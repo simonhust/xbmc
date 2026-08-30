@@ -346,3 +346,24 @@ void aml_set_3d_video_mode(unsigned int mode, bool framepacking_support, int vie
     CSysfsPath("/sys/module/amvdec_h264mvc/parameters/view_mode", view_mode);
   }
 }
+
+void aml_set_osd_pq_bypass(StreamHdrType hdrType)
+{
+  // When the GUI is rendered (baked) into PQ by GLES, the kernel HDR2
+  // processing of OSD1 must be bypassed to avoid a double transfer.
+  const bool enable = ((hdrType == StreamHdrType::HDR_TYPE_HDR10) ||
+                       (hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS));
+
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", enable);
+  CLog::Log(LOGDEBUG, "AMLUtils::{} - am_vecm osd_pq_bypass [{}]", __FUNCTION__,
+            enable ? "enabled" : "disabled");
+}
+
+void aml_set_linux_osd_sdr8(bool osdSdr8)
+{
+  // Tell the Dolby Vision engine whether the OSD content is SDR 8-bit RGB
+  // (GLES baked to PQ) or HDR 10-bit RGB (hardware processed).
+  CSysfsPath("/sys/module/aml_media/parameters/aml_linux_osd_sdr8", osdSdr8);
+  CLog::Log(LOGDEBUG, "AMLUtils::{} - aml_linux_osd_sdr8 [{}]", __FUNCTION__,
+            osdSdr8 ? "enabled" : "disabled");
+}

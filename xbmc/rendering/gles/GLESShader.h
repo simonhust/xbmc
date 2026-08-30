@@ -74,4 +74,7 @@ protected:
   GLfloat m_clipYOffset;
 
   GLfloat m_sdrPeak;
+  GLint m_sdrSaturation = 0;
+  GLint m_hdrPgsPeak = 0;
+  GLint m_hdrPgsSaturation = 0;
 };

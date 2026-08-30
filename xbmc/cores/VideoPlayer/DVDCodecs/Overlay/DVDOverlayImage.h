@@ -83,4 +83,5 @@ public:
   int height{0};
   int source_width{0};
   int source_height{0};
+  bool m_isHdrPq{false};
 };

@@ -8,9 +8,13 @@
 
 #include "GLESShader.h"
 
+#include <algorithm>
+
 #include "ServiceBroker.h"
 #include "rendering/MatrixGL.h"
 #include "rendering/RenderSystem.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/log.h"
 #include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
@@ -50,6 +54,9 @@ void CGLESShader::OnCompiledAndLinked()
   m_hContrast   = glGetUniformLocation(ProgramHandle(), "m_contrast");
   m_hBrightness = glGetUniformLocation(ProgramHandle(), "m_brightness");
   m_sdrPeak = glGetUniformLocation(ProgramHandle(), "m_sdrPeak");
+  m_sdrSaturation = glGetUniformLocation(ProgramHandle(), "m_sdrSaturation");
+  m_hdrPgsPeak = glGetUniformLocation(ProgramHandle(), "m_hdrPgsPeak");
+  m_hdrPgsSaturation = glGetUniformLocation(ProgramHandle(), "m_hdrPgsSaturation");
 
   // Variables passed directly to the Vertex shader
   m_hProj  = glGetUniformLocation(ProgramHandle(), "m_proj");
@@ -181,6 +188,14 @@ bool CGLESShader::OnEnabled()
 
   const float sdrPeak = CServiceBroker::GetWinSystem()->GetGuiSdrPeakLuminance();
   glUniform1f(m_sdrPeak, sdrPeak);
+
+  glUniform1f(m_sdrSaturation, CServiceBroker::GetWinSystem()->GetGuiSdrSaturation());
+
+  const auto pSettings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  glUniform1f(m_hdrPgsPeak,
+              static_cast<float>(std::clamp(pSettings->GetInt(CSettings::SETTING_VIDEOSCREEN_HDRPGSPEAKLUMINANCE), 0, 100)) / 50.0f);
+  glUniform1f(m_hdrPgsSaturation,
+              static_cast<float>(std::clamp(pSettings->GetInt(CSettings::SETTING_VIDEOSCREEN_HDRPGSSATURATION), 0, 100)) / 50.0f);
 
   return true;
 }

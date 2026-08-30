@@ -59,3 +59,5 @@ bool aml_convert_to_dv_by_vs_engine(StreamHdrType hdrType);
 bool aml_video_started();
 int aml_amdv_wait(StreamHdrType hdrType);
 void aml_set_3d_video_mode(unsigned int mode, bool framepacking_support, int view_mode);
+void aml_set_osd_pq_bypass(StreamHdrType hdrType);
+void aml_set_linux_osd_sdr8(bool osdSdr8);
