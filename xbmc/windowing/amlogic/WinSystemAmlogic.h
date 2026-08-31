@@ -81,7 +81,6 @@ protected:
   static std::unique_ptr<CAMLDisplay> m_amlDisplay;
   std::unique_ptr<CAMLGBMUtils> m_amlGBMUtils{nullptr};
   std::unique_ptr<KODI::UTILS::EGL::CEGLFence> m_eglFence{nullptr};
-  std::atomic<bool> m_hotplugPending{false};
 private:
   struct callback_data
   {

@@ -416,7 +416,6 @@ bool CWinSystemAmlogic::CreateNewWindow(const std::string& name,
   if ((ret = m_amlDisplay->set_native_resolution(res, m_framebuffer_name, m_stereo_mode,
                                            m_force_mode_switch, m_hotplug_mode_switch)))
   {
-    m_hdr_caps_initialized = false;
     m_bWindowCreated = true;
   }
 
