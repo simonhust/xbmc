@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "rendering/RenderSystemTypes.h"
+#include "utils/HDRCapabilities.h"
 #include "windowing/Resolution.h"
 
 struct drm_fb
