@@ -50,6 +50,9 @@ void CGLESShader::OnCompiledAndLinked()
   m_hContrast   = glGetUniformLocation(ProgramHandle(), "m_contrast");
   m_hBrightness = glGetUniformLocation(ProgramHandle(), "m_brightness");
   m_sdrSaturation = glGetUniformLocation(ProgramHandle(), "m_sdrSaturation");
+  m_sdrPeak = glGetUniformLocation(ProgramHandle(), "m_sdrPeak");
+  m_hdrPgsPeak = glGetUniformLocation(ProgramHandle(), "m_hdrPgsPeak");
+  m_hdrPgsSaturation = glGetUniformLocation(ProgramHandle(), "m_hdrPgsSaturation");
 
   // Variables passed directly to the Vertex shader
   m_hProj  = glGetUniformLocation(ProgramHandle(), "m_proj");
@@ -181,6 +184,14 @@ bool CGLESShader::OnEnabled()
 
   const float sdrSaturation = CServiceBroker::GetWinSystem()->GetGuiSdrSaturation();
   glUniform1f(m_sdrSaturation, sdrSaturation);
+
+  const float sdrPeak = CServiceBroker::GetWinSystem()->GetGuiSdrPeakLuminance();
+  glUniform1f(m_sdrPeak, sdrPeak);
+
+  // HDR-authored PGS (PQ-coded) adjustment: neutral 1.0 passes the overlay
+  // through untouched. Settings wiring for peak/saturation is a follow-up.
+  glUniform1f(m_hdrPgsPeak, 1.0f);
+  glUniform1f(m_hdrPgsSaturation, 1.0f);
 
   return true;
 }

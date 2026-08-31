@@ -526,3 +526,13 @@ void aml_set_3d_video_mode(unsigned int mode, bool framepacking_support, int vie
     CSysfsPath("/sys/module/amvdec_h264mvc/parameters/view_mode", view_mode);
   }
 }
+
+void aml_set_linux_osd_sdr8(bool osdSdr8)
+{
+  // Tell the Dolby Vision engine the format of the OSD content it composites:
+  // true -> 8-bit SDR RGB (default), false -> 10-bit HDR RGB (GUI/OSD baked to
+  // PQ by GLES, the DV core must pass it through untouched).
+  CSysfsPath("/sys/module/aml_media/parameters/aml_linux_osd_sdr8", osdSdr8);
+  CLog::Log(LOGDEBUG, "AMLUtils::{} - aml_linux_osd_sdr8 [{}]", __FUNCTION__,
+            osdSdr8 ? "enabled" : "disabled");
+}

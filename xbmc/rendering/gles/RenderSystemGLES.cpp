@@ -451,6 +451,7 @@ void CRenderSystemGLES::SetDepthCulling(DepthCulling culling)
 void CRenderSystemGLES::InitialiseShaders()
 {
   std::string defines;
+  std::string definesPgsPqOutput;
   m_limitedColorRange = CServiceBroker::GetWinSystem()->UseLimitedColor() &&
                         !CServiceBroker::GetWinSystem()->IsHdrComposite();
   if (m_limitedColorRange)
@@ -462,6 +463,11 @@ void CRenderSystemGLES::InitialiseShaders()
   {
     defines += "#define KODI_TRANSFER_PQ 1\n";
   }
+
+  // SM_TEXTURE_NOBLEND_PQ_OUTPUT handles HDR-authored PGS subtitles (decoded
+  // BT.2020/PQ). It is compiled without KODI_TRANSFER_PQ/KODI_LIMITED_RANGE:
+  // the overlay is full-range PQ and is preserved/adjusted by the shader.
+  definesPgsPqOutput += "#define KODI_HDR_PGS_PQ_OUTPUT 1\n";
 
   m_pShader[ShaderMethodGLES::SM_DEFAULT] =
       std::make_unique<CGLESShader>("gles_shader.vert", "gles_shader_default.frag", defines);
@@ -534,6 +540,18 @@ void CRenderSystemGLES::InitialiseShaders()
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND]->Free();
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND].reset();
     CLog::Log(LOGERROR, "GUI Shader gles_shader_texture_noblend.frag - compile and link failed");
+  }
+
+  // Same shader, but for HDR-authored PGS overlays (BT.2020/PQ): decode PQ,
+  // adjust peak/saturation, re-encode PQ.
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT] =
+      std::make_unique<CGLESShader>("gles_shader_texture_noblend.frag", definesPgsPqOutput);
+  if (!m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT]->CompileAndLink())
+  {
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT]->Free();
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT].reset();
+    CLog::Log(LOGERROR,
+              "GUI Shader gles_shader_texture_noblend.frag (PGS PQ output) - compile and link failed");
   }
 
   m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR] =
@@ -657,6 +675,10 @@ void CRenderSystemGLES::ReleaseShaders()
   if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND])
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND]->Free();
   m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND].reset();
+
+  if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT])
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT]->Free();
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT].reset();
 
   if (m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR])
     m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR]->Free();

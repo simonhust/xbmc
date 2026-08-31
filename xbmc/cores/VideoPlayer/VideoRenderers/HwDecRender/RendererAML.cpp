@@ -77,17 +77,24 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // GUI and subtitles stay sRGB BT.709 in the GLES path: no KODI_TRANSFER_PQ
-  // (709->2020) bake is applied to the GUI/OSD plane, so the userspace does
-  // not pre-convert to BT.2020. All OSD colour conversion is owned by the
-  // kernel: the amvecm HDR2 core does the full 709->2020 gamut plus sRGB->PQ
-  // for HDR10/HDR10+, and the DV core handles the OSD for Dolby Vision. The
-  // corresponding kernel params (osd_pq_bypass/osd_gamut_bypass/
-  // osd_bypass_enable) are written in CAMLCodec::OpenDecoder; they are left at
-  // their SDR defaults here.
-  CLog::Log(LOGDEBUG,
-            "CRendererAML::Configure hdrType={} transfer={}",
-            static_cast<int>(picture.hdrType), picture.color_transfer);
+  // Scheme B (cpm-style PQ baking): the GLES compositor pre-bakes the GUI/OSD
+  // plane to PQ (KODI_TRANSFER_PQ shaders), so IsTransferPQ must be set for
+  // HDR/DV output. The kernel then passes the PQ-baked OSD through untouched
+  // (HDR10/HLG: source-type bypass; DV: g_format=HDR via aml_linux_osd_sdr8=0).
+  bool device_support_dv(aml_support_dolby_vision());
+  bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+      CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
+  bool dv_is_used(device_support_dv && !user_dv_disable &&
+                  picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION &&
+                  aml_display_support_dv());
+  bool hdr_is_used(
+      (picture.hdrType == StreamHdrType::HDR_TYPE_HLG ||
+       picture.color_transfer == AVCOL_TRC_SMPTE2084) &&
+      CServiceBroker::GetWinSystem()->IsHDRDisplay());
+  CLog::Log(LOGDEBUG, "CRendererAML::Configure DV support, {}, DV system is {}, HDR is {}",
+            user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled",
+            hdr_is_used ? "used" : "not used");
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(dv_is_used | hdr_is_used);
 
   m_bConfigured = true;
 

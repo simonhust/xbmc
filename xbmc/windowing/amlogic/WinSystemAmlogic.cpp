@@ -10,6 +10,8 @@
 
 #include <string.h>
 #include <float.h>
+#include <algorithm>
+#include <cmath>
 
 #include "ServiceBroker.h"
 #include "cores/RetroPlayer/process/amlogic/RPProcessInfoAmlogic.h"
@@ -487,6 +489,26 @@ float CWinSystemAmlogic::GetGuiSdrSaturation() const
 
   // UI 0-100, neutral at 50 -> 1.0.
   return saturation / 50.0f;
+}
+
+float CWinSystemAmlogic::GetGuiSdrPeakLuminance() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int guiSdrPeak =
+      settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRPEAKLUMINANCE);
+
+  // Map the 0-100 setting to a usable SDR white level for the PQ-baked GUI.
+  // The shader expects this value as "nits / 100".
+  // Exponential curve anchored to a sensible range: 0 -> 30 nits, 100 -> 1000 nits.
+  constexpr float kMinNits = 30.0f;
+  constexpr float kMaxNits = 1000.0f;
+  const float exponent =
+      std::log(kMaxNits / kMinNits) * (static_cast<float>(guiSdrPeak) / 100.0f);
+  float sdrWhiteNits = std::clamp(kMinNits * std::exp(exponent), kMinNits, kMaxNits);
+
+  // Keep within the PQ domain (10,000 nits max) after any boost.
+  sdrWhiteNits = std::clamp(sdrWhiteNits, 0.0f, 10000.0f);
+  return sdrWhiteNits / 100.0f;
 }
 
 HDR_STATUS CWinSystemAmlogic::GetOSHDRStatus()

@@ -147,6 +147,8 @@ std::shared_ptr<COverlay> COverlay::Create(const CDVDOverlayImage& o, CRect& rSo
 
 COverlayTextureGLES::COverlayTextureGLES(const CDVDOverlayImage& o, CRect& rSource)
 {
+  m_isHdrPqAuthored = o.m_isHdrPq;
+
   glGenTextures(1, &m_texture);
   glBindTexture(GL_TEXTURE_2D, m_texture);
 
@@ -462,7 +464,11 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  renderSystem->EnableGUIShader(ShaderMethodGLES::SM_TEXTURE_NOBLEND);
+  // HDR-authored PGS (BT.2020/PQ-coded) uses the PQ output shader, which
+  // decodes/adjusts/re-encodes PQ so the overlay matches the PQ-baked GUI.
+  renderSystem->EnableGUIShader(m_isHdrPqAuthored
+                                    ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT
+                                    : ShaderMethodGLES::SM_TEXTURE_NOBLEND);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();
   GLint depthLoc = renderSystem->GUIShaderGetDepth();

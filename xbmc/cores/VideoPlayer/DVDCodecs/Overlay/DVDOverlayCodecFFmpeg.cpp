@@ -111,12 +111,33 @@ bool CDVDOverlayCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &optio
     delete[] parse_extra;
   }
 
-  if (avcodec_open2(m_pCodecContext, pCodec, NULL) < 0)
+  AVDictionary* codecOpts = nullptr;
+  if (m_pCodecContext->codec_id == AV_CODEC_ID_HDMV_PGS_SUBTITLE)
+  {
+    // UHD-BD HDR PGS is BT.2020 PQ, SDR PGS is SDR BT.709 or SDR BT.2020.
+    StreamHdrType videoHdrType = hints.hdrType;
+
+    // Note: HDR10+ is not identified currently upstream - will though be caught as HDR10.
+    m_pgsIsPqAuthored = (videoHdrType == StreamHdrType::HDR_TYPE_HDR10 ||
+                         videoHdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
+                         videoHdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+
+    // Decode the HDR-authored PGS palette with the BT.2020 matrix so the
+    // overlay carries PQ-coded values; the PQ output shader preserves/adjusts
+    // them. SDR PGS stays on the auto (BT.709) matrix.
+    const char* matrix = m_pgsIsPqAuthored ? "bt2020" : "auto";
+    av_dict_set(&codecOpts, "pgs_matrix", matrix, 0);
+  }
+
+  if (avcodec_open2(m_pCodecContext, pCodec, &codecOpts) < 0)
   {
     CLog::Log(LOGDEBUG,"CDVDVideoCodecFFmpeg::Open() Unable to open codec");
+    av_dict_free(&codecOpts);
     avcodec_free_context(&m_pCodecContext);
     return false;
   }
+
+  av_dict_free(&codecOpts);
 
   if (pCodec->name != nullptr)
     SetName("ff-" + std::string(pCodec->name));
@@ -274,6 +295,7 @@ std::shared_ptr<CDVDOverlay> CDVDOverlayCodecFFmpeg::GetOverlay()
     overlay->iPTSStartTime = m_StartTime;
     overlay->iPTSStopTime = m_StopTime;
     overlay->replace = true;
+    overlay->m_isHdrPq = m_pgsIsPqAuthored;
     overlay->linesize = rect.w;
     overlay->pixels.resize(rect.w * rect.h);
     overlay->palette.resize(rect.nb_colors);
