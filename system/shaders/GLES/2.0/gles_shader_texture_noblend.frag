@@ -30,12 +30,12 @@ varying vec4 m_cord0;
 uniform float m_sdrPeak;
 uniform float m_sdrSaturation;
 uniform float m_pma;
-#if defined(KODI_HDR_PGS_PQ_OUTPUT)
+#if defined(KODI_HDR_PGS_PQ_OUTPUT) || defined(KODI_HDR_PGS_TO_SDR)
 uniform float m_hdrPgsPeak;
 uniform float m_hdrPgsSaturation;
 #endif
 
-#if defined(KODI_HDR_PGS_PQ_OUTPUT)
+#if defined(KODI_HDR_PGS_PQ_OUTPUT) || defined(KODI_HDR_PGS_TO_SDR)
 vec3 decodePQ(vec3 x)
 {
   const float ST2084_m1 = 2610.0 / (4096.0 * 4.0);
@@ -78,6 +78,28 @@ vec3 convertHdrPgsForPqOutput(vec3 pq)
   linear = max(linear, vec3(0.0));
   linear *= m_hdrPgsPeak;
   return encodePQ(linear);
+}
+#endif
+
+#if defined(KODI_HDR_PGS_TO_SDR)
+vec3 convertHdrPgsToSdr(vec3 pq)
+{
+  // PQ code values (BT.2020, 1.0 = 10000 nits) -> linear BT.2020
+  vec3 linear = decodePQ(pq);
+
+  // Map 100 nits to SDR reference white: PGS graphics are authored around
+  // graphic levels, brighter values simply clip.
+  linear *= 100.0;
+
+  // BT.2020 -> BT.709 gamut (linear light).
+  const mat3 mat2020to709 = mat3(
+      1.660491, -0.124456, -0.018154,
+     -0.587656,  1.132895, -0.100593,
+     -0.072836, -0.008344,  1.118744);
+  vec3 srgb = clamp(mat2020to709 * linear, vec3(0.0), vec3(1.0));
+
+  // Encode BT.709 gamma (inverse of the GUI bake's 1/0.45 decode).
+  return pow(srgb, vec3(0.45));
 }
 #endif
 
@@ -132,6 +154,13 @@ void main ()
   rgb.rgb = convertGuiForPqOutput(rgb.rgb);
 #elif defined(KODI_HDR_PGS_PQ_OUTPUT)
   rgb.rgb = convertHdrPgsForPqOutput(rgb.rgb);
+#elif defined(KODI_HDR_PGS_TO_SDR)
+  // The conversion is per-channel nonlinear: un-premultiply, convert,
+  // re-premultiply so semi-transparent texels keep their blend ratio.
+  if (m_pma > 0.5 && rgb.a > 0.0)
+    rgb.rgb = convertHdrPgsToSdr(rgb.rgb / rgb.a) * rgb.a;
+  else
+    rgb.rgb = convertHdrPgsToSdr(rgb.rgb);
 #endif
 
   gl_FragColor = rgb;

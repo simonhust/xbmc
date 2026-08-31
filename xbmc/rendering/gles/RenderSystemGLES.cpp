@@ -469,6 +469,12 @@ void CRenderSystemGLES::InitialiseShaders()
   // the overlay is full-range PQ and is preserved/adjusted by the shader.
   definesPgsPqOutput += "#define KODI_HDR_PGS_PQ_OUTPUT 1\n";
 
+  // SM_TEXTURE_NOBLEND_PQ_TO_SDR tone-maps the HDR-authored PGS overlay
+  // (BT.2020/PQ) to SDR BT.709 for an sRGB GUI framebuffer (SDR sink).
+  // Full-range output, so no KODI_LIMITED_RANGE either.
+  std::string definesPgsPqToSdr;
+  definesPgsPqToSdr += "#define KODI_HDR_PGS_TO_SDR 1\n";
+
   m_pShader[ShaderMethodGLES::SM_DEFAULT] =
       std::make_unique<CGLESShader>("gles_shader.vert", "gles_shader_default.frag", defines);
   if (!m_pShader[ShaderMethodGLES::SM_DEFAULT]->CompileAndLink())
@@ -552,6 +558,18 @@ void CRenderSystemGLES::InitialiseShaders()
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT].reset();
     CLog::Log(LOGERROR,
               "GUI Shader gles_shader_texture_noblend.frag (PGS PQ output) - compile and link failed");
+  }
+
+  // Same shader, tone-mapping HDR-authored PGS overlays to SDR BT.709
+  // (sRGB GUI framebuffer on an SDR sink).
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR] =
+      std::make_unique<CGLESShader>("gles_shader_texture_noblend.frag", definesPgsPqToSdr);
+  if (!m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR]->CompileAndLink())
+  {
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR]->Free();
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR].reset();
+    CLog::Log(LOGERROR,
+              "GUI Shader gles_shader_texture_noblend.frag (PGS PQ to SDR) - compile and link failed");
   }
 
   m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR] =
@@ -679,6 +697,10 @@ void CRenderSystemGLES::ReleaseShaders()
   if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT])
     m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT]->Free();
   m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT].reset();
+
+  if (m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR])
+    m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR]->Free();
+  m_pShader[ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR].reset();
 
   if (m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR])
     m_pShader[ShaderMethodGLES::SM_MULTI_BLENDCOLOR]->Free();

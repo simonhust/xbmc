@@ -2202,22 +2202,30 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
 
-  // Dolby Vision (profile 4/7) on a DV-capable chip: the DV core must treat
-  // the OSD as 10-bit HDR RGB (g_format=HDR, aml_linux_osd_sdr8=0 and
-  // amdv_force_hdr_output=1) so the GLES-baked PQ overlay passes through the
-  // DV core's OSD conversion untouched. The DV OUTPUT mode stays sink-based
-  // (dv_mode), so the video is tone-mapped DV->SDR on SDR displays. The
-  // base-layer hint hdrType is HDR10 for a DV FEL stream, so detect DV via
-  // the profile. Triggered purely by the stream hdrType/profile - never by
-  // the display/output state; amdv_force_hdr_output is restored on close.
+  // Dolby Vision (profile 4/7) on a DV-capable chip *and* an HDR/DV-capable
+  // sink: the DV core must treat the OSD as 10-bit HDR RGB (g_format=HDR,
+  // aml_linux_osd_sdr8=0 and amdv_force_hdr_output=1) so the GLES-baked PQ
+  // overlay passes through the DV core's OSD conversion untouched. On an SDR
+  // sink the DV engine resolves to SDR output (dolby_vision_mode=SDR8) and the
+  // GUI must stay sRGB with the OSD declared 8-bit SDR RGB (defaults): the DV
+  // core2 graphic path then converts the sRGB OSD into the SDR8 output domain
+  // (the previously verified chain). This mirrors the avdvplus
+  // aml_set_transfer_pq gate: hdr_display = IsHDRDisplay() ||
+  // aml_display_support_dv(). The base-layer hint hdrType is HDR10 for a DV
+  // FEL stream, so detect DV via the profile. Both nodes are restored on close.
+  const bool hdrDisplay = CServiceBroker::GetWinSystem()->IsHDRDisplay() ||
+                          aml_display_support_dv();
   const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 7);
-  const bool dvPqBake = isDovi && aml_support_dolby_vision();
+  const bool dvPqBake = isDovi && aml_support_dolby_vision() && hdrDisplay;
   aml_set_linux_osd_sdr8(!dvPqBake);
   aml_set_amdv_force_hdr_output(dvPqBake);
 
+  // Non-DV HDR (HDR10/HDR10+, PQ transfer): amvecm HDR2 bypasses its own OSD
+  // sRGB->PQ conversion so the GLES-baked PQ overlay is not converted twice.
+  // HLG is excluded, matching the avdvplus aml_set_osd_pq_bypass policy.
   const bool isHdrPqStream =
-      !dvPqBake && (hints.hdrType == StreamHdrType::HDR_TYPE_HLG ||
-                    hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084);
+      !dvPqBake && (hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084 &&
+                    hints.hdrType != StreamHdrType::HDR_TYPE_HLG);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", isHdrPqStream ? 1 : 0);
 
   switch(am_private->video_format)
@@ -2461,6 +2469,7 @@ void CAMLCodec::CloseDecoder()
 
   // restore the OSD force-HDR node (written on HDR PGS open)
   aml_set_amdv_force_hdr_output(false);
+  aml_set_linux_osd_sdr8(true);
 
   // never leave vcodec ff/rw or paused.
   if (m_speed != DVD_PLAYSPEED_NORMAL)

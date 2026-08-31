@@ -77,23 +77,25 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // Scheme B (avdvplus/cpm-style PQ baking): the GLES compositor pre-bakes the
-  // GUI/OSD plane to PQ (KODI_TRANSFER_PQ shaders) whenever the stream is
-  // HDR-authored, and the kernel passes the PQ overlay through untouched
-  // (amvecm HDR2 osd_pq_bypass / DV g_format). The trigger is purely the
-  // stream hdrType - never the display/output state; the kernel owns the final
-  // output adaptation.
+  // avdvplus aml_set_transfer_pq port: the GUI/OSD plane is pre-baked to PQ
+  // (KODI_TRANSFER_PQ shaders) only when the *sink* is HDR/DV-capable. On an
+  // SDR sink the DV engine resolves to SDR output (core2 converts the sRGB
+  // OSD) or amvecm HDR2 SDR_HDR handles it, so the GUI must stay sRGB - a
+  // PQ bake there is misread as sRGB (gray/washed-out OSD). HLG never bakes.
+  bool hdr_display(CServiceBroker::GetWinSystem()->IsHDRDisplay() ||
+                   aml_display_support_dv());
   bool device_support_dv(aml_support_dolby_vision());
   bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
       CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
   bool dv_is_used(device_support_dv && !user_dv_disable &&
                   picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
-  bool hdr_is_used(picture.hdrType == StreamHdrType::HDR_TYPE_HLG ||
-                   picture.color_transfer == AVCOL_TRC_SMPTE2084);
-  CLog::Log(LOGDEBUG, "CRendererAML::Configure DV support, {}, DV system is {}, HDR is {}",
+  bool hdr_is_used(picture.color_transfer == AVCOL_TRC_SMPTE2084);
+  CLog::Log(LOGDEBUG, "CRendererAML::Configure DV support, {}, DV system is {}, HDR is {}, "
+            "HDR display is {}",
             user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled",
-            hdr_is_used ? "used" : "not used");
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(dv_is_used | hdr_is_used);
+            hdr_is_used ? "used" : "not used", hdr_display ? "yes" : "no");
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdr_display &&
+                                                                (dv_is_used || hdr_is_used));
 
   m_bConfigured = true;
 

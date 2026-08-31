@@ -464,14 +464,19 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  // HDR-authored PGS (BT.2020/PQ-coded) always takes the PQ baking path,
-  // matching the avdvplus (cpm) approach: trigger on the subtitle hdrType
-  // (BT.2020/PQ-authored) only, never on the current display state. The GPU
-  // bakes the PQ overlay to the same ST2084 pipeline as the GUI, and the
-  // kernel forwards the OSD through the HDR2 path untouched.
+  // HDR-authored PGS (BT.2020/PQ-coded) follows the GUI output domain, per
+  // the avdvplus reference: pass the PQ overlay through untouched only while
+  // the GUI is baked to PQ (IsTransferPQ, HDR/DV-capable sink). On an SDR
+  // sink (e.g. the DV engine resolving to SDR8 output) the GUI framebuffer
+  // stays sRGB, so the PQ code values are tone-mapped to SDR BT.709 in the
+  // shader instead - otherwise the PQ values are misread as sRGB gamma and
+  // the subtitles come out dark/gray.
   ShaderMethodGLES method = ShaderMethodGLES::SM_TEXTURE_NOBLEND;
+  const bool guiPqOutput =
+      CServiceBroker::GetWinSystem()->GetGfxContext().IsTransferPQ();
   if (m_isHdrPqAuthored)
-    method = ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT;
+    method = guiPqOutput ? ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT
+                         : ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR;
   renderSystem->EnableGUIShader(method);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();
