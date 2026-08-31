@@ -2188,28 +2188,33 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION)
     CSysfsPath("/sys/class/amvecm/enable_hdr10plus", 1);
 
-  // OSD plane policy under HDR output. GUI and subtitles stay sRGB BT.709 in
-  // the GLES path (no 709->2020 bake), so the kernel owns all OSD colour
+  // OSD plane policy (Scheme B / avdvplus): the GLES compositor pre-bakes the
+  // GUI/OSD to PQ whenever the stream is HDR-authored, so the kernel must pass
+  // the PQ overlay through untouched instead of applying its own OSD sRGB->PQ
   // conversion:
-  // - HDR10/HDR10+: the amvecm HDR2 core does the full 709->2020 gamut plus
-  //   sRGB->PQ transfer (osd_gamut_bypass=0, osd_pq_bypass=0).
-  // - Dolby Vision: the DV core handles the OSD (osd_bypass_enable=0).
-  // All three are written to their SDR defaults (0) at open time so a stale
-  // value from a prior playback (e.g. the renderer destructor leaving
-  // osd_pq_bypass=1) never leaks into this stream.
+  // - HDR10/HDR10+/HLG (non-DV): amvecm HDR2 core bypasses its OSD conversion
+  //   (osd_pq_bypass=1, triggered by hdrType).
+  // - Dolby Vision: the DV core composites the OSD as 10-bit HDR RGB
+  //   (g_format via aml_linux_osd_sdr8=0 below); osd_pq_bypass=0.
+  // - SDR: all SDR defaults (0).
+  // All three are reset at open time so a stale value from a prior playback
+  // (e.g. the renderer destructor leaving osd_pq_bypass=1) never leaks in.
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
 
-  // Scheme B: the GLES compositor pre-bakes the GUI/OSD to PQ. For Dolby
-  // Vision (profile 4/7) on a DV-capable display the DV core must treat the
-  // OSD as 10-bit HDR RGB (g_format=HDR) so it passes through untouched;
-  // otherwise (SDR output or non-DV) the OSD stays 8-bit SDR. The base-layer
-  // hint hdrType is HDR10 for a DV FEL stream, so detect DV via the profile.
+  // Dolby Vision (profile 4/7) on a DV-capable chip: the DV core must treat
+  // the OSD as 10-bit HDR RGB (g_format=HDR) so the GLES-baked PQ overlay
+  // passes through untouched. The base-layer hint hdrType is HDR10 for a DV
+  // FEL stream, so detect DV via the profile. Both knobs are triggered purely
+  // by the stream hdrType/profile - never by the display/output state.
   const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 7);
-  const bool dvPqBake = isDovi && aml_support_dolby_vision() &&
-                        aml_display_support_dv();
+  const bool dvPqBake = isDovi && aml_support_dolby_vision();
   aml_set_linux_osd_sdr8(!dvPqBake);
+
+  const bool isHdrPqStream =
+      !dvPqBake && (hints.hdrType == StreamHdrType::HDR_TYPE_HLG ||
+                    hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084);
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", isHdrPqStream ? 1 : 0);
 
   switch(am_private->video_format)
   {

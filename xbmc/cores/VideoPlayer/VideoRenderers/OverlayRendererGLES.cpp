@@ -464,17 +464,14 @@ void COverlayTextureGLES::Render(SRenderState& state)
 
   CRenderSystemGLES* renderSystem =
       dynamic_cast<CRenderSystemGLES*>(CServiceBroker::GetRenderSystem());
-  // HDR-authored PGS (BT.2020/PQ-coded) is preserved/adjusted (PQ output) when
-  // the GUI is baked to PQ; on an SDR output path the BT.2020 overlay must be
-  // converted back to the BT.709 gamut, otherwise the colours are wrong.
+  // HDR-authored PGS (BT.2020/PQ-coded) always takes the PQ baking path,
+  // matching the avdvplus (cpm) approach: trigger on the subtitle hdrType
+  // (BT.2020/PQ-authored) only, never on the current display state. The GPU
+  // bakes the PQ overlay to the same ST2084 pipeline as the GUI, and the
+  // kernel forwards the OSD through the HDR2 path untouched.
   ShaderMethodGLES method = ShaderMethodGLES::SM_TEXTURE_NOBLEND;
   if (m_isHdrPqAuthored)
-  {
-    if (CServiceBroker::GetWinSystem()->GetGfxContext().IsTransferPQ())
-      method = ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT;
-    else
-      method = ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_TO_SDR;
-  }
+    method = ShaderMethodGLES::SM_TEXTURE_NOBLEND_PQ_OUTPUT;
   renderSystem->EnableGUIShader(method);
   GLint posLoc = renderSystem->GUIShaderGetPos();
   GLint tex0Loc = renderSystem->GUIShaderGetCoord0();

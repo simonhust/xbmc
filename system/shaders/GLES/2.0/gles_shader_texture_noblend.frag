@@ -35,19 +35,6 @@ uniform float m_hdrPgsPeak;
 uniform float m_hdrPgsSaturation;
 #endif
 
-#if defined(KODI_HDR_PGS_TO_SDR)
-// Convert a BT.2020-decoded PGS code value to the BT.709 gamut for SDR output.
-vec3 pgsToSdr709(vec3 x)
-{
-  // BT.2020 -> BT.709 gamut (kernel ncl_2020_709 / 2048, rows sum to 1.0).
-  const mat3 inv2020to709 = mat3(
-      1.6606, -0.1245, -0.0181,
-     -0.5879,  1.1328, -0.1006,
-     -0.0728, -0.0083,  1.1187);
-  return clamp(inv2020to709 * x, vec3(0.0), vec3(1.0));
-}
-#endif
-
 #if defined(KODI_HDR_PGS_PQ_OUTPUT)
 vec3 decodePQ(vec3 x)
 {
@@ -145,8 +132,6 @@ void main ()
   rgb.rgb = convertGuiForPqOutput(rgb.rgb);
 #elif defined(KODI_HDR_PGS_PQ_OUTPUT)
   rgb.rgb = convertHdrPgsForPqOutput(rgb.rgb);
-#elif defined(KODI_HDR_PGS_TO_SDR)
-  rgb.rgb = pgsToSdr709(rgb.rgb);
 #endif
 
   gl_FragColor = rgb;

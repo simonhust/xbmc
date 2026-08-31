@@ -39,10 +39,10 @@ CRendererAML::~CRendererAML()
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
 
   // Restore the kernel OSD pipeline to the SDR state. OpenDecoder writes the
-  // OSD params at their SDR defaults (osd_pq_bypass=0, osd_gamut_bypass=0,
-  // osd_bypass_enable=0); on teardown we force osd_pq_bypass=1 so the GUI
-  // (sRGB BT.709, no GLES bake) passes through unconverted on the SDR sink
-  // instead of being washed out by a PQ encode on SDR gamma.
+  // OSD params based on the stream hdrType (osd_pq_bypass=1 only for non-DV
+  // HDR, otherwise 0); on teardown we force osd_pq_bypass=1 so the GUI (sRGB
+  // BT.709, no GLES bake) passes through unconverted on the SDR sink instead
+  // of being washed out by a PQ encode on SDR gamma.
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
@@ -77,20 +77,19 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   SetViewMode(m_videoSettings.m_ViewMode);
   ManageRenderArea();
 
-  // Scheme B (cpm-style PQ baking): the GLES compositor pre-bakes the GUI/OSD
-  // plane to PQ (KODI_TRANSFER_PQ shaders), so IsTransferPQ must be set for
-  // HDR/DV output. The kernel then passes the PQ-baked OSD through untouched
-  // (HDR10/HLG: source-type bypass; DV: g_format=HDR via aml_linux_osd_sdr8=0).
+  // Scheme B (avdvplus/cpm-style PQ baking): the GLES compositor pre-bakes the
+  // GUI/OSD plane to PQ (KODI_TRANSFER_PQ shaders) whenever the stream is
+  // HDR-authored, and the kernel passes the PQ overlay through untouched
+  // (amvecm HDR2 osd_pq_bypass / DV g_format). The trigger is purely the
+  // stream hdrType - never the display/output state; the kernel owns the final
+  // output adaptation.
   bool device_support_dv(aml_support_dolby_vision());
   bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
       CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
   bool dv_is_used(device_support_dv && !user_dv_disable &&
-                  picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION &&
-                  aml_display_support_dv());
-  bool hdr_is_used(
-      (picture.hdrType == StreamHdrType::HDR_TYPE_HLG ||
-       picture.color_transfer == AVCOL_TRC_SMPTE2084) &&
-      CServiceBroker::GetWinSystem()->IsHDRDisplay());
+                  picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+  bool hdr_is_used(picture.hdrType == StreamHdrType::HDR_TYPE_HLG ||
+                   picture.color_transfer == AVCOL_TRC_SMPTE2084);
   CLog::Log(LOGDEBUG, "CRendererAML::Configure DV support, {}, DV system is {}, HDR is {}",
             user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled",
             hdr_is_used ? "used" : "not used");
