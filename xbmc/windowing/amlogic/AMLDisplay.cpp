@@ -1170,3 +1170,31 @@ bool CAMLDisplay::aml_probe_resolutions(std::vector<RESOLUTION_INFO> &resolution
   }
   return resolutions.size() > 0;
 }
+
+void CAMLDisplay::aml_refresh_display_caps()
+{
+  // built locally so a stream opening during the update cannot see empty caps
+  CHDRCapabilities caps;
+  int hdr_cap = m_amlDRMUtils->aml_get_drmProperty("hdr_cap", DRM_MODE_OBJECT_CONNECTOR);
+  int dv_cap = m_amlDRMUtils->aml_get_drmProperty("dv_cap", DRM_MODE_OBJECT_CONNECTOR);
+
+  hdr_cap = hdr_cap < 0 ? 0 : hdr_cap;
+  dv_cap = dv_cap < 0 ? 0 : dv_cap;
+
+  if (hdr_cap & (HDR10_CAP | SMPTE_ST_2084_CAP))
+    caps.SetHDR10();
+
+  if (hdr_cap & HDR10_PLUS_CAP)
+    caps.SetHDR10Plus();
+
+  if (hdr_cap & HLG_CAP)
+    caps.SetHLG();
+
+  if (dv_cap)
+    caps.SetDolbyVision();
+
+  if (dv_cap & DV_2160p60Hz)
+    caps.SetDolbyVision4k60();
+
+  m_hdr_caps = caps;
+}

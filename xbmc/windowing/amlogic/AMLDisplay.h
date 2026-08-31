@@ -162,9 +162,13 @@ public:
   int TakeOutFenceFd() const { return m_amlDRMUtils->TakeOutFenceFd(); }
   bool GetHotPlug() { bool ret = m_bHotPlug; m_bHotPlug = false; return ret; }
   void SetHotPlug() { m_bHotPlug = true; }
+
+  void aml_refresh_display_caps();
+  CHDRCapabilities GetHDRCaps() const { return m_hdr_caps; }
 private:
   std::unique_ptr<CAMLDRMUtils> m_amlDRMUtils;
   bool aml_mode_to_resolution(const char *mode, RESOLUTION_INFO *res);
   bool m_bHotPlug = false;
   RenderStereoMode m_stereo_mode;
+  CHDRCapabilities m_hdr_caps;
 };
