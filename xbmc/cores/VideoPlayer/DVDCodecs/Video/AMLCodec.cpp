@@ -2204,15 +2204,13 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
 
   // Dolby Vision (profile 4/7) on a DV-capable chip: the DV core must treat
   // the OSD as 10-bit HDR RGB (g_format=HDR) so the GLES-baked PQ overlay
-  // passes through untouched, and keep HDR output (amdv_force_hdr_output)
-  // instead of the sink-based SDR fallback. The base-layer hint hdrType is
-  // HDR10 for a DV FEL stream, so detect DV via the profile. All knobs are
-  // triggered purely by the stream hdrType/profile - never by the display/
-  // output state; amdv_force_hdr_output is restored on CloseDecoder.
+  // passes through the DV core's OSD conversion untouched, while the video is
+  // still DV->SDR/HDR per the sink (dv_mode). The base-layer hint hdrType is
+  // HDR10 for a DV FEL stream, so detect DV via the profile. Triggered purely
+  // by the stream hdrType/profile - never by the display/output state.
   const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 7);
   const bool dvPqBake = isDovi && aml_support_dolby_vision();
   aml_set_linux_osd_sdr8(!dvPqBake);
-  aml_set_amdv_force_hdr_output(dvPqBake);
 
   const bool isHdrPqStream =
       !dvPqBake && (hints.hdrType == StreamHdrType::HDR_TYPE_HLG ||
@@ -2457,9 +2455,6 @@ void CAMLCodec::CloseDecoder()
   CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder");
 
   SetPollDevice(-1);
-
-  // restore the DV HDR-output force (written on HDR PGS open)
-  aml_set_amdv_force_hdr_output(false);
 
   // never leave vcodec ff/rw or paused.
   if (m_speed != DVD_PLAYSPEED_NORMAL)
