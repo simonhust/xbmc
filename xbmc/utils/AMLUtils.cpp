@@ -542,3 +542,15 @@ void aml_set_linux_osd_sdr8(bool osdSdr8)
   CLog::Log(LOGDEBUG, "AMLUtils::{} - aml_linux_osd_sdr8 [{}]", __FUNCTION__,
             osdSdr8 ? "enabled" : "disabled");
 }
+
+void aml_set_amdv_force_hdr_output(bool forceHdr)
+{
+  // avdvplus: force the Dolby Vision engine's OSD plane to HDR (10-bit HDR
+  // RGB, GLES-baked PQ passthrough) while HDR PGS playback is active. Only
+  // affects the OSD input format (g_format) - never the DV output mode, so
+  // the video stays sink-based (DV->SDR on SDR displays). Written on HDR PGS
+  // open, restored to false on close.
+  CSysfsPath("/sys/module/aml_media/parameters/amdv_force_hdr_output", forceHdr);
+  CLog::Log(LOGDEBUG, "AMLUtils::{} - amdv_force_hdr_output [{}]", __FUNCTION__,
+            forceHdr ? "enabled" : "disabled");
+}
