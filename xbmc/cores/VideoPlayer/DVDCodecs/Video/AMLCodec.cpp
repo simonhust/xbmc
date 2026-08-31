@@ -2201,6 +2201,16 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 0);
 
+  // Scheme B: the GLES compositor pre-bakes the GUI/OSD to PQ. For Dolby
+  // Vision (profile 4/7) on a DV-capable display the DV core must treat the
+  // OSD as 10-bit HDR RGB (g_format=HDR) so it passes through untouched;
+  // otherwise (SDR output or non-DV) the OSD stays 8-bit SDR. The base-layer
+  // hint hdrType is HDR10 for a DV FEL stream, so detect DV via the profile.
+  const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 7);
+  const bool dvPqBake = isDovi && aml_support_dolby_vision() &&
+                        aml_display_support_dv();
+  aml_set_linux_osd_sdr8(!dvPqBake);
+
   switch(am_private->video_format)
   {
     default:
