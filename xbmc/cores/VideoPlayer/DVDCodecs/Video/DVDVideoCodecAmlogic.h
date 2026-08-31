@@ -130,6 +130,7 @@ private:
   double    m_dv_seek_first_dts = DVD_NOPTS_VALUE;
 
   int m_resume_pair_count{0};
+  int m_nalLengthSize{0};
   struct ResumeBuffer {
     uint8_t *data;
     uint32_t size;
