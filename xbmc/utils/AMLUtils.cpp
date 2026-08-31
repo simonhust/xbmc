@@ -292,8 +292,12 @@ bool aml_dolby_vision_enabled()
   static int dv_enabled = -1;
   bool dv_user_enabled(!CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
 
+  // avdvplus: DV processing availability is driven purely by the chip
+  // capability and the user setting - never by the current display HDR/DV
+  // capability. The kernel owns the output adaptation, so user-space must
+  // not gate DV streams on the sink.
   if (dv_enabled == -1)
-    dv_enabled = (!!aml_support_dolby_vision() && !!aml_display_support_dv());
+    dv_enabled = !!aml_support_dolby_vision();
 
   return ((dv_enabled && !!dv_user_enabled) == 1);
 }
