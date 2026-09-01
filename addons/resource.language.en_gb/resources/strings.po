@@ -24879,7 +24879,49 @@ msgctxt "#39217"
 msgid "Adjust the colour saturation of the GUI overlay in SDR mode."
 msgstr ""
 
-#empty strings from id 39218 to 39899
+#. Label for setting "HDR PGS peak luminance" of label #39212
+#: system/settings/settings.xml
+msgctxt "#39212"
+msgid "HDR PGS peak luminance"
+msgstr ""
+
+#. Help text for setting "HDR PGS peak luminance" of label #39212
+#: system/settings/settings.xml
+msgctxt "#39213"
+msgid "Peak luminance applied to HDR-authored PGS subtitles in high-precision mode. Neutral at 50."
+msgstr ""
+
+#. Label for setting "HDR PGS saturation" of label #39214
+#: system/settings/settings.xml
+msgctxt "#39214"
+msgid "HDR PGS saturation"
+msgstr ""
+
+#. Help text for setting "HDR PGS saturation" of label #39214
+#: system/settings/settings.xml
+msgctxt "#39215"
+msgid "Colour saturation applied to HDR-authored PGS subtitles in high-precision mode. Neutral at 50."
+msgstr ""
+
+#. HDR PGS settings group label
+#: system/settings/settings.xml
+msgctxt "#39218"
+msgid "HDR PGS"
+msgstr ""
+
+#. Label for setting "High precision PGS" of label #39219
+#: system/settings/settings.xml
+msgctxt "#39219"
+msgid "High precision PGS"
+msgstr ""
+
+#. Help text for setting "High precision PGS" of label #39219
+#: system/settings/settings.xml
+msgctxt "#39220"
+msgid "Bake HDR-authored PGS subtitles to PQ in the GLES compositor (BT.2020 decode, four adjustable parameters, kernel HDR2 pass-through). Disable to hand the GUI and subtitles to the kernel as BT.709 sRGB and let the kernel HDR2 core apply the SDR->HDR conversion."
+msgstr ""
+
+#empty strings from id 39221 to 39899
 
 #. List formatting: pattern used to join a list of exactly two items, e.g. "A and B"
 #. STR_LIST_AND_TWO

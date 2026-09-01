@@ -248,6 +248,10 @@ public:
   // GUI saturation factor used by the 709->2020 GUI shader transfer path;
   // 1.0 is neutral. Platforms without a setting keep the GUI fully saturated.
   virtual float GetGuiSdrSaturation() const { return 1.0f; }
+  // HDR PGS subtitle adjustment factors used by the PQ output shader; 1.0 is
+  // neutral. Platforms without a setting pass the PQ overlay through.
+  virtual float GetHdrPgsPeakLuminance() const { return 1.0f; }
+  virtual float GetHdrPgsSaturation() const { return 1.0f; }
   virtual bool HasSystemSdrPeakLuminance() { return false; }
 
   /*!

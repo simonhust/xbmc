@@ -188,10 +188,13 @@ bool CGLESShader::OnEnabled()
   const float sdrPeak = CServiceBroker::GetWinSystem()->GetGuiSdrPeakLuminance();
   glUniform1f(m_sdrPeak, sdrPeak);
 
-  // HDR-authored PGS (PQ-coded) adjustment: neutral 1.0 passes the overlay
-  // through untouched. Settings wiring for peak/saturation is a follow-up.
-  glUniform1f(m_hdrPgsPeak, 1.0f);
-  glUniform1f(m_hdrPgsSaturation, 1.0f);
+  // HDR-authored PGS (PQ-coded) adjustment: 1.0 (neutral) passes the overlay
+  // through untouched; the settings map 0-100 with 50 as neutral.
+  const float hdrPgsPeak = CServiceBroker::GetWinSystem()->GetHdrPgsPeakLuminance();
+  glUniform1f(m_hdrPgsPeak, hdrPgsPeak);
+
+  const float hdrPgsSaturation = CServiceBroker::GetWinSystem()->GetHdrPgsSaturation();
+  glUniform1f(m_hdrPgsSaturation, hdrPgsSaturation);
 
   return true;
 }

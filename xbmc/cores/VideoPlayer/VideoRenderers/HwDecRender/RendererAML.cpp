@@ -82,19 +82,25 @@ bool CRendererAML::Configure(const VideoPicture &picture, float fps, unsigned in
   // SDR sink the DV engine resolves to SDR output (core2 converts the sRGB
   // OSD) or amvecm HDR2 SDR_HDR handles it, so the GUI must stay sRGB - a
   // PQ bake there is misread as sRGB (gray/washed-out OSD). HLG never bakes.
+  // High precision PGS off also disables the bake: the GUI/subtitles stay
+  // BT.709 sRGB and the kernel HDR2 core applies SDR->HDR.
   bool hdr_display(CServiceBroker::GetWinSystem()->IsHDRDisplay() ||
                    aml_display_support_dv());
   bool device_support_dv(aml_support_dolby_vision());
   bool user_dv_disable(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
       CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE));
+  bool high_precision_pgs(CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+      CSettings::SETTING_SUBTITLES_HDRPGS));
   bool dv_is_used(device_support_dv && !user_dv_disable &&
                   picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
   bool hdr_is_used(picture.color_transfer == AVCOL_TRC_SMPTE2084);
   CLog::Log(LOGDEBUG, "CRendererAML::Configure DV support, {}, DV system is {}, HDR is {}, "
-            "HDR display is {}",
+            "HDR display is {}, high precision PGS is {}",
             user_dv_disable ? "disabled" : "enabled", dv_is_used ? "enabled" : "disabled",
-            hdr_is_used ? "used" : "not used", hdr_display ? "yes" : "no");
-  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(hdr_display &&
+            hdr_is_used ? "used" : "not used", hdr_display ? "yes" : "no",
+            high_precision_pgs ? "enabled" : "disabled");
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(high_precision_pgs &&
+                                                                hdr_display &&
                                                                 (dv_is_used || hdr_is_used));
 
   m_bConfigured = true;

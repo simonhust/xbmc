@@ -2216,7 +2216,14 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   const bool hdrDisplay = CServiceBroker::GetWinSystem()->IsHDRDisplay() ||
                           aml_display_support_dv();
   const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 7);
-  const bool dvPqBake = isDovi && aml_support_dolby_vision() && hdrDisplay;
+  // High precision PGS: only then does the GLES compositor pre-bake the OSD to
+  // PQ. When disabled the GUI/subtitles stay BT.709 sRGB and the kernel HDR2
+  // core applies the SDR->HDR conversion (osd_pq_bypass=0, sdr8=1).
+  const bool highPrecisionPgs =
+      CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+          CSettings::SETTING_SUBTITLES_HDRPGS);
+  const bool dvPqBake =
+      highPrecisionPgs && isDovi && aml_support_dolby_vision() && hdrDisplay;
   aml_set_linux_osd_sdr8(!dvPqBake);
   aml_set_amdv_force_hdr_output(dvPqBake);
 
@@ -2224,8 +2231,9 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   // sRGB->PQ conversion so the GLES-baked PQ overlay is not converted twice.
   // HLG is excluded, matching the avdvplus aml_set_osd_pq_bypass policy.
   const bool isHdrPqStream =
-      !dvPqBake && (hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084 &&
-                    hints.hdrType != StreamHdrType::HDR_TYPE_HLG);
+      highPrecisionPgs && !dvPqBake &&
+      (hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084 &&
+       hints.hdrType != StreamHdrType::HDR_TYPE_HLG);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", isHdrPqStream ? 1 : 0);
 
   switch(am_private->video_format)

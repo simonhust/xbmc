@@ -14,6 +14,8 @@
 #include "cores/FFmpeg.h"
 #include "cores/VideoPlayer/Interface/DemuxPacket.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "utils/EndianSwap.h"
 #include "utils/log.h"
 #include "windowing/GraphicContext.h"
@@ -114,18 +116,15 @@ bool CDVDOverlayCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &optio
   AVDictionary* codecOpts = nullptr;
   if (m_pCodecContext->codec_id == AV_CODEC_ID_HDMV_PGS_SUBTITLE)
   {
-    // UHD-BD HDR PGS is BT.2020 PQ, SDR PGS is SDR BT.709 or SDR BT.2020.
-    StreamHdrType videoHdrType = hints.hdrType;
-
-    // Note: HDR10+ is not identified currently upstream - will though be caught as HDR10.
-    m_pgsIsPqAuthored = (videoHdrType == StreamHdrType::HDR_TYPE_HDR10 ||
-                         videoHdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
-                         videoHdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
-
-    // Decode the HDR-authored PGS palette with the BT.2020 matrix so the
-    // overlay carries PQ-coded values; the PQ output shader preserves/adjusts
-    // them. SDR PGS stays on the auto (BT.709) matrix.
-    const char* matrix = m_pgsIsPqAuthored ? "bt2020" : "auto";
+    // High precision PGS: decode the UHD-BD palette with the BT.2020 matrix
+    // so the overlay carries PQ-coded values, and the PQ output shader
+    // preserves/adjusts them. Standard mode decodes BT.709 sRGB and the
+    // kernel HDR2 core applies the SDR->HDR conversion instead.
+    const bool highPrecisionPgs =
+        CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(
+            CSettings::SETTING_SUBTITLES_HDRPGS);
+    m_pgsIsPqAuthored = highPrecisionPgs;
+    const char* matrix = highPrecisionPgs ? "bt2020" : "bt709";
     av_dict_set(&codecOpts, "pgs_matrix", matrix, 0);
   }
 

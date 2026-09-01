@@ -524,6 +524,24 @@ float CWinSystemAmlogic::GetGuiSdrPeakLuminance() const
   return sdrWhiteNits / 100.0f;
 }
 
+float CWinSystemAmlogic::GetHdrPgsSaturation() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int saturation = settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSSATURATION);
+
+  // UI 0-100, neutral at 50 -> 1.0.
+  return saturation / 50.0f;
+}
+
+float CWinSystemAmlogic::GetHdrPgsPeakLuminance() const
+{
+  const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+  const int pgsPeak = settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSPEAKLUMINANCE);
+
+  // Linear luminance multiplier for the HDR PGS shader; neutral 1.0 at 50.
+  return pgsPeak / 50.0f;
+}
+
 HDR_STATUS CWinSystemAmlogic::GetOSHDRStatus()
 {
   return (IsHDRDisplay() ? HDR_STATUS::HDR_ON : HDR_STATUS::HDR_UNSUPPORTED);
