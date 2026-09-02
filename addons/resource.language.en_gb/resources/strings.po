@@ -24918,7 +24918,7 @@ msgstr ""
 #. Help text for setting "High precision PGS" of label #39219
 #: system/settings/settings.xml
 msgctxt "#39220"
-msgid "Bake HDR-authored PGS subtitles to PQ in the GLES compositor (BT.2020 decode, four adjustable parameters, kernel HDR2 pass-through). Disable to hand the GUI and subtitles to the kernel as BT.709 sRGB and let the kernel HDR2 core apply the SDR->HDR conversion."
+msgid "High-precision path: the GLES compositor bakes the GUI and the HDR PGS subtitles (decoded as BT.2020/PQ code values) into the HDR domain, with four adjustable parameters, and the kernel passes the OSD through. Disable for the low-cost path: the GUI stays BT.709 sRGB, HDR PGS is tone-mapped to BT.709 sRGB in the shader, and the kernel HDR2 core applies SDR->HDR (or passes the OSD through on an SDR sink)."
 msgstr ""
 
 #empty strings from id 39221 to 39899

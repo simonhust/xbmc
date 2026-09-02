@@ -1007,6 +1007,9 @@
               <condition>HAVE_AMCODEC</condition>
             </or>
           </requirement>
+          <dependencies>
+            <dependency type="visible" setting="subtitles.hdrpgs" operator="is">true</dependency>
+          </dependencies>
           <level>2</level>
           <default>50</default>
           <control type="slider" format="percentage" range="0,100" />
@@ -1021,6 +1024,7 @@
             </or>
           </requirement>
           <dependencies>
+            <dependency type="visible" setting="subtitles.hdrpgs" operator="is">true</dependency>
             <dependency type="enable">
               <or>
                 <condition on="property" name="hassystemsdrpeakluminance" operator="!is" />
@@ -1033,11 +1037,17 @@
           <control type="slider" format="percentage" range="0,100" />
         </setting>
         <setting id="subtitles.hdrpgspeakluminance" type="integer" label="39212" help="39213">
+          <dependencies>
+            <dependency type="visible" setting="subtitles.hdrpgs" operator="is">true</dependency>
+          </dependencies>
           <level>2</level>
           <default>50</default>
           <control type="slider" format="percentage" range="0,100" />
         </setting>
         <setting id="subtitles.hdrpgssaturation" type="integer" label="39214" help="39215">
+          <dependencies>
+            <dependency type="visible" setting="subtitles.hdrpgs" operator="is">true</dependency>
+          </dependencies>
           <level>2</level>
           <default>50</default>
           <control type="slider" format="percentage" range="0,100" />
