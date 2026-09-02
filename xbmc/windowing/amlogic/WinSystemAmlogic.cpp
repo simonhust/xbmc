@@ -487,7 +487,8 @@ bool CWinSystemAmlogic::IsHDRDisplay()
   // cached caps refreshed on display events (aml_refresh_display_caps)
   CHDRCapabilities caps = m_amlDisplay->GetHDRCaps();
   return (caps.SupportsHDR10() | caps.SupportsHDR10Plus() | caps.SupportsHLG() |
-         (caps.SupportsDolbyVision() != DolbyVisionFormat::DOLBYVISION_TYPE_NONE));
+          caps.SupportsHDRVivid() |
+          (caps.SupportsDolbyVision() != DolbyVisionFormat::DOLBYVISION_TYPE_NONE));
 }
 
 CHDRCapabilities CWinSystemAmlogic::GetDisplayHDRCapabilities() const

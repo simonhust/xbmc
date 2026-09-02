@@ -1175,11 +1175,46 @@ void CAMLDisplay::aml_refresh_display_caps()
 {
   // built locally so a stream opening during the update cannot see empty caps
   CHDRCapabilities caps;
-  int hdr_cap = m_amlDRMUtils->aml_get_drmProperty("hdr_cap", DRM_MODE_OBJECT_CONNECTOR);
-  int dv_cap = m_amlDRMUtils->aml_get_drmProperty("dv_cap", DRM_MODE_OBJECT_CONNECTOR);
+  int hdr_cap = -1;
+  int dv_cap = -1;
 
-  hdr_cap = hdr_cap < 0 ? 0 : hdr_cap;
-  dv_cap = dv_cap < 0 ? 0 : dv_cap;
+  // Primary source: the hdmitx sysfs nodes (historical detection). They are
+  // always present on Amlogic and derive from the HDMI RX EDID capability.
+  CSysfsPath hdr_cap_sysfs{"/sys/class/amhdmitx/amhdmitx0/hdr_cap"};
+  CSysfsPath dv_cap_sysfs{"/sys/class/amhdmitx/amhdmitx0/dv_cap"};
+  if (hdr_cap_sysfs.Exists() && dv_cap_sysfs.Exists())
+  {
+    hdr_cap = 0;
+    dv_cap = 0;
+    const std::string hdrstr = hdr_cap_sysfs.Get<std::string>().value();
+    if (hdrstr.find("HDR10Plus Supported: 1") != std::string::npos)
+      hdr_cap |= HDR10_PLUS_CAP;
+    if (hdrstr.find("Traditional HDR: 1") != std::string::npos ||
+        hdrstr.find("SMPTE ST 2084: 1") != std::string::npos)
+      hdr_cap |= HDR10_CAP | SMPTE_ST_2084_CAP;
+    if (hdrstr.find("Hybrid Log-Gamma: 1") != std::string::npos)
+      hdr_cap |= HLG_CAP;
+
+    const std::string dvstr = dv_cap_sysfs.Get<std::string>().value();
+    if (dvstr.find("2160p30hz: 1") != std::string::npos)
+      dv_cap = 1;
+    else if (dvstr.find("2160p60hz: 1") != std::string::npos)
+      dv_cap = DV_2160p60Hz;
+
+    // CUVA HDR Vivid is only reported through the hdmitx sysfs node (the DRM
+    // hdr_cap property carries no CUVA bits).
+    if (hdrstr.find("CUVA supported: 1") != std::string::npos)
+      caps.SetHDRVivid();
+  }
+  else
+  {
+    // Fallback: the meson DRM driver exposes hdr_cap/dv_cap as connector
+    // bitmask properties; other Amlogic DRM drivers do not.
+    hdr_cap = m_amlDRMUtils->aml_get_drmProperty("hdr_cap", DRM_MODE_OBJECT_CONNECTOR);
+    dv_cap = m_amlDRMUtils->aml_get_drmProperty("dv_cap", DRM_MODE_OBJECT_CONNECTOR);
+    hdr_cap = hdr_cap < 0 ? 0 : hdr_cap;
+    dv_cap = dv_cap < 0 ? 0 : dv_cap;
+  }
 
   if (hdr_cap & (HDR10_CAP | SMPTE_ST_2084_CAP))
     caps.SetHDR10();
