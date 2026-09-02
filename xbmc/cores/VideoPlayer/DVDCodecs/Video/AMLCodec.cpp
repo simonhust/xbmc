@@ -2229,9 +2229,13 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
 
   // Non-DV HDR (HDR10/HDR10+, PQ transfer): amvecm HDR2 bypasses its own OSD
   // sRGB->PQ conversion so the GLES-baked PQ overlay is not converted twice.
-  // HLG is excluded, matching the avdvplus aml_set_osd_pq_bypass policy.
+  // HLG is excluded, matching the avdvplus aml_set_osd_pq_bypass policy. Only
+  // on an HDR/DV-capable sink does the GLES compositor bake the OSD to PQ, so
+  // the bypass must be gated on hdrDisplay - on an SDR sink the OSD stays sRGB
+  // (SetTransferPQ=false) and osd_pq_bypass must stay 0 so the kernel HDR2
+  // path keeps its SDR handling instead of misreading sRGB as pre-baked PQ.
   const bool isHdrPqStream =
-      highPrecisionPgs && !dvPqBake &&
+      highPrecisionPgs && !dvPqBake && hdrDisplay &&
       (hints.colorTransferCharacteristic == AVCOL_TRC_SMPTE2084 &&
        hints.hdrType != StreamHdrType::HDR_TYPE_HLG);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", isHdrPqStream ? 1 : 0);
