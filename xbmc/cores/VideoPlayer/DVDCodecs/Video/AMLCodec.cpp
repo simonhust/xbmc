@@ -2245,6 +2245,16 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
        hints.hdrType != StreamHdrType::HDR_TYPE_HLG);
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", isHdrPqStream ? 1 : 0);
 
+  // Keep the GLES OSD bake path in sync with the kernel OSD signal right here
+  // at open time, where the authoritative stream data (dv profile, transfer,
+  // hdr type) is available. Previously only CRendererAML::Configure (which
+  // runs on the render thread after the codec is already open) set
+  // SetTransferPQ; on an in-place SDR->DV switch the old renderer's destructor
+  // re-asserts osd_pq_bypass=1 *after* this injection, desyncing the sRGB GUI
+  // from the kernel HDR2 OSD conversion and shifting subtitle/GUI colors.
+  CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(
+      highPrecisionPgs && hdrDisplay && (dv_enable || isHdrPqStream));
+
   switch(am_private->video_format)
   {
     default:
@@ -2488,6 +2498,15 @@ void CAMLCodec::CloseDecoder()
   // restore the OSD force-HDR node (written on HDR PGS open)
   aml_set_amdv_force_hdr_output(false);
   aml_set_linux_osd_sdr8(true);
+  // restore the OSD input-signal node (written on open) to the SDR GUI state.
+  // This lives here (paired with the OpenDecoder injection) instead of the
+  // renderer destructor: the destructor also runs mid-switch when streams are
+  // swapped in place (e.g. SDR pre-roll -> DV feature on one Blu-ray), where
+  // re-asserting osd_pq_bypass=1 clobbered the value the new stream's
+  // OpenDecoder had just written and desynced the sRGB GUI from the kernel
+  // HDR2 OSD conversion (subtitle/GUI color shift). CloseDecoder always runs
+  // after the stream ends, so the restore still lands before the GUI returns.
+  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
 
   // never leave vcodec ff/rw or paused.
   if (m_speed != DVD_PLAYSPEED_NORMAL)

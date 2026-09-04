@@ -24,8 +24,6 @@
 #include "windowing/GraphicContext.h"
 #include "windowing/WinSystem.h"
 
-#include "platform/linux/SysfsPath.h"
-
 CRendererAML::CRendererAML()
  : m_prevVPts(DVD_NOPTS_VALUE)
  , m_bConfigured(false)
@@ -37,15 +35,6 @@ CRendererAML::~CRendererAML()
 {
   Reset();
   CServiceBroker::GetWinSystem()->GetGfxContext().SetTransferPQ(false);
-
-  // Restore the kernel OSD pipeline to the SDR state. OpenDecoder writes the
-  // OSD params based on the stream hdrType (osd_pq_bypass=1 only for non-DV
-  // HDR, otherwise 0); on teardown we force osd_pq_bypass=1 so the GUI (sRGB
-  // BT.709, no GLES bake) passes through unconverted on the SDR sink instead
-  // of being washed out by a PQ encode on SDR gamma.
-  CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
-  CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
 }
 
 CBaseRenderer* CRendererAML::Create(CVideoBuffer *buffer)
