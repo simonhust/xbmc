@@ -8976,22 +8976,22 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14314"
-msgid "Convert HDR10+ to Dolby Vision"
+msgid "Map HDR10+ to Dolby Vision P8.1"
 msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14315"
-msgid "Converts HDR10+ (and HDR Vivid) to Dolby Vision: a Dolby Vision profile 8.1 RPU is generated from the HDR10+ metadata per access unit, and HDR10+ sources are absorbed by the DV VS-Engine for tone mapping on DV capable displays."
+msgid "Maps HDR10+ dynamic metadata to Dolby Vision: a Dolby Vision profile 8.1 RPU is generated from the HDR10+ metadata per access unit, and HDR10+ sources are absorbed by the DV VS-Engine for tone mapping on DV capable displays."
 msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14316"
-msgid "Convert CUVA HDR Vivid to Dolby Vision"
+msgid "Map HDR Vivid to Dolby Vision P8.1"
 msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14317"
-msgid "CUVA HDR Vivid is converted to Dolby Vision by the DV VS-Engine on DV capable displays."
+msgid "Maps CUVA HDR Vivid dynamic metadata to Dolby Vision: a Dolby Vision profile 8.1 RPU is generated from the HDR Vivid metadata, and HDR Vivid sources are absorbed by the DV VS-Engine for tone mapping on DV capable displays."
 msgstr ""
 
 #empty strings from id 14318 to 15010
