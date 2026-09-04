@@ -2213,7 +2213,7 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   CSysfsPath("/sys/module/aml_media/parameters/osd_bypass_enable", 0);
   CSysfsPath("/sys/module/aml_media/parameters/osd_gamut_bypass", 0);
 
-  // Dolby Vision (profile 4/7) on a DV-capable chip *and* an HDR/DV-capable
+  // Dolby Vision (profile 4/5/7/8) on a DV-capable chip *and* an HDR/DV-capable
   // sink: the DV core must treat the OSD as 10-bit HDR RGB (g_format=HDR,
   // aml_linux_osd_sdr8=0 and amdv_force_hdr_output=1) so the GLES-baked PQ
   // overlay passes through the DV core's OSD conversion untouched. On an SDR
@@ -2222,11 +2222,14 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   // core2 graphic path then converts the sRGB OSD into the SDR8 output domain
   // (the previously verified chain). This mirrors the avdvplus
   // aml_set_transfer_pq gate: hdr_display = IsHDRDisplay() ||
-  // aml_display_support_dv(). The base-layer hint hdrType is HDR10 for a DV
-  // FEL stream, so detect DV via the profile. Both nodes are restored on close.
+  // aml_display_support_dv(). Detect DV via the profile: the base-layer hint
+  // hdrType is HDR10 for a DV FEL stream, and single-layer profiles (5, 8)
+  // need the same OSD HDR-RGB passthrough as dual-layer ones. Both nodes are
+  // restored on close.
   const bool hdrDisplay = CServiceBroker::GetWinSystem()->IsHDRDisplay() ||
                           aml_display_support_dv();
-  const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 7);
+  const bool isDovi = (hints.dovi.dv_profile == 4 || hints.dovi.dv_profile == 5 ||
+                       hints.dovi.dv_profile == 7 || hints.dovi.dv_profile == 8);
   // High precision PGS: only then does the GLES compositor pre-bake the OSD to
   // PQ. When disabled the GUI/subtitles stay BT.709 sRGB and the kernel HDR2
   // core applies the SDR->HDR conversion (osd_pq_bypass=0, sdr8=1).
