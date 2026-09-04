@@ -20038,7 +20038,7 @@ msgstr ""
 #. Label of setting "System / Display / GUI peak luminance in HDR PQ mode"
 #: system/settings/settings.xml
 msgctxt "#36097"
-msgid "GUI peak luminance in HDR PQ mode"
+msgid "GUI peak luminance"
 msgstr ""
 
 #. Label of setting "System / Display / Use 10 bit for SDR"
@@ -24870,7 +24870,7 @@ msgstr ""
 #. Label for setting "GUI SDR saturation" of label #39216
 #: system/settings/settings.xml
 msgctxt "#39216"
-msgid "GUI SDR saturation"
+msgid "GUI saturation"
 msgstr ""
 
 #. Help text for setting "GUI SDR saturation" of label #39216
@@ -24882,7 +24882,7 @@ msgstr ""
 #. Label for setting "HDR PGS peak luminance" of label #39212
 #: system/settings/settings.xml
 msgctxt "#39212"
-msgid "HDR PGS peak luminance"
+msgid "PGS peak luminance"
 msgstr ""
 
 #. Help text for setting "HDR PGS peak luminance" of label #39212
@@ -24894,7 +24894,7 @@ msgstr ""
 #. Label for setting "HDR PGS saturation" of label #39214
 #: system/settings/settings.xml
 msgctxt "#39214"
-msgid "HDR PGS saturation"
+msgid "PGS saturation"
 msgstr ""
 
 #. Help text for setting "HDR PGS saturation" of label #39214
