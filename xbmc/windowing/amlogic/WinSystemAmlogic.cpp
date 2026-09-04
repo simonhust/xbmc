@@ -87,15 +87,12 @@ void CWinSystemAmlogic::SettingOptionsComponentsFiller(const SettingConstPtr& se
                                                  std::vector<IntegerSettingOption>& list,
                                                  int& current)
 {
-  int dv_cap = m_amlDisplay->aml_get_drmProperty("dv_cap", DRM_MODE_OBJECT_CONNECTOR);
-
-  if ((dv_cap & DV_RGB_444_8BIT) != 0)
-    list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14426),
-                      AML_DV_TV_LED);
-
-  if ((dv_cap & LL_YCbCr_422_12BIT) != 0)
-    list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14427),
-                      AML_DV_PLAYER_LED);
+  // Always offer both DV LED modes; the sink DV capability is not consulted
+  // so the setting stays usable on displays that do not advertise DV yet.
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14426),
+                    AML_DV_TV_LED);
+  list.emplace_back(CServiceBroker::GetResourcesComponent().GetLocalizeStrings().Get(14427),
+                    AML_DV_PLAYER_LED);
 }
 
 void CWinSystemAmlogic::SettingOptionsMultiHdrPriorityFiller(const SettingConstPtr& setting,
@@ -289,7 +286,10 @@ bool CWinSystemAmlogic::InitWindowSystem()
     CSysfsPath("/sys/module/aml_media/parameters/hdr_mode", 1);
   }
 
-  if (!aml_support_dolby_vision() || !aml_display_support_dv())
+  // The DV-related toggles are gated on the chip's DV capability only; the
+  // sink is intentionally not checked so the settings stay visible (and
+  // configurable) even on a display that currently does not advertise DV.
+  if (!aml_support_dolby_vision())
   {
     auto setting = settings->GetSetting(CSettings::SETTING_COREELEC_AMLOGIC_DV_DISABLE);
     if (setting)
@@ -322,20 +322,6 @@ bool CWinSystemAmlogic::InitWindowSystem()
   {
     CServiceBroker::GetSettingsComponent()->GetSettings()->
       GetSettingsManager()->RegisterSettingOptionsFiller("dv_led_modes", SettingOptionsComponentsFiller);
-
-    int dv_cap = m_amlDisplay->aml_get_drmProperty("dv_cap", DRM_MODE_OBJECT_CONNECTOR);
-    AML_DISPLAY_DV_LED old_value = static_cast<AML_DISPLAY_DV_LED>(
-      settings->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED));
-    AML_DISPLAY_DV_LED new_value = old_value;
-
-    if (old_value == AML_DV_TV_LED && !(dv_cap & DV_RGB_444_8BIT))
-      new_value = static_cast<AML_DISPLAY_DV_LED>((dv_cap & LL_YCbCr_422_12BIT) != 0 ? AML_DV_PLAYER_LED : -1);
-
-    if (old_value == AML_DV_PLAYER_LED && !(dv_cap & LL_YCbCr_422_12BIT))
-      new_value = static_cast<AML_DISPLAY_DV_LED>((dv_cap & DV_RGB_444_8BIT) != 0 ? AML_DV_TV_LED : -1);
-
-    if (new_value != old_value)
-      settings->SetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED, new_value);
   }
 
   /* Mixed HDR stream priority (0 DV, 1 HDR10+, 2 CUVA) - always available */
