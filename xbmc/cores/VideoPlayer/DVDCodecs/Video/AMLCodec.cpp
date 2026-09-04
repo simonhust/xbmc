@@ -2160,12 +2160,18 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
     if (hints.dovi.dv_profile == 0)
     {
       AmlDisplay->aml_set_drmProperty("dv_policy", DRM_MODE_OBJECT_CRTC, AMDV_FORCE_OUTPUT_MODE);
+      // dv_mode is a DRM CRTC property whose set callback passes the value
+      // straight to set_amdv_mode() as the AMDV_OUTPUT_MODE_* enum (see
+      // meson_crtc.c dv_mode_property). The old sysfs node had a
+      // dv_mode_table[] indirection (0=BYPASS, 1=IPT, ...), so the legacy
+      // (enum + 1) % 6 encoding must NOT be applied here - Player-LED uses
+      // IPT, TV-LED uses IPT_TUNNEL.
       if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED)
         AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
-                                        (AMDV_OUTPUT_MODE_IPT + 1) % 6);
+                                        AMDV_OUTPUT_MODE_IPT);
       else
         AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
-                                        (AMDV_OUTPUT_MODE_IPT_TUNNEL + 1) % 6);
+                                        AMDV_OUTPUT_MODE_IPT_TUNNEL);
     }
     else
     {
@@ -2517,8 +2523,11 @@ void CAMLCodec::CloseDecoder()
 
   // disable Dolby Vision VS-Engine for non DV media
   if (dv_enabled && dolby_vision_policy == AMDV_FORCE_OUTPUT_MODE)
+    // dv_mode is a DRM CRTC property with native AMDV_OUTPUT_MODE_* enum
+    // semantics (see OpenDecoder); restore to BYPASS directly, no sysfs
+    // (enum + 1) % 6 offset.
     AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
-                                    (AMDV_OUTPUT_MODE_BYPASS + 1) % 6);
+                                    AMDV_OUTPUT_MODE_BYPASS);
 
   m_dll->codec_close(&am_private->vcodec);
   dumpfile_close(am_private);
