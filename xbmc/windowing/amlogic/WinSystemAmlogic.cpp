@@ -501,8 +501,9 @@ float CWinSystemAmlogic::GetGuiSdrSaturation() const
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
   const int saturation = settings->GetInt(CSettings::SETTING_SUBTITLES_GUISDRSATURATION);
 
-  // UI 0-100, neutral at 50 -> 1.0.
-  return saturation / 50.0f;
+  // UI 0-100, neutral at 50 -> 2.0 (previously 1.0; the BT.709 OSD on a
+  // BT.2020 HDR canvas reads undersaturated at the old neutral).
+  return saturation / 25.0f;
 }
 
 float CWinSystemAmlogic::GetGuiSdrPeakLuminance() const
@@ -530,8 +531,9 @@ float CWinSystemAmlogic::GetHdrPgsSaturation() const
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
   const int saturation = settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSSATURATION);
 
-  // UI 0-100, neutral at 50 -> 1.0.
-  return saturation / 50.0f;
+  // UI 0-100, neutral at 50 -> 2.0 (previously 1.0; the BT.709 OSD on a
+  // BT.2020 HDR canvas reads undersaturated at the old neutral).
+  return saturation / 25.0f;
 }
 
 float CWinSystemAmlogic::GetHdrPgsPeakLuminance() const
