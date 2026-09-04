@@ -124,12 +124,13 @@ void CResolutionUtils::FindResolutionFromWhitelist(float fps, int width, int hei
            (info.iScreenHeight >= curr.iScreenHeight && info.iScreenWidth >= curr.iScreenWidth)) &&
            (info.dwFlags & dwFlags) == dwFlags)
       {
-        // do not add half refreshrates (25, 29.97 by default) as kodi cannot cope with
-        // them on playback start. Especially interlaced content is not properly detected
-        // and this causes ugly double switching.
-        // This won't allow 25p / 30p playback on native refreshrate by default
-        if ((info.fRefreshRate > 30) || (MathUtils::FloatEquals(info.fRefreshRate, 24.0f, 0.1f)))
-          indexList.push_back(CDisplaySettings::GetInstance().GetStringFromRes(c));
+        // Include the half refreshrates (25, 29.97, 30) as well so progressive
+        // 25p/29.97p/30p content can match its native refresh rate instead of
+        // double-switching to 60Hz. The demuxer already doubles the fps for
+        // real interlaced streams (50i/59.94i/60i), so they never mis-match
+        // these half-rate candidates; only true progressive content lands on
+        // 25/29.97/30.
+        indexList.push_back(CDisplaySettings::GetInstance().GetStringFromRes(c));
       }
     }
   }
