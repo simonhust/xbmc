@@ -26,7 +26,7 @@ class CBitstreamConverter;
 
 class CDVDVideoCodecAmlogic;
 
-typedef std::tuple<uint8_t*, uint32_t, bool, double> DLDemuxPacket;
+typedef std::tuple<uint8_t*, uint32_t, bool, double, double> DLDemuxPacket; /* data, size, isEL, dts, pts */
 
 class CAMLVideoBuffer : public CVideoBuffer
 {
@@ -125,6 +125,15 @@ private:
   uint8_t  *m_last_pData = nullptr;
   uint32_t  m_last_iSize = 0;
   double    m_last_dts = DVD_NOPTS_VALUE;
+  /* Last valid per-layer DTS for NOPTS repair in the dual-queue pairing.
+   * Kept separately per layer: BL and EL packets interleave, so a shared
+   * "last dts" can lag one frame behind the layer that needs repairing. */
+  double    m_last_bl_dts = DVD_NOPTS_VALUE;
+  double    m_last_el_dts = DVD_NOPTS_VALUE;
+  /* PTS of the most recent BL+EL pair (complemented from either layer at
+   * the pair exit, see DualLayerTryPair). Consumed by AddData when handing
+   * the converted pair to the decoder. */
+  double    m_last_pair_pts = DVD_NOPTS_VALUE;
   bool      m_dv_seek_filter_active = false;
   double    m_dv_seek_time_seen = DVD_NOPTS_VALUE;
   double    m_dv_seek_first_dts = DVD_NOPTS_VALUE;

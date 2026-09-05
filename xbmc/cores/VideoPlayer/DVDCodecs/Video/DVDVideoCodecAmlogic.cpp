@@ -525,6 +525,9 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
   m_last_pData = nullptr;
   m_last_iSize = 0;
   m_last_dts = DVD_NOPTS_VALUE;
+  m_last_bl_dts = DVD_NOPTS_VALUE;
+  m_last_el_dts = DVD_NOPTS_VALUE;
+  m_last_pair_pts = DVD_NOPTS_VALUE;
   m_ready_to_pair = false;
   m_switched_to_dual = false;
 
@@ -533,25 +536,57 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
 
 void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
 {
+  /* A demuxed BL/EL packet can arrive with DTS=NOPTS (e.g. a PES header the
+   * demuxer fails to timestamp). Inserted as-is, ~1.8e19 sorts to the queue
+   * tail and never pairs (|bl_dts - el_dts| <= 5000us fails forever once it
+   * reaches the front), stalling both queues -> black screen. Repair the
+   * timestamp from the previous valid DTS of the SAME layer: the decode-order
+   * DTS grid advances by exactly one frame, so prev + 1/fps lands on the true
+   * slot, which the paired EL/BL frame carries identically. */
+  double dts = packet.dts;
+  if (dts == DVD_NOPTS_VALUE)
+  {
+    double &last_dts = packet.isELPackage ? m_last_el_dts : m_last_bl_dts;
+    if (last_dts != DVD_NOPTS_VALUE && m_hints.fpsrate > 0)
+    {
+      dts = last_dts + DVD_TIME_BASE * static_cast<double>(m_hints.fpsscale) / m_hints.fpsrate;
+      last_dts = dts;
+      CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, repaired NOPTS {} dts: {:.3f} -> {:.3f}",
+        packet.isELPackage ? "EL" : "BL", packet.dts / DVD_TIME_BASE, dts / DVD_TIME_BASE);
+    }
+    else
+    {
+      /* No previous DTS to repair from (layer's first packet) - drop it rather
+       * than parking an unpairable NOPTS at the front of the queue. */
+      CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, dropping NOPTS {} packet (no previous DTS)",
+        packet.isELPackage ? "EL" : "BL");
+      return;
+    }
+  }
+  else if (packet.isELPackage)
+    m_last_el_dts = dts;
+  else
+    m_last_bl_dts = dts;
+
   CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, EL={}, dts={:.3f}, el_q={}, bl_q={}, ready={}",
-    packet.isELPackage, packet.dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size(), m_ready_to_pair);
+    packet.isELPackage, dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size(), m_ready_to_pair);
 
   /* Insert packet into the appropriate queue (sorted by DTS ascending) */
   auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
   memcpy(pkt, packet.pData, packet.iSize);
-  DLDemuxPacket new_pkt(pkt, packet.iSize, packet.isELPackage, packet.dts);
+  DLDemuxPacket new_pkt(pkt, packet.iSize, packet.isELPackage, dts, packet.pts);
 
   if (packet.isELPackage)
   {
     auto it = m_el_packages.begin();
-    while (it != m_el_packages.end() && std::get<3>(*it) < packet.dts)
+    while (it != m_el_packages.end() && std::get<3>(*it) < dts)
       ++it;
     m_el_packages.emplace(it, std::move(new_pkt));
   }
   else
   {
     auto it = m_bl_packages.begin();
-    while (it != m_bl_packages.end() && std::get<3>(*it) < packet.dts)
+    while (it != m_bl_packages.end() && std::get<3>(*it) < dts)
       ++it;
     m_bl_packages.emplace(it, std::move(new_pkt));
   }
@@ -625,12 +660,26 @@ bool CDVDVideoCodecAmlogic::DualLayerTryPair()
   uint8_t *el_data = std::get<0>(el_pkt);
   uint32_t el_size = std::get<1>(el_pkt);
 
+  /* The converted BL+EL pair is handed to the decoder with the BL PTS;
+   * if the BL PES lost its timestamp (demux NOPTS, as on this disc's
+   * 10:01 splice) fall back to the EL twin's PTS. Only when both layers
+   * are NOPTS does the decoder receive NOPTS and fall back to its own
+   * duration-based PTS estimation. */
   bool converted = m_bitstream->Convert(bl_data, bl_size, el_data, el_size);
 
   if (converted)
   {
     KODI::MEMORY::AlignedFree(bl_data);
     KODI::MEMORY::AlignedFree(el_data);
+
+    double bl_pts = std::get<4>(bl_pkt);
+    double el_pts = std::get<4>(el_pkt);
+    if (bl_pts != DVD_NOPTS_VALUE)
+      m_last_pair_pts = bl_pts;
+    else if (el_pts != DVD_NOPTS_VALUE)
+      m_last_pair_pts = el_pts;
+    else
+      m_last_pair_pts = DVD_NOPTS_VALUE;
 
     m_last_pData = m_bitstream->GetConvertBuffer();
     m_last_iSize = m_bitstream->GetConvertSize();
@@ -740,20 +789,24 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
                   m_packages.pop_front();
                 }
 
-                auto trim_to = [](std::list<DLDemuxPacket> &q, double boundary) {
-                  while (!q.empty() && std::get<3>(q.front()) < boundary)
-                  {
-                    KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
-                    q.pop_front();
-                  }
-                };
-                trim_to(m_el_packages, packet.dts);
-                trim_to(m_bl_packages, packet.dts);
+                if (packet.dts != DVD_NOPTS_VALUE)
+                {
+                  auto trim_to = [](std::list<DLDemuxPacket> &q, double boundary) {
+                    while (!q.empty() && std::get<3>(q.front()) < boundary)
+                    {
+                      KODI::MEMORY::AlignedFree(std::get<0>(q.front()));
+                      q.pop_front();
+                    }
+                  };
+                  trim_to(m_el_packages, packet.dts);
+                  trim_to(m_bl_packages, packet.dts);
+                }
 
                 m_ready_to_pair = false;
               }
             }
-            else if (!m_switched_to_dual && packet.dts >= DVD_TIME_BASE * 1.0)
+            else if (!m_switched_to_dual && packet.dts != DVD_NOPTS_VALUE &&
+                     packet.dts >= DVD_TIME_BASE * 1.0)
             {
               /* Blu-ray: switch at 1s boundary */
               m_switched_to_dual = true;
@@ -812,7 +865,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
             {
               uint8_t *pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
               memcpy(pkt, packet.pData, packet.iSize);
-              m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
+              m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts, packet.pts);
               return true;
             }
           }
@@ -884,7 +937,7 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
             {
               uint8_t *pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
               memcpy(pkt, packet.pData, packet.iSize);
-              m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts);
+              m_packages.emplace_back(pkt, iSize, packet.isELPackage, packet.dts, packet.pts);
               return true;
             }
           }
@@ -1084,7 +1137,14 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
 
     double used_dts = (m_last_dts != DVD_NOPTS_VALUE) ? m_last_dts : packet.dts;
     m_last_dts = DVD_NOPTS_VALUE;
-    m_last_added = m_Codec->AddData(pData, iSize, used_dts, m_hints.ptsinvalid ? DVD_NOPTS_VALUE : packet.pts);
+    /* The pair-exit PTS (BL, complemented from the EL twin when BL is
+     * NOPTS) wins over the triggering packet's PTS on the dual-queue path;
+     * single-layer/EP-map paths never set it and fall back to packet.pts,
+     * and to NOPTS when the stream itself flagged PTS invalid. */
+    double used_pts = (m_last_pair_pts != DVD_NOPTS_VALUE) ? m_last_pair_pts
+                                                           : (m_hints.ptsinvalid ? DVD_NOPTS_VALUE : packet.pts);
+    m_last_pair_pts = DVD_NOPTS_VALUE;
+    m_last_added = m_Codec->AddData(pData, iSize, used_dts, used_pts);
 
     if (m_last_added && packet.pData)
     {
