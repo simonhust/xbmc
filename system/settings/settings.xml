@@ -1041,8 +1041,8 @@
             <dependency type="visible" setting="subtitles.hdrpgs" operator="is">true</dependency>
           </dependencies>
           <level>2</level>
-          <default>50</default>
-          <control type="slider" format="percentage" range="0,200" />
+          <default>25</default>
+          <control type="slider" format="percentage" range="0,100" />
         </setting>
         <setting id="subtitles.hdrpgssaturation" type="integer" label="39214" help="39215">
           <dependencies>
