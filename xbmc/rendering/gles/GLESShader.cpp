@@ -189,7 +189,7 @@ bool CGLESShader::OnEnabled()
   glUniform1f(m_sdrPeak, sdrPeak);
 
   // HDR-authored PGS (PQ-coded) adjustment: 1.0 (neutral) passes the overlay
-  // through untouched; the settings map 0-100 with 50 as neutral.
+  // through untouched; the settings map 0-200 with 50 as neutral.
   const float hdrPgsPeak = CServiceBroker::GetWinSystem()->GetHdrPgsPeakLuminance();
   glUniform1f(m_hdrPgsPeak, hdrPgsPeak);
 

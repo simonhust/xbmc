@@ -527,7 +527,8 @@ float CWinSystemAmlogic::GetHdrPgsPeakLuminance() const
   const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
   const int pgsPeak = settings->GetInt(CSettings::SETTING_SUBTITLES_HDRPGSPEAKLUMINANCE);
 
-  // Linear luminance multiplier for the HDR PGS shader; neutral 1.0 at 50.
+  // Linear luminance multiplier for the HDR PGS shader; neutral 1.0 at 50,
+  // 2.0 at 100, 4.0 at 200 (slider range 0-200, default 50).
   return pgsPeak / 50.0f;
 }
 
