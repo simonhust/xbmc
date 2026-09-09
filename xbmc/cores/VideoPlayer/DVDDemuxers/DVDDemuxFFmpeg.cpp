@@ -252,6 +252,16 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
   m_program = UINT_MAX;
   m_seekToKeyFrame = false;
 
+  // Reset Dolby Vision dual-stream state on every (re)open. Reset() calls
+  // Open() without reconstructing this object, so a title switch from a DT-DL
+  // title (P4/P7) to a non-dual-stream title (SDR/HDR10/P6) would otherwise
+  // leave m_dv_dual_stream etc. set, mis-marking subsequent single-track
+  // packets (isDualStream/isELPackage) and forcing P6 BL dovi config to P7.
+  m_dv_dual_stream = false;
+  m_dv_no_el_epmap = false;
+  m_dv_multi_clip = false;
+  m_dv_direct_pair = false;
+
   const AVIOInterruptCB int_cb = { interrupt_cb, this };
 
   if (!pInput)
@@ -1649,6 +1659,25 @@ void CDVDDemuxFFmpeg::DisposeStreams()
 CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
 {
   AVStream* pStream = m_pFormatContext->streams[streamIdx];
+
+  // When the base-layer (stream 0) video is (re)opened — at demuxer open or
+  // when ReadInternal re-creates a stream after a playlist/clip switch it
+  // detected via a pPrivate change — reset the DV dual-stream flags so the
+  // new title's EL presence is re-evaluated. Blu-ray mpls/clip switches do
+  // not reliably raise BD_EVENT_DISCONTINUITY, so Reset()->Open() (which the
+  // Open() entry reset covers) is not always reached; this is the only
+  // reliable re-entry point for the common switch path. The EL stream
+  // (streamIdx > 0) re-sets m_dv_dual_stream=true below when it is reopened,
+  // so BL-then-EL ordering (guaranteed by PID/interleave ordering) preserves
+  // correct DT-DL detection.
+  if (streamIdx == 0 && pStream && pStream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO)
+  {
+    m_dv_dual_stream = false;
+    m_dv_no_el_epmap = false;
+    m_dv_multi_clip = false;
+    m_dv_direct_pair = false;
+  }
+
   if (pStream && pStream->discard != AVDISCARD_ALL)
   {
     // Video (mp4) from GoPro cameras can have a 'meta' track used for a file repair containing
@@ -3011,6 +3040,27 @@ StreamHdrType CDVDDemuxFFmpeg::DetermineHdrType(AVStream* pStream)
                                    pStream->codecpar->nb_coded_side_data,
                                    AV_PKT_DATA_MASTERING_DISPLAY_METADATA))
     hdrType = StreamHdrType::HDR_TYPE_HDR10;
+  else if (pStream->codecpar->codec_id == AV_CODEC_ID_HEVC &&
+           pStream->codecpar->extradata &&
+           pStream->codecpar->extradata_size >= 20)
+  {
+    /* Fallback: detect single-layer Dolby Vision (profile 8) from HEVC SPS
+     * when DOVI_CONF side data is missing (e.g. WEB-DL files without
+     * dvcC/dvvC/dvwC box in CodecPrivate). */
+    const uint8_t *ed = pStream->codecpar->extradata;
+    int ed_size = pStream->codecpar->extradata_size;
+    /* HEVC CodecPrivate: configurationVersion(1) + general_profile_space(2b) +
+     * general_tier_flag(1b) + general_profile_idc(5b) + ... */
+    for (int i = 0; i < ed_size - 4; i++) {
+      /* Look for profile_tier_level start: constraint_indicator_flags(4B)
+       * preceded by general_profile_idc(1B) = 8 */
+      if (ed[i] == 8 && (i == 0 || ed[i-1] == 0x00 || ed[i-1] == 0x01)) {
+        /* Found DV profile 8 */
+        hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
+        break;
+      }
+    }
+  }
 
   return hdrType;
 }
