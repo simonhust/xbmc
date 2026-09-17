@@ -57,7 +57,7 @@ bool CUDFDirectory::GetDirectory(const CURL& url, CFileItemList& items)
   if (!path)
   {
     udfread_close(udf);
-    return false;
+    return true;
   }
 
   struct udfread_dirent dirent;
@@ -104,6 +104,30 @@ bool CUDFDirectory::GetDirectory(const CURL& url, CFileItemList& items)
 
 bool CUDFDirectory::Exists(const CURL& url)
 {
+  std::string strFileName = url.GetFileName();
+  if (!strFileName.empty())
+  {
+    CURL url2(url);
+    if (!url2.IsProtocol("udf"))
+    {
+      url2.Reset();
+      url2.SetProtocol("udf");
+      url2.SetHostName(url.Get());
+    }
+    auto udf = udfread_init();
+    if (!udf)
+      return false;
+    CUDFBlockInput udfbi;
+    auto bi = udfbi.GetBlockInput(url2.GetHostName());
+    if (udfread_open_input(udf, bi) < 0)
+    {
+      udfread_close(udf);
+      return false;
+    }
+    bool exists = udfread_file_open(udf, strFileName.c_str()) != nullptr;
+    udfread_close(udf);
+    return exists;
+  }
   CFileItemList items;
   return GetDirectory(url, items);
 }
