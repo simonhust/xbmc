@@ -512,6 +512,14 @@ void CDVDVideoCodecAmlogic::ClearBitstreamCommon(void)
     KODI::MEMORY::AlignedFree(std::get<0>(pkt));
   m_bl_packages.clear();
 
+  for (auto& pkt : m_pending_bl_nopts)
+    KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+  m_pending_bl_nopts.clear();
+
+  for (auto& pkt : m_pending_el_nopts)
+    KODI::MEMORY::AlignedFree(std::get<0>(pkt));
+  m_pending_el_nopts.clear();
+
   for (auto& pkt : m_packages)
     KODI::MEMORY::AlignedFree(std::get<0>(pkt));
   m_packages.clear();
@@ -542,7 +550,25 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
    * reaches the front), stalling both queues -> black screen. Repair the
    * timestamp from the previous valid DTS of the SAME layer: the decode-order
    * DTS grid advances by exactly one frame, so prev + 1/fps lands on the true
-   * slot, which the paired EL/BL frame carries identically. */
+   * slot, which the paired EL/BL frame carries identically.
+   *
+   * The layer's LEADING packets can be NOPTS too (disc remuxes whose opening
+   * frames carry no DTS, e.g. Fire Eyes). There is no previous DTS to repair
+   * from, so park them instead of dropping: the first one carries the opening
+   * IDR and without it the firmware waits forever on a reference that never
+   * arrives (RP freezes, picture stalls). When the layer's first valid DTS
+   * shows up, backfill the same one-frame grid backwards onto them. */
+  constexpr size_t MAX_PENDING_NOPTS = 32;
+
+  auto insert_sorted = [this](DLDemuxPacket &&p) {
+    auto &q = std::get<2>(p) ? m_el_packages : m_bl_packages;
+    const double d = std::get<3>(p);
+    auto it = q.begin();
+    while (it != q.end() && std::get<3>(*it) < d)
+      ++it;
+    q.emplace(it, std::move(p));
+  };
+
   double dts = packet.dts;
   if (dts == DVD_NOPTS_VALUE)
   {
@@ -554,19 +580,59 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
       CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, repaired NOPTS {} dts: {:.3f} -> {:.3f}",
         packet.isELPackage ? "EL" : "BL", packet.dts / DVD_TIME_BASE, dts / DVD_TIME_BASE);
     }
+    else if (m_hints.fpsrate > 0)
+    {
+      /* Leading NOPTS with nothing to repair from yet - park the packet until
+       * the layer's first valid DTS arrives so the grid can be backfilled. */
+      auto &pending = packet.isELPackage ? m_pending_el_nopts : m_pending_bl_nopts;
+      if (pending.size() >= MAX_PENDING_NOPTS)
+      {
+        KODI::MEMORY::AlignedFree(std::get<0>(pending.front()));
+        pending.pop_front();
+        CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, pending {} NOPTS overflow, dropped oldest",
+          packet.isELPackage ? "EL" : "BL");
+      }
+      auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
+      memcpy(pkt, packet.pData, packet.iSize);
+      pending.emplace_back(pkt, packet.iSize, packet.isELPackage, DVD_NOPTS_VALUE, packet.pts);
+      CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, parked leading NOPTS {} packet (pts {:.3f}, pending {})",
+        packet.isELPackage ? "EL" : "BL", packet.pts / DVD_TIME_BASE, pending.size());
+      return;
+    }
     else
     {
-      /* No previous DTS to repair from (layer's first packet) - drop it rather
-       * than parking an unpairable NOPTS at the front of the queue. */
+      /* No fps to build a grid from - drop rather than parking an unpairable
+       * NOPTS at the front of the queue. */
       CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, dropping NOPTS {} packet (no previous DTS)",
         packet.isELPackage ? "EL" : "BL");
       return;
     }
   }
-  else if (packet.isELPackage)
-    m_last_el_dts = dts;
   else
-    m_last_bl_dts = dts;
+  {
+    /* First valid DTS of this layer: backfill the parked leading packets by
+     * extending the frame grid backwards (decode order == arrival order, so
+     * slot i of n sits (n - i) frames before the valid DTS). */
+    auto &pending = packet.isELPackage ? m_pending_el_nopts : m_pending_bl_nopts;
+    if (!pending.empty())
+    {
+      const double frame_dur = DVD_TIME_BASE * static_cast<double>(m_hints.fpsscale) / m_hints.fpsrate;
+      const size_t n = pending.size();
+      size_t i = 0;
+      for (auto &pp : pending)
+        std::get<3>(pp) = dts - static_cast<double>(n - i++) * frame_dur;
+      CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, backfilled {} leading NOPTS {} packets, dts {:.3f}..{:.3f}",
+        n, packet.isELPackage ? "EL" : "BL",
+        std::get<3>(pending.front()) / DVD_TIME_BASE, dts / DVD_TIME_BASE);
+      for (auto &pp : pending)
+        insert_sorted(std::move(pp));
+      pending.clear();
+    }
+    if (packet.isELPackage)
+      m_last_el_dts = dts;
+    else
+      m_last_bl_dts = dts;
+  }
 
   CLog::Log(LOGDEBUG, "DV: DualLayerAccumulate, EL={}, dts={:.3f}, el_q={}, bl_q={}, ready={}",
     packet.isELPackage, dts / DVD_TIME_BASE, m_el_packages.size(), m_bl_packages.size(), m_ready_to_pair);
@@ -574,22 +640,7 @@ void CDVDVideoCodecAmlogic::DualLayerAccumulate(const DemuxPacket &packet)
   /* Insert packet into the appropriate queue (sorted by DTS ascending) */
   auto pkt = static_cast<uint8_t*>(KODI::MEMORY::AlignedMalloc(packet.iSize + AV_INPUT_BUFFER_PADDING_SIZE, 16));
   memcpy(pkt, packet.pData, packet.iSize);
-  DLDemuxPacket new_pkt(pkt, packet.iSize, packet.isELPackage, dts, packet.pts);
-
-  if (packet.isELPackage)
-  {
-    auto it = m_el_packages.begin();
-    while (it != m_el_packages.end() && std::get<3>(*it) < dts)
-      ++it;
-    m_el_packages.emplace(it, std::move(new_pkt));
-  }
-  else
-  {
-    auto it = m_bl_packages.begin();
-    while (it != m_bl_packages.end() && std::get<3>(*it) < dts)
-      ++it;
-    m_bl_packages.emplace(it, std::move(new_pkt));
-  }
+  insert_sorted(DLDemuxPacket(pkt, packet.iSize, packet.isELPackage, dts, packet.pts));
 
   /* Already ready to pair — no need to re-check */
   if (m_ready_to_pair)

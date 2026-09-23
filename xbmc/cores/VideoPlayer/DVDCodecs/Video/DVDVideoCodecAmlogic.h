@@ -117,6 +117,11 @@ private:
 
   std::list<DLDemuxPacket> m_el_packages;  /* EL queue sorted by DTS ascending */
   std::list<DLDemuxPacket> m_bl_packages;  /* BL queue sorted by DTS ascending */
+  /* Leading NOPTS packets of each layer, parked until the layer's first valid
+   * DTS arrives so the decode-order grid can be backfilled onto them (they
+   * carry the opening IDR - dropping them stalls the firmware forever). */
+  std::list<DLDemuxPacket> m_pending_bl_nopts;
+  std::list<DLDemuxPacket> m_pending_el_nopts;
   std::list<DLDemuxPacket> m_packages;     /* single package queue for dual layer */
   bool m_ready_to_pair{false};             /* state machine: ready to pair front of both queues */
   bool m_switched_to_dual{false};          /* switched from single-queue to dual-queue at 1s */
