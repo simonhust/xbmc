@@ -2545,21 +2545,39 @@ void CAMLCodec::CloseDecoder()
   // disable Dolby Vision driver
   if (dv_enabled)
   {
-    // the transition needs a few display frames before the core powers down
-    CSysfsPath dolby_vision_status{"/sys/module/aml_media/parameters/dolby_vision_status"};
-    if (dolby_vision_status.Exists())
+    // Preferred path: ask the kernel to run the DV -> GUI handover
+    // synchronously (DV core stop -> wait 2x VSYNC -> core reset -> HDMI
+    // switch -> settle). The property-set ioctl only returns once the
+    // kernel reports the pipeline is clean, so the GUI starts rendering
+    // on a stable output and no longer tears while DV is still powering
+    // down (~100-150ms of black while the switch completes).
+    bool dvCleanExit = false;
+    if (AmlDisplay->aml_get_drmProperty("dv_exit_sync", DRM_MODE_OBJECT_CRTC) >= 0)
     {
-      std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
-      while (dolby_vision_status.Get<int>().value() != 0 && (std::chrono::system_clock::now() - now) < std::chrono::seconds(m_decoder_timeout))
-        usleep(10000); // wait 10ms
+      CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder - requesting synchronous DV clean exit");
+      AmlDisplay->aml_set_drmProperty("dv_exit_sync", DRM_MODE_OBJECT_CRTC, 1);
+      dvCleanExit = true;
     }
 
-    CSysfsPath dv_video_on{"/sys/class/amdolby_vision/dv_video_on"};
-    if (dv_video_on.Exists())
+    if (!dvCleanExit)
     {
-      std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
-      while(dv_video_on.Get<int>().value() == 1 && (std::chrono::system_clock::now() - now) < std::chrono::seconds(m_decoder_timeout))
-        usleep(10000); // wait 10ms
+      // legacy fallback on kernels without dv_exit_sync:
+      // the transition needs a few display frames before the core powers down
+      CSysfsPath dolby_vision_status{"/sys/module/aml_media/parameters/dolby_vision_status"};
+      if (dolby_vision_status.Exists())
+      {
+        std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
+        while (dolby_vision_status.Get<int>().value() != 0 && (std::chrono::system_clock::now() - now) < std::chrono::seconds(m_decoder_timeout))
+          usleep(10000); // wait 10ms
+      }
+
+      CSysfsPath dv_video_on{"/sys/class/amdolby_vision/dv_video_on"};
+      if (dv_video_on.Exists())
+      {
+        std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
+        while(dv_video_on.Get<int>().value() == 1 && (std::chrono::system_clock::now() - now) < std::chrono::seconds(m_decoder_timeout))
+          usleep(10000); // wait 10ms
+      }
     }
 
     if (dolby_vision_policy == AMDV_FORCE_OUTPUT_MODE)
