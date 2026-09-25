@@ -1496,7 +1496,22 @@ bool CVideoPlayer::IsBetterStream(const CCurrentStream& current, CDemuxStream* s
     if (current.type == StreamType::SUBTITLE && stream->dvdNavId == m_dvd.iSelectedSPUStream)
       return true;
     if (current.type == StreamType::VIDEO && current.id < 0)
+    {
+      /* The first video packet reaching this check wins the auto-open race,
+       * but two Blu-ray stream kinds must never take it:
+       * - the Dolby Vision enhancement layer (0x1015): decoded alone it
+       *   renders black/garbage (it is paired with the BL inside the video
+       *   decoder, and titles muxing EL packets first - e.g. BD-J menu
+       *   titles - would open the EL as the video stream);
+       * - secondary video (PiP bonus, PIDs 0x1B00-0x1BFF): muxed ahead of
+       *   the primary video on some discs, which would start the feature
+       *   on the low-res PiP track.
+       * Wait for a primary video (BL) packet instead. */
+      if (stream->dvdNavId == 0x1015 ||
+          (stream->dvdNavId >= 0x1b00 && stream->dvdNavId <= 0x1bff))
+        return false;
       return true;
+    }
   }
   else
   {
