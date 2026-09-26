@@ -150,7 +150,17 @@ bool CWinSystemAmlogicGLESContext::CreateNewWindow(const std::string& name,
       m_stereo_mode == stereo_mode && m_bWindowCreated &&
       !force_mode_switch_by_hdr && !force_mode_switch_by_hotplug &&
       (fractional_rate == cur_fractional_rate) &&
-      nativeGUI == m_nativeGUI)
+      nativeGUI == m_nativeGUI &&
+      /* current_resolution is derived from the live display mode and the
+       * live GUI-scaling setting, but the fb/GBM surface size was set from
+       * the iWidth of whichever resolution entry was last applied: the
+       * standard entries carry the full mode size while the AML entries
+       * halve it for 4K. When a video-mode switch applied a different entry
+       * (same mode and refresh rate, different iWidth), the derived values
+       * matched the target and the restore was skipped - the GUI then
+       * rendered into a corner of the stale surface (quarter screen on
+       * 4K). Require the actually applied window size to match as well. */
+      m_nWidth == res.iWidth && m_nHeight == res.iHeight)
   {
     CLog::Log(LOGDEBUG, "CWinSystemAmlogicGLESContext::{}: No need to create a new window", __FUNCTION__);
     return true;

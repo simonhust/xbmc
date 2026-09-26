@@ -385,10 +385,6 @@ bool CWinSystemAmlogic::CreateNewWindow(const std::string& name,
 {
   bool ret;
 
-  m_nWidth        = res.iWidth;
-  m_nHeight       = res.iHeight;
-  m_fRefreshRate  = res.fRefreshRate;
-
   int delay = CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt("videoscreen.delayrefreshchange");
   if (delay > 0)
   {
@@ -407,6 +403,12 @@ bool CWinSystemAmlogic::CreateNewWindow(const std::string& name,
   if ((ret = m_amlDisplay->set_native_resolution(res, m_framebuffer_name, m_stereo_mode,
                                            m_force_mode_switch, m_hotplug_mode_switch)))
   {
+    /* Track the applied size only on success: the GLES CreateNewWindow
+     * skip-check compares the target resolution against these values, and a
+     * failed apply must leave them at the previous (still active) window. */
+    m_nWidth        = res.iWidth;
+    m_nHeight       = res.iHeight;
+    m_fRefreshRate  = res.fRefreshRate;
     m_bWindowCreated = true;
   }
 
