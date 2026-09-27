@@ -1197,11 +1197,11 @@ void CRenderManager::PrepareNextRender()
   // While the clock is paused, frameOnScreen does not advance, so adding the display
   // latency would pick a frame ahead of the one actually shown. That only holds for
   // renderers that draw the video into our framebuffer and re-pick every refresh.
-  // Renderers that hand frames to a hardware plane queue (VideoBypassesFramebuffer)
+  // Renderers that hand frames to a hardware plane queue (HasVideoPlane)
   // cannot take a released frame back: frames released without the latency during an
   // internal pause (caching, display reset) keep that lead and video stays ahead of audio.
   const bool isPaused =
-      m_dvdClock.IsPaused() && !(m_pRenderer && m_pRenderer->VideoBypassesFramebuffer());
+      m_dvdClock.IsPaused() && !(m_pRenderer && m_pRenderer->HasVideoPlane());
   double renderPts = frameOnScreen;
   if (!isPaused)
     renderPts += m_displayLatency;
