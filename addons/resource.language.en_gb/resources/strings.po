@@ -8976,7 +8976,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14314"
-msgid "Map HDR10+ to Dolby Vision P8.1"
+msgid "Tone map HDR10+ to Dolby Vision"
 msgstr ""
 
 #: system/settings/settings.xml
@@ -8986,7 +8986,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14316"
-msgid "Map HDR Vivid to Dolby Vision P8.1"
+msgid "Tone map HDR Vivid to Dolby Vision"
 msgstr ""
 
 #: system/settings/settings.xml
