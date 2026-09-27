@@ -995,7 +995,7 @@
       <group id="7" label="39218">
         <setting id="subtitles.hdrpgs" type="boolean" label="39219" help="39220">
           <level>1</level>
-          <default>true</default>
+          <default>false</default>
           <control type="toggle" />
         </setting>
         <setting id="subtitles.guisdrsaturation" type="integer" label="39216" help="39217">
