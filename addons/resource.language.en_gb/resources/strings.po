@@ -8981,7 +8981,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14315"
-msgid "Maps HDR10+ dynamic metadata to Dolby Vision: a Dolby Vision profile 8.1 RPU is generated from the HDR10+ metadata per access unit, and HDR10+ sources are absorbed by the DV VS-Engine for tone mapping on DV capable displays."
+msgid "Maps HDR10+ dynamic metadata to Dolby Vision: a Dolby Vision profile 8.1 RPU is synthesised from the HDR10+ metadata per access unit, and the stream is processed by the same Dolby Vision hardware pipeline as native DV content (IPT tone mapping) on DV capable displays. Sinks without Dolby Vision fall back to the HDR10 base layer."
 msgstr ""
 
 #: system/settings/settings.xml
@@ -8991,7 +8991,7 @@ msgstr ""
 
 #: system/settings/settings.xml
 msgctxt "#14317"
-msgid "Maps CUVA HDR Vivid dynamic metadata to Dolby Vision: a Dolby Vision profile 8.1 RPU is generated from the HDR Vivid metadata, and HDR Vivid sources are absorbed by the DV VS-Engine for tone mapping on DV capable displays."
+msgid "Maps CUVA HDR Vivid dynamic metadata to Dolby Vision: a Dolby Vision profile 8.1 RPU is synthesised from the HDR Vivid metadata, and the stream is processed by the same Dolby Vision hardware pipeline as native DV content (IPT tone mapping) on DV capable displays. Sinks without Dolby Vision fall back to the HDR10 base layer."
 msgstr ""
 
 #empty strings from id 14318 to 15010
