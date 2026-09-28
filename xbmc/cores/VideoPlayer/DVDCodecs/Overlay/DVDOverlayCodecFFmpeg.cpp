@@ -12,6 +12,8 @@
 #include "DVDStreamInfo.h"
 #include "ServiceBroker.h"
 #include "cores/FFmpeg.h"
+#include "settings/Settings.h"
+#include "settings/SettingsComponent.h"
 #include "cores/VideoPlayer/Interface/DemuxPacket.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
 #include "utils/EndianSwap.h"
@@ -124,6 +126,26 @@ bool CDVDOverlayCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &optio
     m_pgsIsPqAuthored = (hints.hdrType == StreamHdrType::HDR_TYPE_HDR10 ||
                          hints.hdrType == StreamHdrType::HDR_TYPE_HDR10PLUS ||
                          hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION);
+    // When the SDR→DV or HDR→DV VS-Engine conversion is active, the source
+    // stream is not natively HDR-authored, so PGS subtitles must follow the
+    // default sRGB pipeline. Letting PGS ride the PQ shader path here would
+    // misread the palette code values and produce dark/gray subtitles.
+    if (m_pgsIsPqAuthored)
+    {
+      const auto* settings =
+          CServiceBroker::GetSettingsComponent()->GetSettings();
+      const bool dvConversionActive =
+          (hints.hdrType == StreamHdrType::HDR_TYPE_NONE &&
+           settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_SDR2DV)) ||
+          (hints.hdrType != StreamHdrType::HDR_TYPE_NONE &&
+           hints.hdrType != StreamHdrType::HDR_TYPE_DOLBYVISION &&
+           hints.hdrType != StreamHdrType::HDR_TYPE_HLG &&
+           hints.hdrType != StreamHdrType::HDR_TYPE_HDR10PLUS &&
+           hints.hdrType != StreamHdrType::HDR_TYPE_HDRVIVID &&
+           settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR2DV));
+      if (dvConversionActive)
+        m_pgsIsPqAuthored = false;
+    }
     const char* matrix = m_pgsIsPqAuthored ? "bt2020" : "bt709";
     av_dict_set(&codecOpts, "pgs_matrix", matrix, 0);
   }
