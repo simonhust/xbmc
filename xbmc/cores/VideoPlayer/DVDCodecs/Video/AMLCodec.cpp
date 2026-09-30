@@ -2147,10 +2147,10 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
     // enable Dolby Vision
     AmlDisplay->aml_set_drmProperty("dv_enable", DRM_MODE_OBJECT_CRTC, 1);
 
-    // use player led mode when enabled
+    // use player led mode when enabled and display supports DV
     if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(
-            CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED ||
-        !display_support_dv)
+            CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED &&
+        display_support_dv)
       AmlDisplay->aml_set_drmProperty("dv_ll_policy", DRM_MODE_OBJECT_CRTC, DOLBY_VISION_LL_YUV422);
     else
       AmlDisplay->aml_set_drmProperty("dv_ll_policy", DRM_MODE_OBJECT_CRTC,
@@ -2166,7 +2166,11 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
       // dv_mode_table[] indirection (0=BYPASS, 1=IPT, ...), so the legacy
       // (enum + 1) % 6 encoding must NOT be applied here - Player-LED uses
       // IPT, TV-LED uses IPT_TUNNEL.
-      if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED)
+      // Only enable SDR->DV/HDR->DV conversion when display supports DV.
+      if (!display_support_dv)
+        AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
+                                        AMDV_OUTPUT_MODE_BYPASS);
+      else if (CServiceBroker::GetSettingsComponent()->GetSettings()->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED)
         AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
                                         AMDV_OUTPUT_MODE_IPT);
       else
