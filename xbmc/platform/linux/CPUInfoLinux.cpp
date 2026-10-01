@@ -348,11 +348,27 @@ int CCPUInfoLinux::GetUsedPercentage()
 
 float CCPUInfoLinux::GetCPUFrequency()
 {
-  if (m_freqPath.empty())
-    return 0;
+  if (!m_freqPath.empty())
+  {
+    auto freq = CSysfsPath(m_freqPath).Get<float>();
+    if (freq.has_value())
+      return *freq / 1000.0f;
+  }
 
-  auto freq = CSysfsPath(m_freqPath).Get<float>();
-  return freq.has_value() ? *freq / 1000.0f : 0.0f;
+  // Amlogic SoCs expose the current DVFS clock rate via the clock framework
+  // debugfs when no cpufreq driver is registered (e.g. missing efuse key on
+  // SC2 boxes). clk_rate is in Hz, prefer the dynamically scaled clock.
+  for (const char* clk : {"cpu_clk_dyn", "cpu_clk"})
+  {
+    CSysfsPath path{std::string("/sys/kernel/debug/clk/") + clk + "/clk_rate"};
+    if (!path.Exists())
+      continue;
+    auto rate = path.Get<float>();
+    if (rate.has_value() && *rate > 0)
+      return *rate / 1000000.0f;
+  }
+
+  return 0;
 }
 
 bool CCPUInfoLinux::GetTemperature(CTemperature& temperature)
