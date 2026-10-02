@@ -9,6 +9,7 @@
 #include "VideoPlayerAudio.h"
 
 #include "DVDCodecs/Audio/DVDAudioCodec.h"
+#include "DVDCodecs/Audio/DVDAudioCodecAvs3a.h"
 #include "DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
 #include "ServiceBroker.h"
@@ -96,6 +97,11 @@ CVideoPlayerAudio::~CVideoPlayerAudio()
 
 bool CVideoPlayerAudio::OpenStream(CDVDStreamInfo hints)
 {
+  static bool avs3aRegistered = []() {
+    CDVDAudioCodecAvs3a::Register();
+    return true;
+  }();
+
   CLog::Log(LOGINFO, "Finding audio codec for: {}", hints.codec);
   bool allowpassthrough = !CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_VIDEOPLAYER_USEDISPLAYASCLOCK);
 
