@@ -58,6 +58,13 @@ bool CDVDAudioCodecDtsUhd::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options
   if (hints.codec != AV_CODEC_ID_DTS_UHD)
     return false;
 
+  /* When passthrough is requested, let the passthrough codec handle it. */
+  for (const auto& opt : options.m_keys)
+  {
+    if (opt.m_name == "ptstreamtype")
+      return false;
+  }
+
   m_ctx = dts_uhd_decoder_init();
   if (!m_ctx)
   {
