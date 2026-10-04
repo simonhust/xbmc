@@ -377,7 +377,7 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
       format.m_streamInfo.m_sampleRate = samplerate;
       break;
 
-    case AV_CODEC_ID_AV3A:
+    case AV_CODEC_ID_AVS3_AUDIO:
       // Packed into IEC 61937-17 data bursts by CAEBitstreamPacker::Pack; the
       // real sampling rate and frame length come from the frame header, which
       // the passthrough parser reads (see AV3AHeader.h).

@@ -2819,7 +2819,7 @@ std::string CDVDDemuxFFmpeg::GetStreamCodecName(int iStreamId)
     if ((stream->codec == AV_CODEC_ID_DTS || stream->codec == AV_CODEC_ID_DTS_UHD) &&
         stream->codec_fourcc == MKTAG('d','t','s','x'))
       return "dts_uhd";
-    if (stream->codec == AV_CODEC_ID_AV3A && stream->codec_fourcc == MKTAG('a','v','3','a'))
+    if (stream->codec == AV_CODEC_ID_AVS3_AUDIO && stream->codec_fourcc == MKTAG('a','v','3','a'))
       return "av3a";
     return StreamUtils::GetCodecName(stream->codec, stream->profile);
   }
