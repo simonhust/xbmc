@@ -44,8 +44,15 @@ void CAEBitstreamPacker::Pack(CAEStreamInfo &info, uint8_t* data, int size)
 
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
-    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
       PackDTSHD (info, data, size);
+      break;
+
+    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
+      /* Profile 2 (ACE) passthrough: vendor SDO packer wraps the raw ACE
+       * substream directly in IEC 61937 without the DTS-HD container header.
+       * PackDTSHD adds a 10-byte start code + 2-byte length, so we call the
+       * IEC packer directly with the raw data. */
+      m_dataSize = CAEPackIEC61937::PackDTSHD(data, size, m_packedBuffer, info.m_dtsPeriod);
       break;
 
     case CAEStreamInfo::STREAM_TYPE_AV3A:
