@@ -10,6 +10,7 @@
 
 #include "DVDCodecs/Audio/DVDAudioCodec.h"
 #include "DVDCodecs/Audio/DVDAudioCodecAvs3a.h"
+#include "DVDCodecs/Audio/DVDAudioCodecDtsUhd.h"
 #include "DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
 #include "ServiceBroker.h"
@@ -99,6 +100,11 @@ bool CVideoPlayerAudio::OpenStream(CDVDStreamInfo hints)
 {
   static bool avs3aRegistered = []() {
     CDVDAudioCodecAvs3a::Register();
+    return true;
+  }();
+
+  static bool dtsUhdRegistered = []() {
+    CDVDAudioCodecDtsUhd::Register();
     return true;
   }();
 

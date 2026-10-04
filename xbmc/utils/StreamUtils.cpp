@@ -48,6 +48,8 @@ int StreamUtils::GetCodecPriority(const std::string &codec)
     return 2;
   if (codec == "avs3a") // Audio Vivid (AVS3-P3)
     return 2;
+  if (codec == "dts_uhd") // DTS-UHD (DTS:X, ETSI TS 103 491)
+    return 9;
   if (codec == "ac3") // Dolby Digital
     return 1;
   return 0;
@@ -114,6 +116,9 @@ std::string StreamUtils::GetCodecName(int codecId, int profile)
 
   if (codecId == AV_CODEC_ID_AVS3_AUDIO)
     return "avs3a";
+
+  if (codecId == AV_CODEC_ID_DTS_UHD)
+    return "dts_uhd";
 
   const AVCodec* codec = avcodec_find_decoder(static_cast<AVCodecID>(codecId));
   if (codec)

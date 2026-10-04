@@ -76,6 +76,9 @@ std::string CDemuxStreamAudio::GetStreamType() const
     case AV_CODEC_ID_AVS3_AUDIO:
       strInfo = "Audio Vivid";
       break;
+    case AV_CODEC_ID_DTS_UHD:
+      strInfo = "DTS-UHD";
+      break;
     case AV_CODEC_ID_TRUEHD:
       if (profile == AV_PROFILE_TRUEHD_ATMOS)
         strInfo = "TrueHD ATMOS";
