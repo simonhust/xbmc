@@ -44,7 +44,14 @@ void CAEBitstreamPacker::Pack(CAEStreamInfo &info, uint8_t* data, int size)
 
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
+    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
       PackDTSHD (info, data, size);
+      break;
+
+    case CAEStreamInfo::STREAM_TYPE_AV3A:
+      /* IEC 61937-17: one data burst per AVS3-P3 frame, m_dtsPeriod carries the
+       * frame length in samples (1024 or 512). */
+      m_dataSize = CAEPackIEC61937::PackAV3A(data, size, m_packedBuffer, info.m_dtsPeriod);
       break;
 
     case CAEStreamInfo::STREAM_TYPE_AC3:
@@ -83,6 +90,9 @@ bool CAEBitstreamPacker::PackPause(CAEStreamInfo &info, unsigned int millis, boo
   {
     case CAEStreamInfo::STREAM_TYPE_TRUEHD:
     case CAEStreamInfo::STREAM_TYPE_EAC3:
+    case CAEStreamInfo::STREAM_TYPE_AV3A:
+      /* IEC 61937-17 table 2 recommends a pause data-burst repetition period of
+       * four IEC 60958 frames. */
       m_dataSize = CAEPackIEC61937::PackPause(m_packedBuffer, millis, GetOutputChannelMap(info).Count() * 2, GetOutputRate(info), 4, info.m_sampleRate);
       m_pauseDuration = millis;
       break;
@@ -90,6 +100,7 @@ bool CAEBitstreamPacker::PackPause(CAEStreamInfo &info, unsigned int millis, boo
     case CAEStreamInfo::STREAM_TYPE_AC3:
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
+    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_CORE:
     case CAEStreamInfo::STREAM_TYPE_DTS_512:
     case CAEStreamInfo::STREAM_TYPE_DTS_1024:
@@ -218,6 +229,12 @@ unsigned int CAEBitstreamPacker::GetOutputRate(const CAEStreamInfo& info)
     case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
       rate = 192000;
       break;
+    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
+    case CAEStreamInfo::STREAM_TYPE_AV3A:
+      /* Both carry four bytes per sample (one frame per burst), so the IEC 60958
+       * frame rate equals the audio sample rate. */
+      rate = info.m_sampleRate;
+      break;
     default:
       rate = 48000;
       break;
@@ -237,6 +254,8 @@ CAEChannelInfo CAEBitstreamPacker::GetOutputChannelMap(const CAEStreamInfo& info
     case CAEStreamInfo::STREAM_TYPE_DTS_2048:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_CORE:
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
+    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
+    case CAEStreamInfo::STREAM_TYPE_AV3A:
       channels = 2;
       break;
 

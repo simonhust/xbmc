@@ -7,6 +7,7 @@
  */
 
 #include "utils/log.h"
+#include "utils/Base64.h"
 
 #include <assert.h>
 
@@ -893,6 +894,7 @@ bool CBitstreamConverter::Convert(uint8_t *pData_bl, int iSize_bl, uint8_t *pDat
       buf = pData_el;
 
     // process el frame data
+    bool el_has_rpu = false;
     end = buf + el_frame_nal_buf_size;
     while (end - buf > 4)
     {
@@ -904,6 +906,7 @@ bool CBitstreamConverter::Convert(uint8_t *pData_bl, int iSize_bl, uint8_t *pDat
 
       if (nal_type == HEVC_NAL_UNSPEC62)
       {
+        el_has_rpu = true;
         const uint8_t *nalu_62_data = buf;
 #ifdef HAVE_LIBDOVI
         const DoviData* rpu_data = processDoviRpu(buf, size);
@@ -916,6 +919,9 @@ bool CBitstreamConverter::Convert(uint8_t *pData_bl, int iSize_bl, uint8_t *pDat
 #endif
 
         BitstreamAllocAndCopy(&m_convertBuffer, &offset, nalu_62_data, size, nal_type);
+
+        // Hold this RPU for frames that lack one
+        m_lastDoviRpu = Base64::Encode(reinterpret_cast<const char*>(nalu_62_data), size);
 
 #ifdef HAVE_LIBDOVI
         if (rpu_data)
@@ -932,6 +938,21 @@ bool CBitstreamConverter::Convert(uint8_t *pData_bl, int iSize_bl, uint8_t *pDat
           nal_type, size);
 
       buf += size;
+    }
+
+    // If this EL frame had no RPU NAL, inject the last seen RPU so the DV
+    // engine never outputs a frame without RPU (which would cause it to fall
+    // back to HDR10 output and the TV to flicker between DV and HDR10).
+    if (!el_has_rpu && !m_lastDoviRpu.empty())
+    {
+      std::string rpu_nalu;
+      Base64::Decode(m_lastDoviRpu, rpu_nalu);
+      BitstreamAllocAndCopy(&m_convertBuffer, &offset,
+                            reinterpret_cast<const uint8_t*>(rpu_nalu.data()),
+                            static_cast<int>(rpu_nalu.size()), HEVC_NAL_UNSPEC62);
+      CLog::Log(LOGDEBUG, LOGVIDEO,
+                "CBitstreamConverter::Convert: injected last RPU ({} bytes) into EL frame without RPU",
+                rpu_nalu.size());
     }
 
     // append end of sequence if exist

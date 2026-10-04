@@ -31,6 +31,7 @@
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "threads/SystemClock.h"
+#include "utils/AV3AHeader.h"
 #include "utils/AMLUtils.h"
 #include "utils/FontUtils.h"
 #include "utils/LangCodeExpander.h"
@@ -39,7 +40,10 @@
 #include "utils/URIUtils.h"
 #include "utils/XTimeUtils.h"
 #include "utils/log.h"
+#include "cores/DataCacheCore.h"
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -176,7 +180,39 @@ static int dvd_file_read(void* h, uint8_t* buf, int size)
   if (interrupt_cb(h))
     return AVERROR_EXIT;
 
-  std::shared_ptr<CDVDInputStream> pInputStream = static_cast<CDVDDemuxFFmpeg*>(h)->m_pInput;
+  CDVDDemuxFFmpeg* demux = static_cast<CDVDDemuxFFmpeg*>(h);
+
+  // Helper to serve from a cached region (moov or cues)
+  auto serve_from_cache = [&](bool& cached, int& offset, int sz,
+                               std::vector<uint8_t>& data) -> int
+  {
+    if (!cached || offset < 0)
+      return -1;
+    int available = sz - offset;
+    if (available <= 0)
+    {
+      offset = -1;  // reset: done reading from cache
+      return -1;
+    }
+    int to_copy = std::min(size, available);
+    memcpy(buf, data.data() + offset, to_copy);
+    offset += to_copy;
+    return to_copy;
+  };
+
+  // Serve from moov cache
+  if (int ret = serve_from_cache(demux->m_moov_cached, demux->m_moov_cache_offset,
+                                  demux->m_moov_size, demux->m_moov_data);
+      ret >= 0)
+    return ret;
+
+  // Serve from cues cache (MKV)
+  if (int ret = serve_from_cache(demux->m_cues_cached, demux->m_cues_cache_offset,
+                                  demux->m_cues_size, demux->m_cues_data);
+      ret >= 0)
+    return ret;
+
+  std::shared_ptr<CDVDInputStream> pInputStream = demux->m_pInput;
   int len = pInputStream->Read(buf, size);
   if (len == 0)
     return AVERROR_EOF;
@@ -194,7 +230,34 @@ static int64_t dvd_file_seek(void* h, int64_t pos, int whence)
   if (interrupt_cb(h))
     return AVERROR_EXIT;
 
-  std::shared_ptr<CDVDInputStream> pInputStream = static_cast<CDVDDemuxFFmpeg*>(h)->m_pInput;
+  CDVDDemuxFFmpeg* demux = static_cast<CDVDDemuxFFmpeg*>(h);
+  std::shared_ptr<CDVDInputStream> pInputStream = demux->m_pInput;
+
+  // Helper to redirect a seek into a cached region
+  auto redirect_to_cache = [&](bool& cached, int64_t region_pos, int region_size,
+                                int& cache_offset) -> bool
+  {
+    if (!cached || whence == AVSEEK_SIZE)
+      return false;
+    if (pos >= region_pos && pos < region_pos + region_size)
+    {
+      cache_offset = static_cast<int>(pos - region_pos);
+      return true;  // seek served from cache
+    }
+    cache_offset = -1;  // seeking outside cached region: not reading from cache
+    return false;
+  };
+
+  // Redirect seeks targeting the moov region (MP4)
+  if (redirect_to_cache(demux->m_moov_cached, demux->m_moov_pos, demux->m_moov_size,
+                         demux->m_moov_cache_offset))
+    return pos;
+
+  // Redirect seeks targeting the cues region (MKV)
+  if (redirect_to_cache(demux->m_cues_cached, demux->m_cues_pos, demux->m_cues_size,
+                         demux->m_cues_cache_offset))
+    return pos;
+
   if (whence == AVSEEK_SIZE)
     return pInputStream->GetLength();
   else
@@ -261,6 +324,7 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
   m_dv_no_el_epmap = false;
   m_dv_multi_clip = false;
   m_dv_direct_pair = false;
+  m_lastDoviRpu.clear();
 
   const AVIOInterruptCB int_cb = { interrupt_cb, this };
 
@@ -290,8 +354,9 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
   m_pFormatContext  = avformat_alloc_context();
   m_pFormatContext->interrupt_callback = int_cb;
 
-  // try to abort after 30 seconds
-  m_timeout.Set(30s);
+  // try to abort after 120 seconds (large moov files over slow WebDAV
+  // can take longer than 30s to parse)
+  m_timeout.Set(120s);
 
   CURL url = m_pInput->GetURL();
   if (m_pInput->IsStreamType(DVDSTREAM_TYPE_FFMPEG))
@@ -389,6 +454,22 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
 
     if (blockSize > 1 && seekable) // non seakable input streams are not supposed to set block size
       bufferSize = blockSize;
+
+    // Adaptive AVIO buffer: for files over 16MB, use file_size/64 (clamped
+    // to [256KB, 16MB]) so large moov-at-start files (e.g. 117MB) parse
+    // with few network round-trips instead of tens of thousands.
+    if (int64_t fileSize = m_pInput->GetLength(); fileSize > 16 * 1024 * 1024)
+    {
+      int adaptive = static_cast<int>(fileSize / 64);
+      if (adaptive < 256 * 1024) adaptive = 256 * 1024;
+      if (adaptive > 16 * 1024 * 1024) adaptive = 16 * 1024 * 1024;
+      if (bufferSize < adaptive)
+        bufferSize = adaptive;
+    }
+    else if (bufferSize < 256 * 1024)
+    {
+      bufferSize = 256 * 1024;
+    }
 
     unsigned char* buffer = (unsigned char*)av_malloc(bufferSize);
     m_ioContext = avio_alloc_context(buffer, bufferSize, 0, this, dvd_file_read, NULL, dvd_file_seek);
@@ -657,13 +738,152 @@ bool CDVDDemuxFFmpeg::Open(const std::shared_ptr<CDVDInputStream>& pInput, bool 
   m_startTime = 0;
   m_seekStream = -1;
 
+  // Cache moov atom (MP4) and cues (MKV) for files where these index
+  // elements are at end of file, so subsequent seeks don't need slow
+  // network round-trips over cloud WebDAV.
+  FindAndCacheMoov();
+  FindAndCacheCues();
+
   return true;
+}
+
+void CDVDDemuxFFmpeg::FindAndCacheMoov()
+{
+  if (m_moov_cached || !m_pInput)
+    return;
+
+  int64_t file_len = m_pInput->GetLength();
+  if (file_len <= 0)
+    return;
+
+  // Scan backwards from end for 'moov' box. The MP4 box header is:
+  // [4 bytes size][4 bytes type 'moov']. We scan the last 10MB which is
+  // more than enough for any moov atom.
+  constexpr int SCAN_SIZE = 10 * 1024 * 1024;
+  int scan_len = std::min(static_cast<int64_t>(SCAN_SIZE), file_len);
+  int64_t scan_pos = file_len - scan_len;
+
+  std::vector<uint8_t> buf(scan_len);
+  if (m_pInput->Seek(scan_pos, SEEK_SET) < 0)
+    return;
+  int read = m_pInput->Read(buf.data(), scan_len);
+  if (read < 8)
+    return;
+
+  // Search backwards for 'moov' box type
+  for (int i = read - 8; i >= 0; --i)
+  {
+    if (buf[i + 4] == 'm' && buf[i + 5] == 'o' && buf[i + 6] == 'o' && buf[i + 7] == 'v')
+    {
+      // Found 'moov', read box size (big-endian)
+      int64_t moov_size = (static_cast<int64_t>(buf[i]) << 24) |
+                          (static_cast<int64_t>(buf[i + 1]) << 16) |
+                          (static_cast<int64_t>(buf[i + 2]) << 8) |
+                          static_cast<int64_t>(buf[i + 3]);
+      if (moov_size < 8 || moov_size > static_cast<int64_t>(read - i))
+        continue;
+
+      m_moov_pos = scan_pos + i;
+      m_moov_size = static_cast<int>(moov_size);
+      m_moov_data.assign(buf.begin() + i, buf.begin() + i + m_moov_size);
+      m_moov_cached = true;
+      CLog::Log(LOGDEBUG, "CDVDDemuxFFmpeg - Cached moov atom at pos {}, size {}",
+                m_moov_pos, m_moov_size);
+      return;
+    }
+  }
+}
+
+void CDVDDemuxFFmpeg::FindAndCacheCues()
+{
+  if (m_cues_cached || !m_pInput)
+    return;
+
+  int64_t file_len = m_pInput->GetLength();
+  if (file_len <= 0)
+    return;
+
+  // Scan backwards from end for MKV Cues element (EBML ID 0x1C53BB6B).
+  // MKV Cues contain the seek index (keyframe positions). They are typically
+  // at the end of the file. Over slow cloud WebDAV, reading them on every
+  // seek causes long delays. We cache the entire Cues element in memory.
+  constexpr int SCAN_SIZE = 10 * 1024 * 1024;
+  int scan_len = std::min(static_cast<int64_t>(SCAN_SIZE), file_len);
+  int64_t scan_pos = file_len - scan_len;
+
+  std::vector<uint8_t> buf(scan_len);
+  if (m_pInput->Seek(scan_pos, SEEK_SET) < 0)
+    return;
+  int read = m_pInput->Read(buf.data(), scan_len);
+  if (read < 8)
+    return;
+
+  // Search backwards for Cues EBML element ID (0x1C53BB6B)
+  for (int i = read - 8; i >= 0; --i)
+  {
+    if (buf[i] == 0x1C && buf[i + 1] == 0x53 && buf[i + 2] == 0xBB && buf[i + 3] == 0x6B)
+    {
+      // Found Cues element. EBML size encoding: first byte's leading 1 indicates
+      // size byte count. Decode the EBML variant-length size.
+      int size_bytes = 0;
+      int64_t cues_size = 0;
+      unsigned char b = buf[i + 4];
+
+      if (b == 0)
+        continue;  // invalid / unknown size
+
+      // Determine number of size bytes from leading zeros
+      for (int bit = 7; bit >= 0; --bit)
+      {
+        if (b & (1 << bit))
+        {
+          size_bytes = 8 - bit;
+          break;
+        }
+      }
+      if (size_bytes < 1 || size_bytes > 8 || i + 4 + size_bytes > read)
+        continue;
+
+      // Decode EBML size (big-endian, first byte has leading 1 stripped)
+      cues_size = b & ((1 << (8 - size_bytes)) - 1);
+      for (int j = 1; j < size_bytes; ++j)
+        cues_size = (cues_size << 8) | buf[i + 4 + j];
+
+      if (cues_size <= 0 || cues_size > static_cast<int64_t>(read - i))
+        continue;
+
+      m_cues_pos = scan_pos + i;
+      m_cues_size = static_cast<int>(cues_size) + 4 + size_bytes;  // include header
+      m_cues_data.assign(buf.begin() + i,
+                          buf.begin() + i + std::min(static_cast<int64_t>(read - i),
+                                                       cues_size + 4 + size_bytes));
+      m_cues_cached = true;
+      CLog::Log(LOGDEBUG, "CDVDDemuxFFmpeg - Cached MKV cues at pos {}, size {}",
+                m_cues_pos, m_cues_size);
+      return;
+    }
+  }
 }
 
 void CDVDDemuxFFmpeg::Dispose()
 {
   m_pkt.result = -1;
   av_packet_unref(&m_pkt.pkt);
+
+  // Clear moov/cues cache and last RPU
+  m_lastDoviRpu.clear();
+  m_moov_cached = false;
+  m_moov_cached = false;
+  m_moov_pos = -1;
+  m_moov_size = 0;
+  m_moov_cache_offset = -1;
+  m_moov_data.clear();
+
+  m_cues_cached = false;
+  m_cues_pos = -1;
+  m_cues_size = 0;
+  m_cues_cache_offset = -1;
+  m_cues_data.clear();
 
   delete m_pSSIF;
   m_pSSIF = nullptr;
@@ -1275,6 +1495,15 @@ if (m_pFormatContext->streams[pPacket->iStreamId]->codecpar &&
           pPacket->cuvaSei = std::move(meta.cuvaSei);
           pPacket->hdrMdcv = std::move(meta.hdrMdcv);
           pPacket->hdrCll = std::move(meta.hdrCll);
+
+          // Hold last RPU for single-track DV: if this frame has no RPU NAL,
+          // reuse the previous frame's RPU so the DV engine never outputs a
+          // frame without RPU (which causes it to fall back to HDR10 output
+          // and the TV to flicker between DV and HDR10 display modes).
+          if (!pPacket->doviRpu.empty())
+            m_lastDoviRpu = pPacket->doviRpu;
+          else if (!m_lastDoviRpu.empty())
+            pPacket->doviRpu = m_lastDoviRpu;
         }
       }
       /* Non-video-specific flags: set for all packet types (audio, subtitle, etc.) */
@@ -1444,9 +1673,21 @@ bool CDVDDemuxFFmpeg::SeekTime(double time, bool backwards, double* startpts)
     CLog::Log(LOGDEBUG, "{} - seek ended up on time {}", __FUNCTION__,
               (int)(m_currentPts / DVD_TIME_BASE * 1000));
 
-  // in this case the start time is requested time
+  // Anchor the reported start time to the actual landing point instead of
+  // the requested time. Files with non-trivial edit lists / ctts offsets
+  // (e.g. elst-shifted WEB-DL MP4s) can land on a keyframe well before the
+  // requested time. If the player resets its clock to the requested time,
+  // the first post-seek frames are treated as hopelessly late, the clock
+  // runs far ahead of the data while both video and audio stall, and the
+  // gap only closes on a pause/resume. m_currentPts holds the first real
+  // packet timestamp read after the seek.
   if (startpts)
-    *startpts = DVD_MSEC_TO_TIME(time);
+  {
+    if (m_currentPts != DVD_NOPTS_VALUE && m_currentPts > 0)
+      *startpts = m_currentPts;
+    else
+      *startpts = DVD_MSEC_TO_TIME(time);
+  }
 
   if (ret >= 0)
   {
@@ -1733,6 +1974,58 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
         if (av_dict_get(pStream->metadata, "title", NULL, 0))
           st->m_description = av_dict_get(pStream->metadata, "title", NULL, 0)->value;
 
+        // For DTS-UHD (fourCC 'dtsx') and AV3A (fourCC 'av3a'), ffmpeg does not
+        // parse the compressed stream to get channel count. Peek the first frame
+        // and parse it to extract actual channel info for passthrough display.
+        uint32_t fourCC = pStream->codecpar->codec_tag;
+        if (fourCC == MKTAG('d', 't', 's', 'x') || fourCC == MKTAG('a', 'v', '3', 'a'))
+        {
+          int64_t pos = avio_tell(m_pFormatContext->pb);
+          AVPacket* pkt = av_packet_alloc();
+          if (pkt && av_read_frame(m_pFormatContext, pkt) >= 0)
+          {
+            if (pkt->stream_index == streamIdx && pkt->size >= 4)
+            {
+              uint32_t syncword = AV_RB32(pkt->data);
+              if ((fourCC == MKTAG('d', 't', 's', 'x') && syncword == 0x40411BF2) ||
+                  (fourCC == MKTAG('a', 'v', '3', 'a') && AV3A::HasSyncWord(pkt->data, static_cast<unsigned int>(pkt->size))))
+              {
+                // The DTS-UHD sample entry declares the channel count and it
+                // matches the channel mask of the 'udts' box, so only stream
+                // containers that leave it undefined need the bitstream parse.
+                // AV3A is the opposite: its frame header is authoritative.
+                const bool parsedChannelsNeeded =
+                    fourCC != MKTAG('d', 't', 's', 'x') || st->iChannels <= 2;
+                const int channels = parsedChannelsNeeded
+                                         ? CDVDDemuxFFmpeg::ParsePassthroughChannels(fourCC, pkt->data, pkt->size)
+                                         : 0;
+                if (channels > 0)
+                {
+                  st->iChannels = channels;
+                  std::string layout = StreamUtils::GetDefaultLayout(channels);
+                  if (!layout.empty())
+                  {
+                    st->m_channelLayoutName = layout;
+                    // Passthrough streams are never decoded, so the decoder
+                    // never calls CProcessInfo::SetAudioChannels(). Push the
+                    // parsed layout to DataCacheCore directly so that
+                    // Player.Process(audiochannels) shows the correct value.
+                    CServiceBroker::GetDataCacheCore().SetAudioChannels(layout);
+                  }
+                }
+              }
+            }
+            av_packet_free(&pkt);
+            // Seek back to beginning
+            avio_seek(m_pFormatContext->pb, pos, SEEK_SET);
+            avformat_seek_file(m_pFormatContext, -1, INT64_MIN, 0, INT64_MAX, AVSEEK_FLAG_BYTE);
+          }
+          else if (pkt)
+          {
+            av_packet_free(&pkt);
+          }
+        }
+
         break;
       }
       case AVMEDIA_TYPE_VIDEO:
@@ -1846,8 +2139,6 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
         st->colorTransferCharacteristic = pStream->codecpar->color_trc;
         st->colorRange = pStream->codecpar->color_range;
         st->hdr_type = DetermineHdrType(pStream);
-        if (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION)
-          st->colorSpace = AVCOL_SPC_ICTCP;
 
         // https://github.com/FFmpeg/FFmpeg/blob/release/7.0/doc/APIchanges
         const AVPacketSideData* sideData = nullptr;
@@ -2291,6 +2582,7 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
           stream->dvdNavId = pStream->id - 128;
           break;
         case AV_CODEC_ID_DTS:
+        case AV_CODEC_ID_DTS_UHD:
           stream->dvdNavId = pStream->id - 136;
           break;
         case AV_CODEC_ID_MP2:
@@ -2443,11 +2735,92 @@ bool CDVDDemuxFFmpeg::SeekChapter(int chapter, double* startpts)
       true, startpts);
 }
 
+// Helper to parse DTS-UHD FTOC for channel count
+static int ParseDTSUHDChannels(const uint8_t* data, int size)
+{
+  if (size < 8) return 0;
+  uint32_t sync = AV_RB32(data);
+  if (sync != 0x40411BF2U) return 0;
+
+  int bytePos = 4, bitPos = 0;
+  auto readBits = [&](int bits) -> int {
+    int value = 0;
+    for (int i = 0; i < bits && bytePos < size; i++) {
+      int bit = (data[bytePos] >> (7 - bitPos)) & 1;
+      value = (value << 1) | bit;
+      if (++bitPos == 8) { bitPos = 0; bytePos++; }
+    }
+    return value;
+  };
+
+  // ExtractFTOC (Table 6-11)
+  int fullChannelMix = readBits(1);
+  int code = readBits(3);
+  static const int ftocTable[4] = {5, 8, 10, 12};
+  readBits(ftocTable[std::min(code, 3)]); // skip FTOC size
+
+  // ExtractStreamParams (Table 6-12)
+  readBits(1); // bSyncFrameFlag
+  int vbits = readBits(1) ? 3 : 6;
+  readBits(vbits); readBits(vbits); // versions
+  readBits(5); // frame duration
+  readBits(2); // clock rate
+  if (readBits(1)) readBits(36); // timestamp
+  readBits(2); // sample rate modifier
+  readBits(1); readBits(1); // reserved + interactive
+
+  // Number of presentations (Table 6-16)
+  int numPres = fullChannelMix ? 1 : ((int[]){0, 2, 4, 5}[std::min(readBits(3), 3)] + 1);
+
+  int maxCh = 0;
+  for (int p = 0; p < numPres; p++) {
+    if (!fullChannelMix) readBits(1); // selectable
+    if (p > 0 && !fullChannelMix) { int m = readBits(p); for (int i = 0; m; i++, m >>= 1) if (m & 1) readBits(1); }
+    int repType = readBits(3);
+    // Skip object metadata to find channel config
+    for (int skip = 0; skip < 16 && bytePos < size - 1; skip++) {
+      int chIdx = readBits(4);
+      static const int chCounts[16] = {1,2,2,4,4,6,6,8,8,10,10,12,12,14,14,16};
+      int ch = chCounts[std::min(chIdx, 15)];
+      if (ch > maxCh) maxCh = ch;
+      if (chIdx < 14) break;
+      // Skip additional mask bits
+      int extra = readBits(4);
+      if (extra < 14) readBits(extra * 4);
+    }
+  }
+  return maxCh;
+}
+
+// Helper to parse AV3A frame for channel count
+static int ParseAV3AChannels(const uint8_t* data, int size)
+{
+  if (size <= 0) return 0;
+  const AV3A::FrameHeader header =
+      AV3A::ParseFrameHeader(data, static_cast<unsigned int>(size));
+  return header.valid ? static_cast<int>(header.channels) : 0;
+}
+
+int CDVDDemuxFFmpeg::ParsePassthroughChannels(uint32_t fourCC, const uint8_t* data, int size)
+{
+  if (fourCC == MKTAG('d', 't', 's', 'x'))
+    return ParseDTSUHDChannels(data, size);
+  else if (fourCC == MKTAG('a', 'v', '3', 'a'))
+    return ParseAV3AChannels(data, size);
+  return 0;
+}
+
+
 std::string CDVDDemuxFFmpeg::GetStreamCodecName(int iStreamId)
 {
   CDemuxStream* stream = GetStream(iStreamId);
   if (stream)
   {
+    if ((stream->codec == AV_CODEC_ID_DTS || stream->codec == AV_CODEC_ID_DTS_UHD) &&
+        stream->codec_fourcc == MKTAG('d','t','s','x'))
+      return "dts_uhd";
+    if (stream->codec == AV_CODEC_ID_AV3A && stream->codec_fourcc == MKTAG('a','v','3','a'))
+      return "av3a";
     return StreamUtils::GetCodecName(stream->codec, stream->profile);
   }
   return {};
@@ -3032,6 +3405,20 @@ StreamHdrType CDVDDemuxFFmpeg::DetermineHdrType(AVStream* pStream)
                               pStream->codecpar->nb_coded_side_data,
                               AV_PKT_DATA_DOVI_CONF) || convert_dual_stream) // DoVi
     hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
+  else if (pStream->codecpar->codec_id == AV_CODEC_ID_HEVC &&
+           pStream->codecpar->extradata &&
+           pStream->codecpar->extradata_size >= 3)
+  {
+    /* Fallback: detect single-layer Dolby Vision (profile 8) from HEVC
+     * CodecPrivate when DOVI_CONF side data is missing (e.g. WEB-DL files
+     * without dvcC/dvvC/dvwC box). This must come before the color_trc
+     * checks because P8.6 uses ST.2084 PQ (same as HDR10).
+     * hvcC format: configurationVersion(1) + profile_space(2b)+tier(1b)+
+     * profile_idc(5b). profile_idc is the low 5 bits of byte 1. */
+    const uint8_t* ed = pStream->codecpar->extradata;
+    if (ed[0] == 0x01 && (ed[1] & 0x1F) == 8)
+      hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
+  }
   else if (pStream->codecpar->color_trc == AVCOL_TRC_SMPTE2084) // HDR10
     hdrType = StreamHdrType::HDR_TYPE_HDR10;
   else if (pStream->codecpar->color_trc == AVCOL_TRC_ARIB_STD_B67) // HLG
@@ -3042,27 +3429,6 @@ StreamHdrType CDVDDemuxFFmpeg::DetermineHdrType(AVStream* pStream)
                                    pStream->codecpar->nb_coded_side_data,
                                    AV_PKT_DATA_MASTERING_DISPLAY_METADATA))
     hdrType = StreamHdrType::HDR_TYPE_HDR10;
-  else if (pStream->codecpar->codec_id == AV_CODEC_ID_HEVC &&
-           pStream->codecpar->extradata &&
-           pStream->codecpar->extradata_size >= 20)
-  {
-    /* Fallback: detect single-layer Dolby Vision (profile 8) from HEVC SPS
-     * when DOVI_CONF side data is missing (e.g. WEB-DL files without
-     * dvcC/dvvC/dvwC box in CodecPrivate). */
-    const uint8_t *ed = pStream->codecpar->extradata;
-    int ed_size = pStream->codecpar->extradata_size;
-    /* HEVC CodecPrivate: configurationVersion(1) + general_profile_space(2b) +
-     * general_tier_flag(1b) + general_profile_idc(5b) + ... */
-    for (int i = 0; i < ed_size - 4; i++) {
-      /* Look for profile_tier_level start: constraint_indicator_flags(4B)
-       * preceded by general_profile_idc(1B) = 8 */
-      if (ed[i] == 8 && (i == 0 || ed[i-1] == 0x00 || ed[i-1] == 0x01)) {
-        /* Found DV profile 8 */
-        hdrType = StreamHdrType::HDR_TYPE_DOLBYVISION;
-        break;
-      }
-    }
-  }
 
   return hdrType;
 }

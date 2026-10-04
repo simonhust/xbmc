@@ -114,6 +114,8 @@ public:
   std::chrono::milliseconds GetChapterPos(int chapterIdx = -1) override;
   std::string GetStreamCodecName(int iStreamId) override;
 
+  static int ParsePassthroughChannels(uint32_t fourCC, const uint8_t* data, int size);
+
   bool Aborted();
 
   AVFormatContext* m_pFormatContext;
@@ -188,4 +190,32 @@ protected:
   bool m_dv_direct_pair = false;
   bool m_isBluray = false;
   double m_dv_seek_time = DVD_NOPTS_VALUE;
+
+  // Last-seen RPU for single-track DV (RPU NAL units embedded in BL stream).
+  // When a frame lacks RPU, reuse the last RPU so the DV engine never outputs
+  // a frame without RPU (which causes fallback to HDR10 and TV mode flicker).
+  std::string m_lastDoviRpu;
+
+public:
+  // Moov atom cache for MP4 files with moov at end (progressive download).
+  // After first read, cache the moov in memory so subsequent seeks to the
+  // moov region don't need slow network round-trips over cloud WebDAV.
+  bool m_moov_cached = false;
+  int64_t m_moov_pos = -1;
+  int m_moov_size = 0;
+  std::vector<uint8_t> m_moov_data;
+  int m_moov_cache_offset = -1;  // <0 means "not reading from cache"
+
+  // MKV Cues cache (same principle as moov cache). MKV stores its seek index
+  // (Cues element, EBML ID 0x1C53BB6B) typically at the end of the file. Over
+  // slow cloud WebDAV, seeking requires reading this region from the network.
+  // Cache it once at open time.
+  bool m_cues_cached = false;
+  int64_t m_cues_pos = -1;
+  int m_cues_size = 0;
+  std::vector<uint8_t> m_cues_data;
+  int m_cues_cache_offset = -1;
+
+  void FindAndCacheMoov();
+  void FindAndCacheCues();
 };

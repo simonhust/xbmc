@@ -8,16 +8,37 @@
 
 #include "AEPackIEC61937.h"
 
+#include "utils/log.h"
+
 #include <cassert>
 #include <string.h>
 
 #define IEC61937_PREAMBLE1  0xF872
 #define IEC61937_PREAMBLE2  0x4E1F
 
-inline void SwapEndian(uint16_t *dst, uint16_t *src, unsigned int size)
+inline void SwapEndian(uint16_t *dst, const uint16_t *src, unsigned int size)
 {
   for (unsigned int i = 0; i < size; ++i, ++dst, ++src)
     *dst = ((*src & 0xFF00) >> 8) | ((*src & 0x00FF) << 8);
+}
+
+/* Copies one compressed frame into the packet payload as 16 bit words, byte
+ * swapped on little endian hosts. A frame with an odd length keeps its last
+ * byte and pads the remaining half word; rounding the size up and swapping it
+ * would read one byte past the frame. Returns the size the payload occupies. */
+inline unsigned int CopyFrameSwapped(uint8_t* dst, const uint8_t* src, unsigned int size)
+{
+#ifdef __BIG_ENDIAN__
+  memcpy(dst, src, size);
+#else
+  SwapEndian(reinterpret_cast<uint16_t*>(dst), reinterpret_cast<const uint16_t*>(src), size >> 1);
+  if (size & 0x1)
+  {
+    dst[size - 1] = src[size - 1];
+    dst[size] = 0;
+  }
+#endif
+  return size + (size & 0x1);
 }
 
 int CAEPackIEC61937::PackAC3(uint8_t *data, unsigned int size, uint8_t *dest)
@@ -39,8 +60,7 @@ int CAEPackIEC61937::PackAC3(uint8_t *data, unsigned int size, uint8_t *dest)
   int bitstream_mode  = data[5] & 0x7;
   packet->m_type      = IEC61937_TYPE_AC3 | (bitstream_mode << 8);
 
-  size += size & 0x1;
-  SwapEndian((uint16_t*)packet->m_data, (uint16_t*)data, size >> 1);
+  size = CopyFrameSwapped(packet->m_data, data, size);
 #endif
 
   const int pad = (int)OUT_FRAMESTOBYTES(AC3_FRAME_SIZE) - (int)IEC61937_DATA_OFFSET - (int)size;
@@ -65,8 +85,7 @@ int CAEPackIEC61937::PackEAC3(uint8_t *data, unsigned int size, uint8_t *dest)
   else
     memcpy(packet->m_data, data, size);
 #else
-  size += size & 0x1;
-  SwapEndian((uint16_t*)packet->m_data, (uint16_t*)data, size >> 1);
+  size = CopyFrameSwapped(packet->m_data, data, size);
 #endif
 
   const int pad = (int)OUT_FRAMESTOBYTES(EAC3_FRAME_SIZE) - (int)IEC61937_DATA_OFFSET - (int)size;
@@ -108,8 +127,7 @@ int CAEPackIEC61937::PackTrueHD(const uint8_t* data, unsigned int size, uint8_t*
   else
     memcpy(packet->m_data, data, size);
 #else
-  size += size & 0x1;
-  SwapEndian((uint16_t*)packet->m_data, (uint16_t*)data, size >> 1);
+  size = CopyFrameSwapped(packet->m_data, data, size);
 #endif
 
   memset(packet->m_data + size, 0, OUT_FRAMESTOBYTES(TRUEHD_FRAME_SIZE) - IEC61937_DATA_OFFSET - size);
@@ -133,6 +151,19 @@ int CAEPackIEC61937::PackDTSHD(uint8_t *data, unsigned int size, uint8_t *dest, 
   }
 
   struct IEC61937Packet *packet = (struct IEC61937Packet*)dest;
+
+  /* The burst holds the payload, the packer prepends a DTS-HD start code and a
+   * length word to it (see CAEBitstreamPacker::PackDTSHD), so it has to fit the
+   * packet buffer and the header. */
+  const unsigned int burstsize = period << 2;
+  const unsigned int payload = size + (size & 0x1);
+  if (burstsize > MAX_IEC61937_PACKET || payload > burstsize - IEC61937_DATA_OFFSET)
+  {
+    CLog::Log(LOGERROR, "CAEPackIEC61937::PackDTSHD - {} byte frame does not fit a {} byte burst",
+              size, burstsize);
+    return 0;
+  }
+
   packet->m_preamble1 = IEC61937_PREAMBLE1;
   packet->m_preamble2 = IEC61937_PREAMBLE2;
   packet->m_type      = IEC61937_TYPE_DTSHD | (subtype << 8);
@@ -147,11 +178,9 @@ int CAEPackIEC61937::PackDTSHD(uint8_t *data, unsigned int size, uint8_t *dest, 
   else
     memcpy(packet->m_data, data, size);
 #else
-  size += size & 0x1;
-  SwapEndian((uint16_t*)packet->m_data, (uint16_t*)data, size >> 1);
+  size = CopyFrameSwapped(packet->m_data, data, size);
 #endif
 
-  unsigned int burstsize = period << 2;
   memset(packet->m_data + size, 0, burstsize - IEC61937_DATA_OFFSET - size);
   return burstsize;
 }
@@ -208,6 +237,61 @@ int CAEPackIEC61937::PackDTS(uint8_t *data, unsigned int size, uint8_t *dest, bo
     memset(packet->m_data + size, 0, frameSize - IEC61937_DATA_OFFSET - size);
 
   return frameSize;
+}
+
+int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, unsigned int frameLength)
+{
+  /* IEC 61937-17 table 1: the sub-data-type in Pc tells which AVS3-P3 frame
+   * length the burst carries. */
+  unsigned int subDataType;
+  switch (frameLength)
+  {
+    case 512:
+      subDataType = 1;
+      break;
+    case 1024:
+      subDataType = 0;
+      break;
+    default:
+      CLog::Log(LOGERROR, "CAEPackIEC61937::PackAV3A - unsupported frame length {}", frameLength);
+      return 0;
+  }
+
+  /* One data burst carries one AVS3-P3 frame. With the first repetition period
+   * (Pc bits 10 to 11 = 0) the burst is frameLength IEC 60958 frames long, which
+   * is 4 bytes per sample and keeps the interface at the audio sample rate. */
+  const unsigned int headerBytes = IEC61937_AVS3P3_HEADER_WORDS * 2;
+  const unsigned int burstsize = frameLength << 2;
+  if ((size & 0x1) || burstsize > MAX_IEC61937_PACKET || headerBytes + size > burstsize)
+  {
+    CLog::Log(LOGERROR, "CAEPackIEC61937::PackAV3A - {} byte frame does not fit a {} byte burst",
+              size, burstsize);
+    return 0;
+  }
+
+  uint16_t* header = reinterpret_cast<uint16_t*>(dest);
+  header[0] = IEC61937_PREAMBLE1;                             /* Pa */
+  header[1] = IEC61937_PREAMBLE2;                             /* Pb */
+  header[2] = IEC61937_AVS3P3_DATA_TYPE | (subDataType << 8); /* Pc */
+  /* Pd counts the burst-payload plus the conditional lengths of Pe and Pf
+   * (IEC 61937-1:2021, 6.1.9), so four bytes are added for them. */
+  header[3] = size + 2 * (IEC61937_AVS3P3_HEADER_WORDS - 4);
+  header[4] = IEC61937_AVS3P3_EXTENDED_TYPE;                  /* Pe */
+  header[5] = 0;                                              /* Pf: reserved (IEC 61937-1, table 8) */
+
+  uint8_t* payload = dest + headerBytes;
+  if (data == nullptr)
+    memset(payload, 0, size);
+#ifdef __BIG_ENDIAN__
+  else
+    memcpy(payload, data, size);
+#else
+  else
+    SwapEndian(reinterpret_cast<uint16_t*>(payload), reinterpret_cast<uint16_t*>(data), size >> 1);
+#endif
+
+  memset(payload + size, 0, burstsize - headerBytes - size);
+  return burstsize;
 }
 
 int CAEPackIEC61937::PackPause(uint8_t *dest, unsigned int millis, unsigned int framesize, unsigned int samplerate, unsigned int rep_period, unsigned int encodedRate)

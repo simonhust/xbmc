@@ -21,6 +21,7 @@
 // linux/amlogic/media/sound/spdif_info.h
 enum IEC958_mode_codec {
   STEREO_PCM, DTS_RAW_MODE, DOLBY_DIGITAL, DTS, DD_PLUS, DTS_HD, MULTI_CHANNEL_LPCM, TRUEHD, _DTS_HD_MA, HIGH_SR_STEREO_LPCM,
+  AC3_LAYOUT_B, OBA, _DTS_UHD, _AV3A,
   CODEC_CNT
 };
 

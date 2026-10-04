@@ -2908,6 +2908,11 @@ bool CActiveAE::SupportsRaw(AEAudioFormat &format)
   if (format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_DTSHD_MA && !m_settings.dtshdpassthrough)
     return false;
 
+  // DTS-UHD and AV3A always passthrough, regardless of device support
+  if (format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_DTS_UHD ||
+      format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_AV3A)
+    return true;
+
   if (!SupportsFormat(format))
     return false;
 

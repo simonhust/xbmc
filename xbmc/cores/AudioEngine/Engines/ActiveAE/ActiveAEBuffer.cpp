@@ -12,10 +12,15 @@
 #include "ActiveAEFilter.h"
 #include "cores/AudioEngine/AEResampleFactory.h"
 #include "cores/AudioEngine/Utils/AEUtil.h"
+#include "utils/log.h"
 
 #include <memory>
 
 using namespace ActiveAE;
+
+// Frame duration assumed for raw (passthrough) stream types that do not report
+// one, so the sample buffer pool stays bounded (one AC-3/DTS frame at 48 kHz).
+static constexpr unsigned int RAW_FRAMETIME_FALLBACK_MS = 21;
 
 CSoundPacket::CSoundPacket(const SampleConfig& conf, int samples) : config(conf)
 {
@@ -103,6 +108,17 @@ bool CActiveAEBufferPool::Create(unsigned int totaltime)
   if (m_format.m_dataFormat == AE_FMT_RAW)
   {
     buffertime = m_format.m_streamInfo.GetDuration();
+    if (buffertime == 0)
+    {
+      // A stream type with an unknown frame duration keeps `time` constant and
+      // would spin the loop below forever, allocating sample buffers until the
+      // process runs out of memory.
+      CLog::Log(LOGWARNING,
+                "CActiveAEBufferPool::Create - stream type {} has no frame duration, using {} "
+                "ms fallback",
+                static_cast<int>(m_format.m_streamInfo.m_type), RAW_FRAMETIME_FALLBACK_MS);
+      buffertime = RAW_FRAMETIME_FALLBACK_MS;
+    }
   }
   unsigned int n = 0;
   while (time < totaltime || n < 5)

@@ -223,4 +223,9 @@ protected:
   bool m_Hdr10PlusTested{false};
   bool m_IsHdrVivid{false};
   bool m_HdrVividTested{false};
+
+  // Last-seen RPU data for dual-stream DV. When an EL frame lacks RPU, reuse
+  // the last RPU so the DV engine never sees a frame without RPU (which would
+  // cause it to fall back to HDR10 output).
+  std::string m_lastDoviRpu;
 };
