@@ -7,6 +7,21 @@
 
 #include <avs3a/avs3a_wrapper.h>
 
+/* Extra headroom (samples) for the decode output buffer */
+#define AVS3A_FRAME_SLACK 4096
+
+/* AVS3-P3 height-channel downmix is done inside the decoder wrapper:
+   the last 4 channels (TFL/TFR[/TBL/TBR]) are dropped, so the PCM we
+   receive is always bed-only. Map a coded channel count to bed channels. */
+static int Av3aBedChannels(int codedChannels)
+{
+  if (codedChannels == 10 || codedChannels == 12)
+    return codedChannels - 4;
+  if (codedChannels > 0)
+    return codedChannels;
+  return 6;
+}
+
 static CAEChannelInfo GetAv3aChannelLayout(int channels)
 {
   switch (channels)
@@ -20,23 +35,6 @@ static CAEChannelInfo GetAv3aChannelLayout(int channels)
     case 6:
       return CAEChannelInfo(AE_CH_LAYOUT_5_1);
     case 8:
-      return CAEChannelInfo(AE_CH_LAYOUT_7_1);
-    case 10:
-    {
-      CAEChannelInfo info(AE_CH_LAYOUT_7_1);
-      info += AE_CH_TFL;
-      info += AE_CH_TFR;
-      return info;
-    }
-    case 12:
-    {
-      CAEChannelInfo info(AE_CH_LAYOUT_7_1);
-      info += AE_CH_TFL;
-      info += AE_CH_TFR;
-      info += AE_CH_TBL;
-      info += AE_CH_TBR;
-      return info;
-    }
     default:
       return CAEChannelInfo(AE_CH_LAYOUT_7_1);
   }
@@ -76,22 +74,25 @@ bool CDVDAudioCodecAvs3a::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options)
     return false;
   }
 
-  int sample_rate = 0, channels = 0, frame_length = 0, bit_depth = 0;
-  avs3a_decoder_get_info(m_ctx, &sample_rate, &channels, &frame_length, &bit_depth);
+  /* The container/ffmpeg layer already reports the coded channel count
+   * (10 = 5.1.4, 12 = 7.1.4) and the sample rate. The decoder wrapper
+   * drops the 4 height channels, so the PCM we hand over is always
+   * bed-only (6 or 8 channels). */
+  const int codedChannels = hints.channels;
+  const int bedChannels = Av3aBedChannels(codedChannels);
 
-  m_samplesPerFrame = (sample_rate > 0 && channels > 0) ? frame_length * channels : 1024;
-
-  m_format.m_sampleRate = sample_rate > 0 ? sample_rate : 48000;
-  m_format.m_channelLayout = GetAv3aChannelLayout(channels > 0 ? channels : 6);
+  m_format.m_sampleRate = hints.samplerate > 0 ? hints.samplerate : 48000;
+  m_format.m_channelLayout = GetAv3aChannelLayout(bedChannels);
   m_format.m_dataFormat = AE_FMT_S16NE;
   m_format.m_frameSize = m_format.m_channelLayout.Count() * 2;
-  m_format.m_frameLength = frame_length > 0 ? frame_length : 1024;
+  m_format.m_frameLength = 1024;
+  m_samplesPerFrame = m_format.m_frameLength * bedChannels;
 
   m_codecName = "avs3a";
   m_hasOutput = false;
 
-  CLog::Log(LOGINFO, "CDVDAudioCodecAvs3a::Open() opened AVS3A decoder: {}Hz {}ch",
-            m_format.m_sampleRate, channels);
+  CLog::Log(LOGINFO, "CDVDAudioCodecAvs3a::Open() opened AVS3A decoder: {}Hz {}ch (coded {})",
+            m_format.m_sampleRate, m_format.m_channelLayout.Count(), codedChannels);
 
   return true;
 }
@@ -115,7 +116,10 @@ bool CDVDAudioCodecAvs3a::AddData(const DemuxPacket& packet)
   int num_samples = 0;
   int sample_rate_out = 0, channels_out = 0;
 
-  m_outputBuffer.resize(m_samplesPerFrame + packet.iSize);
+  /* The wrapper decodes one AVS frame per call and writes
+   * m_samplesPerFrame bed-channel samples; keep some headroom so a
+   * slightly larger frame can never overrun the buffer. */
+  m_outputBuffer.resize(m_samplesPerFrame + packet.iSize + AVS3A_FRAME_SLACK);
 
   int ret = avs3a_decoder_decode(
       m_ctx, packet.pData, packet.iSize,
@@ -141,6 +145,7 @@ bool CDVDAudioCodecAvs3a::AddData(const DemuxPacket& packet)
     {
       m_format.m_channelLayout = GetAv3aChannelLayout(channels_out);
       m_format.m_frameSize = m_format.m_channelLayout.Count() * 2;
+      m_samplesPerFrame = m_format.m_frameLength * channels_out;
     }
 
     m_hasOutput = true;
@@ -183,9 +188,10 @@ void CDVDAudioCodecAvs3a::Reset()
   m_ctx = avs3a_decoder_init(model_path);
   if (m_ctx)
   {
-    int sample_rate = 0, channels = 0, frame_length = 0, bit_depth = 0;
-    avs3a_decoder_get_info(m_ctx, &sample_rate, &channels, &frame_length, &bit_depth);
-    m_samplesPerFrame = frame_length * channels;
+    /* The decoder is not initialised until the first frame arrives, so
+     * keep the channel/frame count derived from the stream hints. */
+    m_samplesPerFrame = m_format.m_frameLength *
+                        m_format.m_channelLayout.Count();
   }
   m_hasOutput = false;
 }
