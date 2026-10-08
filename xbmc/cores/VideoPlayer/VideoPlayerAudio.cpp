@@ -9,8 +9,12 @@
 #include "VideoPlayerAudio.h"
 
 #include "DVDCodecs/Audio/DVDAudioCodec.h"
+#ifdef AVS3A_DECODER_FOUND
 #include "DVDCodecs/Audio/DVDAudioCodecAvs3a.h"
+#endif
+#ifdef DTS_UHD_DECODER_FOUND
 #include "DVDCodecs/Audio/DVDAudioCodecDtsUhd.h"
+#endif
 #include "DVDCodecs/Audio/DVDAudioCodecPassthrough.h"
 #include "DVDCodecs/DVDFactoryCodec.h"
 #include "ServiceBroker.h"
@@ -98,15 +102,19 @@ CVideoPlayerAudio::~CVideoPlayerAudio()
 
 bool CVideoPlayerAudio::OpenStream(CDVDStreamInfo hints)
 {
+#ifdef AVS3A_DECODER_FOUND
   static bool avs3aRegistered = []() {
     CDVDAudioCodecAvs3a::Register();
     return true;
   }();
+#endif
 
+#ifdef DTS_UHD_DECODER_FOUND
   static bool dtsUhdRegistered = []() {
     CDVDAudioCodecDtsUhd::Register();
     return true;
   }();
+#endif
 
   CLog::Log(LOGINFO, "Finding audio codec for: {}", hints.codec);
   bool allowpassthrough = !CServiceBroker::GetSettingsComponent()->GetSettings()->GetBool(CSettings::SETTING_VIDEOPLAYER_USEDISPLAYASCLOCK);
