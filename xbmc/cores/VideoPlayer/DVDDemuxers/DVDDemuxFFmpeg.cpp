@@ -2863,7 +2863,16 @@ std::string CDVDDemuxFFmpeg::GetStreamCodecName(int iStreamId)
   {
     if ((stream->codec == AV_CODEC_ID_DTS || stream->codec == AV_CODEC_ID_DTS_UHD) &&
         stream->codec_fourcc == MKTAG('d','t','s','x'))
+    {
+      // Profile 1 (DTS:X with DTS-HD MA core) keeps the dtshd_ma_x name so
+      // the skin shows "DTS-HD MA / DTS:X". Profile 2 (pure ACE) reports
+      // AV_CODEC_ID_DTS_UHD and is labelled dts_uhd.
+      if (stream->codec == AV_CODEC_ID_DTS && stream->profile == AV_PROFILE_DTS_HD_MA_X)
+        return "dtshd_ma_x";
+      if (stream->codec == AV_CODEC_ID_DTS && stream->profile == AV_PROFILE_DTS_HD_MA_X_IMAX)
+        return "dtshd_ma_x_imax";
       return "dts_uhd";
+    }
     if (stream->codec == AV_CODEC_ID_AVS3_AUDIO && stream->codec_fourcc == MKTAG('a','v','3','a'))
       return "av3a";
     return StreamUtils::GetCodecName(stream->codec, stream->profile);

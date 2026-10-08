@@ -364,9 +364,11 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
     case AV_CODEC_ID_DTS:
       if (profile == AV_PROFILE_DTS_HD_HRA)
         format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD;
-      else if (profile == AV_PROFILE_DTS_HD_MA || profile == AV_PROFILE_DTS_HD_MA_X ||
-               profile == AV_PROFILE_DTS_HD_MA_X_IMAX)
+      else if (profile == AV_PROFILE_DTS_HD_MA)
         format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_MA;
+      else if (profile == AV_PROFILE_DTS_HD_MA_X ||
+               profile == AV_PROFILE_DTS_HD_MA_X_IMAX)
+        format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
       else
         format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
       format.m_streamInfo.m_sampleRate = samplerate;
@@ -396,18 +398,21 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
 
   bool supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
 
-  if (!supports && codecId == AV_CODEC_ID_DTS &&
-      format.m_streamInfo.m_type != CAEStreamInfo::STREAM_TYPE_DTSHD_CORE &&
+  if (!supports && format.m_streamInfo.m_type != CAEStreamInfo::STREAM_TYPE_DTSHD_CORE &&
       CServiceBroker::GetActiveAE()->UsesDtsCoreFallback())
   {
-    format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
-    supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
+    // DTS:X Profile 1 (DTS_UHD type with DTS-HD MA core) falls back to core
+    // when DTS-UHD passthrough is not supported by the sink.
+    if (codecId == AV_CODEC_ID_DTS || codecId == AV_CODEC_ID_DTS_UHD)
+    {
+      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
+      supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
+    }
   }
 
-  // DTS-UHD passthrough disabled: do not fall through to DTS-HD core
-  // passthrough (the packer expects DTS-HD frames, not DTS-UHD). Instead,
-  // return NULL so the codec factory picks a software decoder (FFmpeg handles
-  // Profile 1 core extraction internally; Profile 2 falls back to silence).
+  // DTS-UHD (Profile 2, pure ACE) passthrough disabled: return NULL so the
+  // codec factory picks a decoder (dts_uhd for channel-based, FFmpeg for
+  // object-based). Profile 1 already fell back to DTS-HD core above.
 
   if (supports)
     return format.m_streamInfo.m_type;
