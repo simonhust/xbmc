@@ -2761,6 +2761,7 @@ void CActiveAE::LoadSettings(AEAudioFormat *format)
   m_settings.dtspassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSPASSTHROUGH);
   m_settings.dtshdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH);
   m_settings.dtsuhdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSUHDPASSTHROUGH);
+  m_settings.av3apassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH);
   m_settings.usesdtscorefallback =
       settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK);
 
@@ -2913,7 +2914,7 @@ bool CActiveAE::SupportsRaw(AEAudioFormat &format)
     return false;
 
   if (format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_AV3A)
-    return true;
+    return m_settings.av3apassthrough;
 
   if (!SupportsFormat(format))
     return false;
@@ -3023,6 +3024,16 @@ bool CActiveAE::IsSettingVisible(const std::string &settingId)
     AEAudioFormat format;
     format.m_dataFormat = AE_FMT_RAW;
     format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
+    const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+    if (SupportsFormat(format) &&
+        settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
+      return true;
+  }
+  else if (settingId == CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH)
+  {
+    AEAudioFormat format;
+    format.m_dataFormat = AE_FMT_RAW;
+    format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_AV3A;
     const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
     if (SupportsFormat(format) &&
         settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
