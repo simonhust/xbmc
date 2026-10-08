@@ -66,6 +66,7 @@ public:
   int demuxerId = -1;
   int source{STREAM_SOURCE_NONE};
   int flags;
+  bool dtsUhdNoCore{false}; //!< DTS-UHD object-based (full_mix=0): skip dts_uhd HW decoder
   std::string filename;
   bool dvd;
   int codecOptions;

@@ -2013,6 +2013,9 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
                     CServiceBroker::GetDataCacheCore().SetAudioChannels(layout);
                   }
                 }
+                // Detect object-based DTS-UHD (full_mix=0) - dts_uhd decoder can't handle
+                if (fourCC == MKTAG('d', 't', 's', 'x') && !DtsUhdIsChannelBased(pkt->data, pkt->size))
+                  st->dtsUhdNoCore = true;
               }
             }
             av_packet_free(&pkt);
@@ -2481,6 +2484,10 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     stream->profile = pStream->codecpar->profile;
     stream->level = pStream->codecpar->level;
 
+    // Keep DTS_UHD codec intact so the passthrough path sends the original
+    // DTS-UHD bitstream to the AVR. The core fallback (when passthrough is
+    // disabled) handles Profile 1 vs Profile 2 distinction in AudioSinkAE.
+
     stream->source = STREAM_SOURCE_DEMUX;
     stream->pPrivate = pStream;
     stream->flags =
@@ -2790,6 +2797,44 @@ static int ParseDTSUHDChannels(const uint8_t* data, int size)
     }
   }
   return maxCh;
+}
+
+// Parse the FTOC full_mix bit from a DTS-UHD sync frame.
+// full_mix=1: channel-based ACE (decoder can handle).
+// full_mix=0: object-based ACE (decoder hangs - reject so FFmpeg takes over).
+static bool DtsUhdIsChannelBased(const uint8_t* data, int size)
+{
+  if (size < 16) return true; // assume channel-based if can't parse
+  uint32_t sync = AV_RB32(data);
+  if (sync != 0x40411BF2U) return true; // non-sync or invalid, assume channel-based
+
+  // Bit-level FTOC parse matching dts_uhd's dtsx_varlen_vlc({5,8,10,12}, 4).
+  // The VLC reads a 3-bit code, then rewinds to start+vlc_bits[code] before
+  // reading ftoc_tbl[idx] bits (overlapping the code bits).
+  static const int vlc_bits[8] = {1, 1, 1, 1, 2, 2, 3, 3};
+  static const int vlc_idx[8] = {0, 0, 0, 0, 1, 1, 2, 3};
+  static const int ftoc_tbl[4] = {5, 8, 10, 12};
+  int pos = 32;
+  auto readBits = [&](int bits) -> int {
+    int value = 0;
+    for (int i = 0; i < bits && (pos + i) / 8 < size; i++) {
+      int bytePos = (pos + i) / 8;
+      int bitPos = (pos + i) % 8;
+      value = (value << 1) | ((data[bytePos] >> (7 - bitPos)) & 1);
+    }
+    pos += bits;
+    return value;
+  };
+
+  // Read 3-bit VLC code, then rewind to start + vlc_bits[code]
+  int code = readBits(3);
+  int idx = vlc_idx[code & 7];
+  pos = 32 + vlc_bits[code & 7]; // rewind
+  readBits(ftoc_tbl[idx]); // read ftoc_size value (overlaps code bits)
+
+  // full_mix is the next bit for sync frames
+  int full_mix = readBits(1);
+  return full_mix == 1;
 }
 
 // Helper to parse AV3A frame for channel count

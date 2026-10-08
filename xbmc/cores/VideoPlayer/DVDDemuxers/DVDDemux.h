@@ -143,6 +143,8 @@ public:
   std::string name;
   std::string codecName;
 
+  bool dtsUhdNoCore{false}; //!< DTS-UHD object-based (full_mix=0): skip dts_uhd HW decoder
+
   int changes{0}; // increment on change which player may need to know about
 
   std::shared_ptr<DemuxCryptoSession> cryptoSession;

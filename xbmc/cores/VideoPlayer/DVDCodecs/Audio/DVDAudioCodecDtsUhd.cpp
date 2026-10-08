@@ -58,6 +58,11 @@ bool CDVDAudioCodecDtsUhd::Open(CDVDStreamInfo& hints, CDVDCodecOptions& options
   if (hints.codec != AV_CODEC_ID_DTS_UHD)
     return false;
 
+  /* Object-based DTS-UHD (full_mix=0): this decoder only handles
+   * channel-based ACE. Reject so the factory falls back to FFmpeg. */
+  if (hints.dtsUhdNoCore)
+    return false;
+
   /* When passthrough is requested, let the passthrough codec handle it. */
   for (const auto& opt : options.m_keys)
   {

@@ -78,6 +78,7 @@ void CDVDStreamInfo::Clear()
   bitrate    = 0;
   bitspersample = 0;
   channellayout = 0;
+  dtsUhdNoCore = false;
 
   orientation = 0;
   bitdepth = 0;
@@ -252,6 +253,7 @@ void CDVDStreamInfo::Assign(const CDVDStreamInfo& right, bool withextradata)
   bitrate       = right.bitrate;
   bitspersample = right.bitspersample;
   channellayout = right.channellayout;
+  dtsUhdNoCore = right.dtsUhdNoCore;
 
   // SUBTITLE
   m_3dSubtitlePlane = right.m_3dSubtitlePlane;
@@ -270,6 +272,7 @@ void CDVDStreamInfo::Assign(const CDemuxStream& right, bool withextradata)
   profile = right.profile;
   level = right.level;
   flags = right.flags;
+  dtsUhdNoCore = right.dtsUhdNoCore;
 
   if (withextradata && right.extraData)
   {

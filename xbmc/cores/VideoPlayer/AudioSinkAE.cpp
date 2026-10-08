@@ -377,6 +377,11 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
       format.m_streamInfo.m_sampleRate = samplerate;
       break;
 
+    case AV_CODEC_ID_DTS_UHD:
+      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
+      format.m_streamInfo.m_sampleRate = samplerate;
+      break;
+
     case AV_CODEC_ID_AVS3_AUDIO:
       // Packed into IEC 61937-17 data bursts by CAEBitstreamPacker::Pack; the
       // real sampling rate and frame length come from the frame header, which
@@ -398,6 +403,11 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
     format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
     supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
   }
+
+  // DTS-UHD passthrough disabled: do not fall through to DTS-HD core
+  // passthrough (the packer expects DTS-HD frames, not DTS-UHD). Instead,
+  // return NULL so the codec factory picks a software decoder (FFmpeg handles
+  // Profile 1 core extraction internally; Profile 2 falls back to silence).
 
   if (supports)
     return format.m_streamInfo.m_type;

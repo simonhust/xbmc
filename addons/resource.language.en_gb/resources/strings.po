@@ -25590,6 +25590,18 @@ msgctxt "#40813"
 msgid "Full sync"
 msgstr ""
 
+#. Label for DTS-UHD (DTS:X) passthrough setting
+#: system/settings/settings.xml
+msgctxt "#40814"
+msgid "DTS-UHD capable receiver"
+msgstr ""
+
+#. Description of setting with label #40814 "DTS-UHD capable receiver"
+#: system/settings/settings.xml
+msgctxt "#40815"
+msgid "Select this option if your receiver is capable of playing DTS-UHD (DTS:X) streams via HDMI passthrough. When disabled, DTS-UHD streams with a DTS-HD MA core will fall back to the core, and pure ACE streams will be decoded to PCM."
+msgstr ""
+
 #. Label for HDR10+ RPU peak brightness source setting of label #60103
 #: system/settings/settings.xml
 msgctxt "#60103"
