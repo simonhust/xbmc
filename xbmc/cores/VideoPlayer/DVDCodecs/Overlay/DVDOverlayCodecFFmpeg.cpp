@@ -132,8 +132,7 @@ bool CDVDOverlayCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &optio
     // misread the palette code values and produce dark/gray subtitles.
     if (m_pgsIsPqAuthored)
     {
-      const auto* settings =
-          CServiceBroker::GetSettingsComponent()->GetSettings();
+      auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
       const bool dvConversionActive =
           (hints.hdrType == StreamHdrType::HDR_TYPE_NONE &&
            settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_SDR2DV)) ||
