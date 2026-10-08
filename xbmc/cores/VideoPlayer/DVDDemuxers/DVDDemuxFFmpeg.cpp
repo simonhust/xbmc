@@ -73,6 +73,8 @@ extern "C"
 using namespace KODI;
 using namespace std::chrono_literals;
 
+static bool DtsUhdIsChannelBased(const uint8_t* data, int size);
+
 struct StereoModeConversionMap
 {
   const char*          name;
