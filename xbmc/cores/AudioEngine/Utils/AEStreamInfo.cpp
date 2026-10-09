@@ -754,8 +754,9 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
   {
     unsigned int header = data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
 
-    // AV3A (Audio Vivid / AVS3-P3) - 12 bit sync word, check before 4-byte DTS switch
-    if (AV3A::HasSyncWord(data, size - skip))
+    // AV3A (Audio Vivid / AVS3-P3) - 12 bit sync word, check before 4-byte DTS switch.
+    // Skip AV3A detection if we already have DTS-UHD sync to avoid false positives.
+    if (m_info.m_type != CAEStreamInfo::STREAM_TYPE_DTS_UHD && AV3A::HasSyncWord(data, size - skip))
     {
       const unsigned int available = size - skip;
       if (available < AV3A::MAX_HEADER_BYTES)
@@ -824,6 +825,9 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
       m_hasSync = true;
       return skip;
     }
+    /* If AV3A is already detected, do not switch to DTS-UHD to avoid false positives. */
+    if (m_info.m_type == CAEStreamInfo::STREAM_TYPE_AV3A)
+      return 0;
 
     unsigned int hd_sync = 0;
     unsigned int dtsBlocks;
