@@ -3021,22 +3021,14 @@ bool CActiveAE::IsSettingVisible(const std::string &settingId)
   }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_DTSUHDPASSTHROUGH)
   {
-    AEAudioFormat format;
-    format.m_dataFormat = AE_FMT_RAW;
-    format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
     const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-    if (SupportsFormat(format) &&
-        settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
+    if (settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
       return true;
   }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH)
   {
-    AEAudioFormat format;
-    format.m_dataFormat = AE_FMT_RAW;
-    format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_AV3A;
     const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-    if (SupportsFormat(format) &&
-        settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
+    if (settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
       return true;
   }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_STEREOUPMIX)
