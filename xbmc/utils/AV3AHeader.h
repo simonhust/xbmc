@@ -189,6 +189,7 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
       const unsigned int objects = readBits(7) + 1;
       const unsigned int bitrateIndex = readBits(4);
       bitrate = detail::BITRATE_MONO[bitrateIndex] * objects;
+      header.channels = objects;
     }
     else
     {

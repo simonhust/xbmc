@@ -972,7 +972,7 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
 
         m_info.m_dataIsLE = false;
         m_info.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
-        m_info.m_channels = 0; // unknown until the bitstream is parsed
+        m_info.m_channels = 8; // default to 7.1 for passthrough; actual count decoded by receiver
         m_info.m_dtsPeriod = m_info.m_samplesPerFrame;
         m_info.m_frameSize = m_fsize;
         m_info.m_repeat = 1;
