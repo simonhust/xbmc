@@ -507,7 +507,7 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
     // if it could be AV3A (Audio Vivid / AVS3-P3)
     if (AV3A::HasSyncWord(data, size))
     {
-      unsigned int skip = SyncDTS(data, size);
+      unsigned int skip = SyncAV3A(data, size);
       if (m_hasSync || m_needBytes)
         return skipped + skip;
       else
@@ -740,8 +740,92 @@ unsigned int CAEStreamParser::SyncAC3(uint8_t* data, unsigned int size)
   return skip;
 }
 
+unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)
+{
+  if (size < AV3A::MAX_HEADER_BYTES)
+  {
+    if (m_needBytes < AV3A::MAX_HEADER_BYTES)
+      m_needBytes = AV3A::MAX_HEADER_BYTES + 1;
+    return 0;
+  }
+
+  unsigned int skip = 0;
+  for (; size - skip > AV3A::MAX_HEADER_BYTES; ++skip, ++data)
+  {
+    if (!AV3A::HasSyncWord(data, size - skip))
+      continue;
+
+    const unsigned int available = size - skip;
+    if (available < AV3A::MAX_HEADER_BYTES)
+    {
+      m_needBytes = available + 1;
+      m_fsize = 0;
+      return skip;
+    }
+
+    const AV3A::FrameHeader frameHeader = AV3A::ParseFrameHeader(data, available);
+    if (!frameHeader.valid)
+      continue; // false sync word, keep searching
+
+    m_fsize = frameHeader.frameBytes;
+    if (m_fsize && m_fsize + AV3A::MAX_HEADER_BYTES <= available &&
+        !AV3A::ParseFrameHeader(data + m_fsize, available - m_fsize).valid)
+      m_fsize = 0;
+
+    if (!m_fsize)
+    {
+      for (unsigned int i = 2; i + AV3A::MAX_HEADER_BYTES <= available; i++)
+      {
+        if (!AV3A::HasSyncWord(data + i, available - i))
+          continue;
+        if (AV3A::ParseFrameHeader(data + i, available - i).valid)
+        {
+          m_fsize = i;
+          break;
+        }
+      }
+      if (!m_fsize)
+        m_fsize = available;
+    }
+
+    if (m_fsize > available && m_fsize <= sizeof(m_buffer))
+    {
+      m_needBytes = m_fsize;
+      m_fsize = 0;
+      return skip;
+    }
+    if (m_fsize > available)
+      m_fsize = available;
+
+    m_info.m_type = CAEStreamInfo::STREAM_TYPE_AV3A;
+    m_info.m_sampleRate = frameHeader.sampleRate ? frameHeader.sampleRate : 48000;
+    m_info.m_channels = frameHeader.channels;
+    m_info.m_samplesPerFrame = AV3A::SAMPLES_PER_FRAME;
+    m_info.m_dtsPeriod = m_info.m_samplesPerFrame;
+    m_info.m_frameSize = m_fsize;
+    m_info.m_repeat = 1;
+    m_syncFunc = &CAEStreamParser::SyncAV3A;
+    if (!m_hasSync)
+    {
+      CLog::Log(LOGINFO,
+                "CAEStreamParser::SyncAV3A - AV3A stream detected ({} channels, {}Hz, {} "
+                "samples/frame, {} bytes/frame)",
+                m_info.m_channels, m_info.m_sampleRate, m_info.m_samplesPerFrame, m_fsize);
+    }
+    m_hasSync = true;
+    return skip;
+  }
+
+  return skip;
+}
+
 unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
 {
+  // Try AV3A first (12-bit sync word can false-match in DTS data)
+  unsigned int skipAV3A = SyncAV3A(data, size);
+  if (m_hasSync || m_needBytes)
+    return skipAV3A;
+
   if (size < 13)
   {
     if (m_needBytes < 13)
@@ -753,81 +837,6 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
   for (; size - skip > 13; ++skip, ++data)
   {
     unsigned int header = data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
-
-    // AV3A (Audio Vivid / AVS3-P3) - 12 bit sync word, check before 4-byte DTS switch.
-    // Skip AV3A detection if we already have DTS-UHD sync to avoid false positives.
-    if (m_info.m_type != CAEStreamInfo::STREAM_TYPE_DTS_UHD && AV3A::HasSyncWord(data, size - skip))
-    {
-      const unsigned int available = size - skip;
-      if (available < AV3A::MAX_HEADER_BYTES)
-      {
-        // Wait for the frame header before deciding on the frame size.
-        m_needBytes = available + 1;
-        m_fsize = 0;
-        return skip;
-      }
-
-      const AV3A::FrameHeader frameHeader = AV3A::ParseFrameHeader(data, available);
-      if (!frameHeader.valid)
-        continue; // false sync word, keep searching
-
-      // The frame length is not part of the header but follows from the bitrate
-      // of the channel configuration; verify it against the next frame when that
-      // one is buffered already.
-      m_fsize = frameHeader.frameBytes;
-      if (m_fsize && m_fsize + AV3A::MAX_HEADER_BYTES <= available &&
-          !AV3A::ParseFrameHeader(data + m_fsize, available - m_fsize).valid)
-        m_fsize = 0;
-
-      // Without a usable frame length, the frame ends where the next header
-      // that parses starts.
-      if (!m_fsize)
-      {
-        for (unsigned int i = 2; i + AV3A::MAX_HEADER_BYTES <= available; i++)
-        {
-          if (!AV3A::HasSyncWord(data + i, available - i))
-            continue;
-          if (AV3A::ParseFrameHeader(data + i, available - i).valid)
-          {
-            m_fsize = i;
-            break;
-          }
-        }
-        if (!m_fsize)
-          m_fsize = available; // next frame is not buffered yet
-      }
-
-      if (m_fsize > available && m_fsize <= sizeof(m_buffer))
-      {
-        // Frame is not buffered completely yet.
-        m_needBytes = m_fsize;
-        m_fsize = 0;
-        return skip;
-      }
-      if (m_fsize > available)
-        m_fsize = available;
-
-      m_info.m_type = CAEStreamInfo::STREAM_TYPE_AV3A;
-      m_info.m_sampleRate = frameHeader.sampleRate ? frameHeader.sampleRate : 48000;
-      m_info.m_channels = frameHeader.channels;
-      m_info.m_samplesPerFrame = AV3A::SAMPLES_PER_FRAME;
-      m_info.m_dtsPeriod = m_info.m_samplesPerFrame;
-      m_info.m_frameSize = m_fsize;
-      m_info.m_repeat = 1;
-      m_syncFunc = &CAEStreamParser::SyncDTS;
-      if (!m_hasSync)
-      {
-        CLog::Log(LOGINFO,
-                  "CAEStreamParser::SyncDTS - AV3A stream detected ({} channels, {}Hz, {} "
-                  "samples/frame, {} bytes/frame)",
-                  m_info.m_channels, m_info.m_sampleRate, m_info.m_samplesPerFrame, m_fsize);
-      }
-      m_hasSync = true;
-      return skip;
-    }
-    /* If AV3A is already detected, do not switch to DTS-UHD to avoid false positives. */
-    if (m_info.m_type == CAEStreamInfo::STREAM_TYPE_AV3A)
-      return 0;
 
     unsigned int hd_sync = 0;
     unsigned int dtsBlocks;
