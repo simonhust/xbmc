@@ -482,6 +482,18 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
 
   while (size > 8)
   {
+    // AV3A (12-bit sync word 0xFFF) is checked first because it is the shortest
+    // sync word and prone to false positives in other formats' data. Locking to
+    // AV3A first prevents misdetection of DTS-UHD/DTS data as AV3A.
+    if (AV3A::HasSyncWord(data, size))
+    {
+      unsigned int skip = SyncAV3A(data, size);
+      if (m_hasSync || m_needBytes)
+        return skipped + skip;
+      else
+        possible = skipped;
+    }
+
     // if it could be DTS
     unsigned int header = data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
     if (header == DTS_PREAMBLE_14LE || header == DTS_PREAMBLE_14BE || header == DTS_PREAMBLE_16LE ||
@@ -498,16 +510,6 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
     if (header == DTS_PREAMBLE_UHD_SYNC || header == DTS_PREAMBLE_UHD_NOSYNC)
     {
       unsigned int skip = SyncDTS(data, size);
-      if (m_hasSync || m_needBytes)
-        return skipped + skip;
-      else
-        possible = skipped;
-    }
-
-    // if it could be AV3A (Audio Vivid / AVS3-P3)
-    if (AV3A::HasSyncWord(data, size))
-    {
-      unsigned int skip = SyncAV3A(data, size);
       if (m_hasSync || m_needBytes)
         return skipped + skip;
       else
@@ -821,11 +823,6 @@ unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)
 
 unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
 {
-  // Try AV3A first (12-bit sync word can false-match in DTS data)
-  unsigned int skipAV3A = SyncAV3A(data, size);
-  if (m_hasSync || m_needBytes)
-    return skipAV3A;
-
   if (size < 13)
   {
     if (m_needBytes < 13)
