@@ -236,9 +236,13 @@ CAEChannelInfo::operator std::string() const
 
   std::string s;
   const CAEChannelInfo& channels(CAEUtil::GuessChLayout(m_channelCount));
+  const unsigned int channelsCnt = channels.Count();
   for (unsigned int i = 0; i < m_channelCount; ++i)
   {
-    s.append(GetChName(m_channels[i] != AE_CH_RAW ? m_channels[i] : channels[i]));
+    enum AEChannel ch = m_channels[i];
+    if (ch == AE_CH_RAW && i < channelsCnt)
+      ch = channels[i];
+    s.append(GetChName(ch));
     if (i < m_channelCount - 1)
       s.append(", ");
   }
@@ -272,6 +276,8 @@ bool CAEChannelInfo::IsLayoutValid()
 
 const char* CAEChannelInfo::GetChName(const enum AEChannel ch)
 {
+  if (ch < 0 || ch >= AE_CH_MAX)
+    return "UNKNOWN";
   assert(ch >= 0 && ch < AE_CH_MAX);
 
   static const char* channels[AE_CH_MAX] =
