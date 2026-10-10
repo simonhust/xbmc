@@ -262,7 +262,14 @@ int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, u
    * is 4 bytes per sample and keeps the interface at the audio sample rate. */
   const unsigned int headerBytes = IEC61937_AVS3P3_HEADER_WORDS * 2;
   const unsigned int burstsize = frameLength << 2;
-  if ((size & 0x1) || burstsize > MAX_IEC61937_PACKET || headerBytes + size > burstsize)
+  /* An AVS3-P3 frame is not a whole number of 16 bit words: for general audio
+   * the length is derived from the bitrate of the header and can end up odd
+   * (mono at 16 kb/s and 48 kHz is 43 bytes), and a lossless frame carries its
+   * length as a 16 bit field of its own. Such a frame keeps its last byte and
+   * the remaining half word is padded, as CopyFrameSwapped does for the other
+   * formats, so it is not dropped here. */
+  const unsigned int payloadSize = size + (size & 0x1);
+  if (burstsize > MAX_IEC61937_PACKET || headerBytes + payloadSize > burstsize)
   {
     CLog::Log(LOGERROR, "CAEPackIEC61937::PackAV3A - {} byte frame does not fit a {} byte burst",
               size, burstsize);
@@ -275,22 +282,17 @@ int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, u
   header[2] = IEC61937_AVS3P3_DATA_TYPE | (subDataType << 8); /* Pc */
   /* Pd counts the burst-payload plus the conditional lengths of Pe and Pf
    * (IEC 61937-1:2021, 6.1.9), so four bytes are added for them. */
-  header[3] = size + 2 * (IEC61937_AVS3P3_HEADER_WORDS - 4);
+  header[3] = payloadSize + 2 * (IEC61937_AVS3P3_HEADER_WORDS - 4);
   header[4] = IEC61937_AVS3P3_EXTENDED_TYPE;                  /* Pe */
   header[5] = 0;                                              /* Pf: reserved (IEC 61937-1, table 8) */
 
   uint8_t* payload = dest + headerBytes;
   if (data == nullptr)
-    memset(payload, 0, size);
-#ifdef __BIG_ENDIAN__
+    memset(payload, 0, payloadSize);
   else
-    memcpy(payload, data, size);
-#else
-  else
-    SwapEndian(reinterpret_cast<uint16_t*>(payload), reinterpret_cast<uint16_t*>(data), size >> 1);
-#endif
+    CopyFrameSwapped(payload, data, size);
 
-  memset(payload + size, 0, burstsize - headerBytes - size);
+  memset(payload + payloadSize, 0, burstsize - headerBytes - payloadSize);
   return burstsize;
 }
 
