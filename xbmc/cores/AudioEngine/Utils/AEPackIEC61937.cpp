@@ -266,8 +266,7 @@ int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, u
    * the length is derived from the bitrate of the header and can end up odd
    * (mono at 16 kb/s and 48 kHz is 43 bytes), and a lossless frame carries its
    * length as a 16 bit field of its own. Such a frame keeps its last byte and
-   * the remaining half word is padded, as CopyFrameSwapped does for the other
-   * formats, so it is not dropped here. */
+   * the remaining half word is zero padded, so it is not dropped here. */
   const unsigned int payloadSize = size + (size & 0x1);
   if (burstsize > MAX_IEC61937_PACKET || headerBytes + payloadSize > burstsize)
   {
@@ -290,7 +289,20 @@ int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, u
   if (data == nullptr)
     memset(payload, 0, payloadSize);
   else
-    CopyFrameSwapped(payload, data, size);
+  {
+    /* The payload goes out byte for byte, unlike every other format here.
+       IEC 61937-17, 5.3.1 requires the burst-payload to contain one complete
+       AVS3-P3 frame, and an AVS3-P3 frame starts with the 12 bit sync word
+       0xFFF (T/UWA 009.1-2023, table A.4), so the frame is already in
+       network order and swapping 16 bit words would move the sync word from
+       byte 0 to byte 1: a real AVS3-P3 frame starts ff f2, and byte swapped
+       it starts f2 ff, which is no longer a frame a receiver can find. The
+       formats that do get swapped are big endian bit streams, which AVS3-P3
+       is not. */
+    memcpy(payload, data, size);
+    if (size & 0x1)
+      payload[size] = 0;
+  }
 
   memset(payload + payloadSize, 0, burstsize - headerBytes - payloadSize);
   return burstsize;

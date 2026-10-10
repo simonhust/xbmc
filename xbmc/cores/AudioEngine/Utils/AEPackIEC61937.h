@@ -41,8 +41,9 @@
  * words Pa to Pf followed by a burst-payload that holds one complete AVS3-P3
  * frame; the remainder of the repetition period is stuffing.
  *
- * The byte order of the payload is not covered here: that follows from
- * IEC 61937-1:2021, which is the general part. */
+ * The payload byte order needs no separate rule from IEC 61937-1: clause 5.3.1
+ * requires the burst-payload to hold one complete AVS3-P3 frame, and such a
+ * frame begins with the sync word, so it is carried verbatim. */
 #define IEC61937_AVS3P3_DATA_TYPE      0x1F
 #define IEC61937_AVS3P3_EXTENDED_TYPE  0x0002
 #define IEC61937_AVS3P3_HEADER_WORDS   6
