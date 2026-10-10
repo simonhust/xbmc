@@ -42,8 +42,10 @@ public:
     STREAM_TYPE_AV3A
   };
   DataType m_type = STREAM_TYPE_NULL;
-  unsigned int m_sampleRate;
-  unsigned int m_channels;
+  // Initialised explicitly: a stream type that does not carry a sample rate yet
+  // reads these back, and garbage here reaches the sink as a bogus rate.
+  unsigned int m_sampleRate = 0;
+  unsigned int m_channels = 0;
   bool m_dataIsLE = true;
   unsigned int m_dtsPeriod = 0;
   unsigned int m_repeat = 0;

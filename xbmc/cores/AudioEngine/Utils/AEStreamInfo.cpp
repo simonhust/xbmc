@@ -59,6 +59,14 @@ constexpr unsigned int UHD_FTOC_SIZE_MAX = 5408;
 // A frame has to fit in the parser buffer.
 constexpr unsigned int UHD_FRAME_SIZE_MAX = MAX_IEC61937_PACKET;
 
+// A DTS-UHD clock rate is a multiple of 32 kHz, 44.1 kHz or 48 kHz (clause
+// 6.4.6.6), so anything outside a narrow window is a misparse or leftover
+// state rather than a stream parameter.
+bool IsDTSUHDValidSampleRate(unsigned int sampleRate)
+{
+  return sampleRate >= 16000 && sampleRate <= 384000;
+}
+
 struct UHDFTOCInfo
 {
   bool syncFrame = false;
@@ -203,12 +211,17 @@ UHDFTOCResult ParseUHDFTOC(const uint8_t* data,
     // FTOC and the frame duration has to convert to a whole number of samples.
     if (reader.pos > (info.ftocBytes - 2) * 8 || (frameDuration * sampleRate) % clockRate)
       return UHDFTOCResult::INVALID;
+    if (!IsDTSUHDValidSampleRate(sampleRate))
+      return UHDFTOCResult::INVALID;
+    const unsigned int samplesPerFrame = frameDuration * sampleRate / clockRate;
+    if (!samplesPerFrame)
+      return UHDFTOCResult::INVALID;
     if (!CheckUHDFTOCCRC(data, info.ftocBytes))
       return UHDFTOCResult::INVALID;
 
     info.hasStreamParams = true;
     info.sampleRate = sampleRate;
-    info.samplesPerFrame = frameDuration * sampleRate / clockRate;
+    info.samplesPerFrame = samplesPerFrame;
     params.valid = true;
     params.fullChannelBasedMix = info.fullChannelBasedMix;
   }
@@ -972,10 +985,13 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
           m_info.m_sampleRate = ftoc.sampleRate;
           m_info.m_samplesPerFrame = ftoc.samplesPerFrame;
         }
-        else if (!m_info.m_sampleRate)
+
+        // Sync can be acquired on a non-sync frame, which carries no stream
+        // parameters at all. Whatever the previous stream left behind must not
+        // be reused here: it belongs to another codec and would be reported as
+        // this stream's rate.
+        if (!IsDTSUHDValidSampleRate(m_info.m_sampleRate))
         {
-          // Sync was acquired on a non-sync frame, so the parameters are not
-          // known before the next sync frame: assume the common configuration.
           m_info.m_sampleRate = 48000;
           m_info.m_samplesPerFrame = 1024;
         }
