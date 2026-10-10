@@ -33,13 +33,20 @@
  * 9 the sub-data-type, which selects the frame length (0 is 1 024 samples, 1 is
  * 512), and bits 10 to 11 the data-type-dependent-info, which selects the
  * repetition period (0, 1, 2 and 3 give 1x, 4x, 8x and 16x of the frame length,
- * 2 to 3 are reserved).
+ * 2 to 3 are reserved). Against table 5 of IEC 61937-1:2021 that is consistent:
+ * bits 0 to 6 hold the data-type, bit 6 being the MSB, and 0x1Fh fits those seven
+ * bits with bit 7 clear. Bit 7 is the error-flag, which table 5 and 6.1.8.4 give
+ * as 0 for a payload believed to be error free, so writing the data-type as
+ * 0x1Fh also reports a valid burst.
  *
  * Table 3 gives the repetition period in IEC 60958 frames for each combination,
  * and at 1x it equals the frame length, so the interface stays at the audio
  * sample rate. Clause 5.3.1 and figure 1 give the burst as the six preamble
  * words Pa to Pf followed by a burst-payload that holds one complete AVS3-P3
- * frame; the remainder of the repetition period is stuffing.
+ * frame; the remainder of the repetition period is stuffing. Table 6 of
+ * IEC 61937-1 gives Pa as F872h and Pb as 4E1Fh, and clause 6.1.8.3.1 says Pe and
+ * Pf are used once Pc carries data-type 31 and that they are included in the
+ * length of the burst-payload, which is what Pd counts.
  *
  * The payload byte order needs no separate rule from IEC 61937-1: clause 5.3.1
  * requires the burst-payload to hold one complete AVS3-P3 frame, and such a

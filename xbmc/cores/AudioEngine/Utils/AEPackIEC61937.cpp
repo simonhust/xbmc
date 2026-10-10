@@ -279,8 +279,12 @@ int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, u
   header[0] = IEC61937_PREAMBLE1;                             /* Pa */
   header[1] = IEC61937_PREAMBLE2;                             /* Pb */
   header[2] = IEC61937_AVS3P3_DATA_TYPE | (subDataType << 8); /* Pc */
-  /* Pd counts the burst-payload plus the conditional lengths of Pe and Pf
-   * (IEC 61937-1:2021, 6.1.9), so four bytes are added for them. */
+  /* Pd counts the burst-payload plus the conditional lengths of Pe and Pf. Clause
+   * 6.1.9 of IEC 61937-1:2021: "The size of the Pa, Pb, Pc and Pd is not counted
+   * in the value of the length-code. In other words, the length-code indicates
+   * the number of bytes of the burst-payload in bytes, plus the conditional
+   * lengths of Pe and Pf if they exist", and clause 6.1.8.3.1 confirms that Pe
+   * and Pf are present for this data-type. Four bytes are added for them. */
   header[3] = payloadSize + 2 * (IEC61937_AVS3P3_HEADER_WORDS - 4);
   header[4] = IEC61937_AVS3P3_EXTENDED_TYPE;                  /* Pe */
   header[5] = 0;                                              /* Pf: reserved (IEC 61937-1, table 8) */
