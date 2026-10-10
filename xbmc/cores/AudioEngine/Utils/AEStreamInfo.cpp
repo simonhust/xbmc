@@ -794,6 +794,19 @@ unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)
       continue;
     }
 
+    // The AVS3-P3 interface carries five rates only (IEC 61937-17, 5.3.1 and
+    // table 3). An encoder may also produce 24 kHz, 22.05 kHz, 16 kHz or 8 kHz,
+    // which decode over PCM but cannot be passed on: letting them through here
+    // would hand the sink a rate its AES3 field cannot encode and no stream it
+    // can configure. Leaving them unsynced sends them to the decoder instead.
+    if (!AV3A::IsInterfaceSampleRate(frameHeader.sampleRate))
+    {
+      CLog::Log(LOGDEBUG,
+                "CAEStreamParser::SyncAV3A - {} Hz is not carried by the AVS3-P3 interface",
+                frameHeader.sampleRate);
+      continue;
+    }
+
     m_fsize = frameHeader.frameBytes;
     if (m_fsize && m_fsize + AV3A::MAX_HEADER_BYTES <= available &&
         !AV3A::ParseFrameHeader(data + m_fsize, available - m_fsize).valid)

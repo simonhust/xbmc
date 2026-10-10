@@ -110,28 +110,6 @@ constexpr ChannelConfig CHANNEL_CONFIGS[14] = {
 
 constexpr unsigned int CHANNEL_CONFIG_COUNT = 14;
 
-/* The sampling frequency index codes one of the rates above; index 15 is
-   reserved for an explicit 24 bit rate (T/UWA 009.1-2023 table A.6, and
-   section 5.2.2.2 of T/UWA 009.2 for the container side). The standard lets
-   that field hold anything up to 16777214 Hz, which rules nothing out, so
-   accept a rate only when the rest of the pipeline can carry it: the rates of
-   the table above, plus the ones the HDMI audio InfoFrame sample rate field
-   can encode (CAESinkALSA GetAESParams). An arbitrary value here is a
-   misparse, and a wrong rate reaches the sink as a stream parameter, where it
-   drives the frame duration, the buffer timing and the AES3 sample rate
-   field. */
-inline bool IsSupportedSampleRate(unsigned int sampleRate)
-{
-  static constexpr unsigned int rates[] = {8000,   16000,  22050,  24000,  32000, 44100,
-                                           48000,  88200,  96000,  176400, 192000};
-  for (const unsigned int rate : rates)
-  {
-    if (rate == sampleRate)
-      return true;
-  }
-  return false;
-}
-
 inline unsigned int FrameBytesForBitrate(uint64_t bitrate, unsigned int sampleRate)
 {
   if (!bitrate || !sampleRate)
@@ -141,6 +119,30 @@ inline unsigned int FrameBytesForBitrate(uint64_t bitrate, unsigned int sampleRa
                                    (sampleRate * 8ULL));
 }
 } // namespace detail
+
+/* Whether an AVS3-P3 stream at this rate can be carried by the IEC 61937
+   interface. Clause 5.3.1 and table 3 of IEC 61937-17:2025 list exactly five
+   rates: "AVS3-P3 supports sample rates of 32 kHz, 44.1 kHz, 48 kHz, 96 kHz, and
+   192 kHz." They are the first five entries of the sampling frequency table,
+   indices 0x0 to 0x4.
+ *
+   An AVS3-P3 encoder can also produce 24 kHz, 22.05 kHz, 16 kHz and 8 kHz, and
+   those decode and play over PCM, but they cannot be passed on over HDMI, so a
+   stream at one of those rates must not be offered for passthrough. */
+inline bool IsInterfaceSampleRate(unsigned int sampleRate)
+{
+  switch (sampleRate)
+  {
+    case 32000:
+    case 44100:
+    case 48000:
+    case 96000:
+    case 192000:
+      return true;
+    default:
+      return false;
+  }
+}
 
 /* A frame starts with a 12 bit sync word; anything else is not a frame. The
    codec id (bits 12-15) and, for general audio, the coding profile (bits 20-22)
@@ -281,10 +283,12 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
   if (sampleRateIndex == 0x0f)
   {
     // Index 15 carries an explicit 24 bit rate instead of a table entry. The
-    // standard allows any value up to 16777214 Hz here, which is no check at
-    // all, so require one the pipeline can carry instead.
+    // standard allows any value up to 16777214 Hz there, which rules nothing
+    // out, so bound it to what an encoder can produce: a rate outside that is a
+    // misparse. Whether the rate can also be passed on is a separate question,
+    // see IsInterfaceSampleRate.
     const unsigned int explicitRate = readBits(24);
-    if (!detail::IsSupportedSampleRate(explicitRate))
+    if (explicitRate < 8000 || explicitRate > 192000)
       return header;
     header.sampleRate = explicitRate;
   }
