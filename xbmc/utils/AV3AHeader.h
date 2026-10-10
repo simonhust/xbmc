@@ -43,8 +43,10 @@ struct FrameHeader
 
 namespace detail
 {
-constexpr unsigned int SAMPLING_RATES[9] = {192000, 96000, 48000, 44100, 32000,
-                                            24000,  22050, 16000, 8000};
+// Table A.9 of T/UWA 009.1; identical in the UWA packager's FFmpeg
+// (avs3_samplingrate_table) and in the reference decoder (attf_head.c).
+constexpr unsigned int SAMPLING_RATES[9] = {192000, 96000, 48000, 44100, 32000, 24000,
+                                            22050,  16000, 8000};
 
 constexpr int64_t BITRATE_MONO[16] = {16000,  32000,  44000,  56000,  64000,  72000,
                                       80000,  96000,  128000, 144000, 164000, 192000,
@@ -103,6 +105,27 @@ constexpr ChannelConfig CHANNEL_CONFIGS[14] = {
 };
 
 constexpr unsigned int CHANNEL_CONFIG_COUNT = 14;
+
+/* The sampling frequency index codes one of the nine rates above; index 15 is
+   reserved in aatf_frame() to carry an explicit 24 bit rate instead
+   (T/UWA 009.2 section 5.2.2.2 and 8.3.5). The standard does not enumerate
+   what an explicit rate may be, so it is accepted only when the rest of the
+   pipeline can actually carry it: the rates of the table above, plus the ones
+   the HDMI audio InfoFrame sample rate field can encode (CAESinkALSA
+   GetAESParams). An arbitrary value here is a misparse, and a wrong rate
+   reaches the sink as a stream parameter, where it drives the frame duration,
+   the buffer timing and the AES3 sample rate field. */
+inline bool IsSupportedSampleRate(unsigned int sampleRate)
+{
+  static constexpr unsigned int rates[] = {8000,   16000,  22050,  24000,  32000, 44100,
+                                           48000,  88200,  96000,  176400, 192000};
+  for (const unsigned int rate : rates)
+  {
+    if (rate == sampleRate)
+      return true;
+  }
+  return false;
+}
 
 inline unsigned int FrameBytesForBitrate(uint64_t bitrate, unsigned int sampleRate)
 {
@@ -242,20 +265,15 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
   const unsigned int sampleRateIndex = readBits(4);
   if (sampleRateIndex == 0x0f)
   {
-    // Index 15 codes an explicit rate instead of a table entry. Accept only a
-    // rate the standard defines: an arbitrary value here is a misparse, and a
-    // wrong rate reaches the sink as a stream parameter.
+    // Index 15 carries an explicit 24 bit rate instead of a table entry.
     const unsigned int explicitRate = readBits(24);
-    unsigned int rateIndex = 0;
-    for (; rateIndex < 9 && detail::SAMPLING_RATES[rateIndex] != explicitRate; rateIndex++)
-    {
-    }
-    if (rateIndex == 9)
+    if (!detail::IsSupportedSampleRate(explicitRate))
       return header;
     header.sampleRate = explicitRate;
   }
   else
   {
+    // 9 to 14 are unassigned; only lossless reserves 15 for an explicit rate.
     if (sampleRateIndex >= 9)
       return header;
     header.sampleRate = detail::SAMPLING_RATES[sampleRateIndex];
