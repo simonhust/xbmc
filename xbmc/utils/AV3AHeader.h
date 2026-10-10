@@ -114,17 +114,19 @@ inline unsigned int FrameBytesForBitrate(uint64_t bitrate, unsigned int sampleRa
 }
 } // namespace detail
 
-/* A frame starts with a 12 bit sync word; anything else is not a frame.
-   The codec id (bits 12-15) and coding profile (bits 20-22) are checked too so
-   that payload data with a coincidental 0xFFF pattern is not mistaken for a
-   frame start. Lossless audio (codec id 1) is deliberately not recognised
-   here: its frame layout is not the one parsed below, so a 12 bit match alone
-   cannot be validated and would accept arbitrary payload data. */
+/* A frame starts with a 12 bit sync word; anything else is not a frame. The
+   codec id (bits 12-15) and, for general audio, the coding profile (bits 20-22)
+   are checked too so that payload data with a coincidental 0xFFF pattern is
+   not mistaken for a frame start. Lossless audio (codec id 1) uses a different
+   layout, so it is only gated on the codec id here and validated in full by
+   ParseFrameHeader. */
 inline bool HasSyncWord(const uint8_t* data, unsigned int size)
 {
   if (size < 3 || data[0] != 0xFF || (data[1] & 0xF0) != 0xF0)
     return false;
   const unsigned int codecId = data[1] & 0x0F;
+  if (codecId == 1)
+    return true;
   if (codecId != 2)
     return false;
   const unsigned int profile = (data[2] >> 1) & 0x07;
@@ -155,74 +157,127 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
     return header;
 
   header.codecId = readBits(4);
-  readBits(1); // ancillary data
-  readBits(3); // neural network type
-  header.profile = readBits(3);
-  const unsigned int sampleRateIndex = readBits(4);
-  readBits(8); // CRC, first part
 
-  if (header.codecId != 2 || header.profile > 2 || sampleRateIndex >= 9)
-    return header;
-
-  header.sampleRate = detail::SAMPLING_RATES[sampleRateIndex];
-
-  unsigned int channelConfig = detail::CHANNEL_CONFIG_COUNT;
-  uint64_t bitrate = 0;
-
-  if (header.profile == 0)
+  if (header.codecId == 2)
   {
-    channelConfig = readBits(7);
-    if (channelConfig >= detail::CHANNEL_CONFIG_COUNT)
+    readBits(1); // ancillary data
+    readBits(3); // neural network type
+    header.profile = readBits(3);
+    const unsigned int sampleRateIndex = readBits(4);
+    readBits(8); // CRC, first part
+
+    if (header.profile > 2 || sampleRateIndex >= 9)
       return header;
-    header.channels = detail::CHANNEL_CONFIGS[channelConfig].channels;
-  }
-  else if (header.profile == 1)
-  {
-    const unsigned int soundBedType = readBits(2);
-    if (soundBedType == 0)
+
+    header.sampleRate = detail::SAMPLING_RATES[sampleRateIndex];
+
+    unsigned int channelConfig = detail::CHANNEL_CONFIG_COUNT;
+    uint64_t bitrate = 0;
+
+    if (header.profile == 0)
     {
-      const unsigned int objects = readBits(7) + 1;
-      const unsigned int bitrateIndex = readBits(4);
-      bitrate = detail::BITRATE_MONO[bitrateIndex] * objects;
-      header.channels = objects;
+      channelConfig = readBits(7);
+      if (channelConfig >= detail::CHANNEL_CONFIG_COUNT)
+        return header;
+      header.channels = detail::CHANNEL_CONFIGS[channelConfig].channels;
+    }
+    else if (header.profile == 1)
+    {
+      const unsigned int soundBedType = readBits(2);
+      if (soundBedType == 0)
+      {
+        const unsigned int objects = readBits(7) + 1;
+        const unsigned int bitrateIndex = readBits(4);
+        bitrate = detail::BITRATE_MONO[bitrateIndex] * objects;
+        header.channels = objects;
+      }
+      else
+      {
+        channelConfig = readBits(7);
+        const unsigned int bedBitrateIndex = readBits(4);
+        const unsigned int objects = readBits(7) + 1;
+        const unsigned int objectBitrateIndex = readBits(4);
+        if (channelConfig >= detail::CHANNEL_CONFIG_COUNT)
+          return header;
+        header.channels = detail::CHANNEL_CONFIGS[channelConfig].channels + objects;
+        const int64_t* bedBitrate = detail::CHANNEL_CONFIGS[channelConfig].bitrate;
+        bitrate = (bedBitrate ? bedBitrate[bedBitrateIndex] : 0) +
+                  detail::BITRATE_MONO[objectBitrateIndex] * objects;
+      }
     }
     else
     {
-      channelConfig = readBits(7);
-      const unsigned int bedBitrateIndex = readBits(4);
-      const unsigned int objects = readBits(7) + 1;
-      const unsigned int objectBitrateIndex = readBits(4);
-      if (channelConfig >= detail::CHANNEL_CONFIG_COUNT)
+      const unsigned int hoaOrder = readBits(4) + 1;
+      if (hoaOrder > 3)
         return header;
-      header.channels = detail::CHANNEL_CONFIGS[channelConfig].channels + objects;
-      const int64_t* bedBitrate = detail::CHANNEL_CONFIGS[channelConfig].bitrate;
-      bitrate = (bedBitrate ? bedBitrate[bedBitrateIndex] : 0) +
-                detail::BITRATE_MONO[objectBitrateIndex] * objects;
+      channelConfig = 10 + hoaOrder; // HOA order 1 to 3 are the last three entries
+      header.channels = detail::CHANNEL_CONFIGS[channelConfig].channels;
     }
+
+    readBits(2); // bit depth
+
+    if (header.profile != 1)
+    {
+      const unsigned int bitrateIndex = readBits(4);
+      const int64_t* table = channelConfig < detail::CHANNEL_CONFIG_COUNT
+                                 ? detail::CHANNEL_CONFIGS[channelConfig].bitrate
+                                 : nullptr;
+      bitrate = table ? table[bitrateIndex] : 0;
+    }
+    readBits(8); // CRC, second part
+
+    header.frameBytes = detail::FrameBytesForBitrate(bitrate, header.sampleRate);
+    header.valid = true;
+    return header;
+  }
+
+  // Lossless audio (codec id 1, av3a.01). Its frame head differs from the
+  // general layout: there is no nn_type and no bitrate index, and the channel
+  // count is coded directly instead of through a channel configuration
+  // (T/UWA 009.2 section 5.2.2.2, the decoder specific config that mirrors
+  // aatf_frame() for codec id 1).
+  if (header.codecId != 1 || header.profile > 2)
+    return header;
+
+  const unsigned int sampleRateIndex = readBits(4);
+  if (sampleRateIndex == 0x0f)
+  {
+    // Index 15 codes an explicit rate instead of a table entry. Accept only a
+    // rate the standard defines: an arbitrary value here is a misparse, and a
+    // wrong rate reaches the sink as a stream parameter.
+    const unsigned int explicitRate = readBits(24);
+    unsigned int rateIndex = 0;
+    for (; rateIndex < 9 && detail::SAMPLING_RATES[rateIndex] != explicitRate; rateIndex++)
+    {
+    }
+    if (rateIndex == 9)
+      return header;
+    header.sampleRate = explicitRate;
   }
   else
   {
-    const unsigned int hoaOrder = readBits(4) + 1;
-    if (hoaOrder > 3)
+    if (sampleRateIndex >= 9)
       return header;
-    channelConfig = 10 + hoaOrder; // HOA order 1 to 3 are the last three entries
-    header.channels = detail::CHANNEL_CONFIGS[channelConfig].channels;
+    header.sampleRate = detail::SAMPLING_RATES[sampleRateIndex];
   }
 
+  readBits(1); // ancillary data
+  header.profile = readBits(3);
+  readBits(4); // reserved
+  const unsigned int channelNumber = readBits(8);
   readBits(2); // bit depth
+  const unsigned int additionInfoLength = readBits(8);
+  // The frame length is not transmitted, and the addition info it points at is
+  // the only payload length the head states. Without it there is nothing to
+  // resynchronise on, so report the header without a frame size and let the
+  // caller resynchronise the way SyncAC3 does for TrueHD.
+  if (bitPos + additionInfoLength * 8 > size * 8)
+    return header;
+  readBits(additionInfoLength * 8);
 
-  if (header.profile != 1)
-  {
-    const unsigned int bitrateIndex = readBits(4);
-    const int64_t* table = channelConfig < detail::CHANNEL_CONFIG_COUNT
-                               ? detail::CHANNEL_CONFIGS[channelConfig].bitrate
-                               : nullptr;
-    bitrate = table ? table[bitrateIndex] : 0;
-  }
-  readBits(8); // CRC, second part
-
-  header.frameBytes = detail::FrameBytesForBitrate(bitrate, header.sampleRate);
-  header.valid = true;
+  header.channels = channelNumber;
+  header.frameBytes = 0;
+  header.valid = channelNumber != 0;
   return header;
 }
 } // namespace AV3A
