@@ -257,9 +257,9 @@ int CAEPackIEC61937::PackAV3A(uint8_t* data, unsigned int size, uint8_t* dest, u
       return 0;
   }
 
-  /* One data burst carries one AVS3-P3 frame. With the first repetition period
-   * (Pc bits 10 to 11 = 0) the burst is frameLength IEC 60958 frames long, which
-   * is 4 bytes per sample and keeps the interface at the audio sample rate. */
+  /* One data burst carries one complete AVS3-P3 frame (IEC 61937-17, 5.3.1) and
+   * fills the repetition period, which at 1x is frameLength IEC 60958 frames of
+   * 4 bytes each; the rest of the burst is stuffing. */
   const unsigned int headerBytes = IEC61937_AVS3P3_HEADER_WORDS * 2;
   const unsigned int burstsize = frameLength << 2;
   /* An AVS3-P3 frame is not a whole number of 16 bit words: for general audio

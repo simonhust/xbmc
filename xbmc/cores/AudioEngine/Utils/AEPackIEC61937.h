@@ -22,10 +22,27 @@
 #define TRUEHD_FRAME_SIZE 15360
 
 #define OUT_SAMPLESIZE 16
-/* AVS3-P3 (IEC 61937-17): the data type is signalled as an extended data type,
- * Pc bits 0 to 7 carry 0x1F and the extended data-type word Pe carries 0x0002.
- * Pc bits 8 to 9 select the frame length (0: 1024, 1: 512) and bits 10 to 11 the
- * repetition period (0: 1x, 1: 4x, 2: 8x, 3: 16x, see clause 4.2 and table 1). */
+/* AVS3-P3 (IEC 61937-17:2025).
+ *
+ * Clause 4.2: "Pc bits 0 to 7 shall indicate extended data-type according to
+ * IEC 61937-1:2021, 6.1.8.3. As all bits are used in the preamble word of Pc, the
+ * value of data-type bits 0 to 7 in Pc is set to be 1Fh. The extended data-type
+ * burst preamble Pe is used and the value is set to be 0x0002h."
+ *
+ * Table 1 splits Pc as follows: bits 0 to 7 carry the data-type 0x1Fh, bits 8 to
+ * 9 the sub-data-type, which selects the frame length (0 is 1 024 samples, 1 is
+ * 512), and bits 10 to 11 the data-type-dependent-info, which selects the
+ * repetition period (0, 1, 2 and 3 give 1x, 4x, 8x and 16x of the frame length,
+ * 2 to 3 are reserved).
+ *
+ * Table 3 gives the repetition period in IEC 60958 frames for each combination,
+ * and at 1x it equals the frame length, so the interface stays at the audio
+ * sample rate. Clause 5.3.1 and figure 1 give the burst as the six preamble
+ * words Pa to Pf followed by a burst-payload that holds one complete AVS3-P3
+ * frame; the remainder of the repetition period is stuffing.
+ *
+ * The byte order of the payload is not covered here: that follows from
+ * IEC 61937-1:2021, which is the general part. */
 #define IEC61937_AVS3P3_DATA_TYPE      0x1F
 #define IEC61937_AVS3P3_EXTENDED_TYPE  0x0002
 #define IEC61937_AVS3P3_HEADER_WORDS   6
