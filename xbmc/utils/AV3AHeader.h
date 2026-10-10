@@ -117,13 +117,15 @@ inline unsigned int FrameBytesForBitrate(uint64_t bitrate, unsigned int sampleRa
 /* A frame starts with a 12 bit sync word; anything else is not a frame.
    The codec id (bits 12-15) and coding profile (bits 20-22) are checked too so
    that payload data with a coincidental 0xFFF pattern is not mistaken for a
-   frame start. */
+   frame start. Lossless audio (codec id 1) is deliberately not recognised
+   here: its frame layout is not the one parsed below, so a 12 bit match alone
+   cannot be validated and would accept arbitrary payload data. */
 inline bool HasSyncWord(const uint8_t* data, unsigned int size)
 {
   if (size < 3 || data[0] != 0xFF || (data[1] & 0xF0) != 0xF0)
     return false;
   const unsigned int codecId = data[1] & 0x0F;
-  if (codecId != 1 && codecId != 2)
+  if (codecId != 2)
     return false;
   const unsigned int profile = (data[2] >> 1) & 0x07;
   return profile <= 2;
@@ -159,13 +161,6 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
   const unsigned int sampleRateIndex = readBits(4);
   readBits(8); // CRC, first part
 
-  if (header.codecId == 1)
-  {
-    // Lossless audio does not share this layout, so only the sync word can be
-    // used to detect its frames.
-    header.valid = true;
-    return header;
-  }
   if (header.codecId != 2 || header.profile > 2 || sampleRateIndex >= 9)
     return header;
 

@@ -495,22 +495,11 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
 
   while (size > 8)
   {
-    // AV3A (12-bit sync word 0xFFF) is checked first because it is the shortest
-    // sync word and prone to false positives in other formats' data. Locking to
-    // AV3A first prevents misdetection of DTS-UHD/DTS data as AV3A.
-    if (AV3A::HasSyncWord(data, size))
-    {
-      unsigned int skip = SyncAV3A(data, size);
-      if (m_hasSync || m_needBytes)
-        return skipped + skip;
-      else
-        possible = skipped;
-    }
-
-    // if it could be DTS
     unsigned int header = data[0] << 24 | data[1] << 16 | data[2] << 8 | data[3];
-    if (header == DTS_PREAMBLE_14LE || header == DTS_PREAMBLE_14BE || header == DTS_PREAMBLE_16LE ||
-        header == DTS_PREAMBLE_16BE)
+
+    // if it could be DTS (16-bit sync words)
+    if (header == DTS_PREAMBLE_14LE || header == DTS_PREAMBLE_14BE ||
+        header == DTS_PREAMBLE_16LE || header == DTS_PREAMBLE_16BE)
     {
       unsigned int skip = SyncDTS(data, size);
       if (m_hasSync || m_needBytes)
@@ -523,6 +512,20 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
     if (header == DTS_PREAMBLE_UHD_SYNC || header == DTS_PREAMBLE_UHD_NOSYNC)
     {
       unsigned int skip = SyncDTS(data, size);
+      if (m_hasSync || m_needBytes)
+        return skipped + skip;
+      else
+        possible = skipped;
+    }
+
+    // AV3A (12-bit sync word 0xFFF) is checked last: it is by far the weakest
+    // signal, a 12 bit pattern that occurs by chance in the payload of other
+    // formats. Testing it first made DTS and DTS-UHD frames lock onto AV3A,
+    // e.g. "SyncAV3A - AV3A stream detected (0 channels, ...)" while the
+    // selected track was dts_uhd.
+    if (AV3A::HasSyncWord(data, size))
+    {
+      unsigned int skip = SyncAV3A(data, size);
       if (m_hasSync || m_needBytes)
         return skipped + skip;
       else
@@ -781,6 +784,15 @@ unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)
     const AV3A::FrameHeader frameHeader = AV3A::ParseFrameHeader(data, available);
     if (!frameHeader.valid)
       continue; // false sync word, keep searching
+
+    // Every parsed header defines a channel count. One that does not is not
+    // usable for passthrough: reporting it yields a 0 channel stream that the
+    // sink cannot configure.
+    if (!frameHeader.channels)
+    {
+      CLog::Log(LOGDEBUG, "CAEStreamParser::SyncAV3A - AV3A header without a channel count");
+      continue;
+    }
 
     m_fsize = frameHeader.frameBytes;
     if (m_fsize && m_fsize + AV3A::MAX_HEADER_BYTES <= available &&
