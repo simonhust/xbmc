@@ -309,7 +309,11 @@ int CDVDAudioCodecFFmpeg::GetSampleRate()
 
 enum AEDataFormat CDVDAudioCodecFFmpeg::GetDataFormat()
 {
-  switch(m_pCodecContext->sample_fmt)
+  // Read the decoded frame rather than the codec context: decoder wrappers that
+  // produce their first frame in decode() leave AVCodecContext::sample_fmt at
+  // AV_SAMPLE_FMT_NONE, which used to surface as "invalid data format".
+  const int sampleFmt = m_pFrame ? m_pFrame->format : m_pCodecContext->sample_fmt;
+  switch(sampleFmt)
   {
     case AV_SAMPLE_FMT_U8 : return AE_FMT_U8;
     case AV_SAMPLE_FMT_U8P : return AE_FMT_U8P;
@@ -364,8 +368,12 @@ static unsigned count_bits(int64_t value)
 
 void CDVDAudioCodecFFmpeg::BuildChannelMap()
 {
-  int codecChannels = m_pCodecContext->ch_layout.nb_channels;
-  uint64_t codecChannelLayout = m_pCodecContext->ch_layout.u.mask;
+  // The frame carries the channel layout the decoder actually rendered; the
+  // codec context is only a hint (0 until a wrapper sets it) and reading it
+  // made the map build from a 0-channel layout.
+  const AVChannelLayout& layout = m_pFrame ? m_pFrame->ch_layout : m_pCodecContext->ch_layout;
+  int codecChannels = layout.nb_channels;
+  uint64_t codecChannelLayout = layout.u.mask;
   if (m_channels == codecChannels && m_layout == codecChannelLayout)
     return; //nothing to do here
 
