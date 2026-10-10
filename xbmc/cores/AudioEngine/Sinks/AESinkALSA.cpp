@@ -215,9 +215,8 @@ inline CAEChannelInfo CAESinkALSA::GetChannelLayoutRaw(const AEAudioFormat& form
     case CAEStreamInfo::STREAM_TYPE_AC3:
     case CAEStreamInfo::STREAM_TYPE_EAC3:
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
-    /* DTS-UHD and AVS3-P3 bursts carry four bytes per audio sample, so their
-     * streams stay at the audio sample rate with two channels. */
-    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
+    /* AVS3-P3 bursts carry four bytes per audio sample, so the stream stays
+     * at the audio sample rate with two channels. */
     case CAEStreamInfo::STREAM_TYPE_AV3A:
       count = 2;
       break;
@@ -663,7 +662,6 @@ void CAESinkALSA::aml_configure_simple_control(std::string &device, const enum I
                 switch (codec) {
                   case TRUEHD:
                   case _DTS_HD_MA:
-                  case _DTS_UHD:
                   case _AV3A:
                     spdif_id = HDMITX_SRC_TDM_B;
                     break;
@@ -677,7 +675,6 @@ void CAESinkALSA::aml_configure_simple_control(std::string &device, const enum I
                 switch (codec) {
                   case TRUEHD:
                   case _DTS_HD_MA:
-                  case _DTS_UHD:
                   case _AV3A:
                     spdif_id = HDMITX_SRC_TDM_C;
                     break;
@@ -831,10 +828,6 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
 
         case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
           codec = _DTS_HD_MA;
-          break;
-
-        case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
-          codec = _DTS_UHD;
           break;
 
         case CAEStreamInfo::STREAM_TYPE_AV3A:
@@ -1939,7 +1932,6 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       if (device.substr(0, device.find(':')) == "surround71")
       {
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_UHD);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_TRUEHD);
       }
@@ -1960,7 +1952,6 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AC3);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-      info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_UHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_CORE);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_1024);

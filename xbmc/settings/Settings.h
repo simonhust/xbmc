@@ -420,7 +420,6 @@ public:
   static constexpr auto SETTING_AUDIOOUTPUT_TRUEHDPASSTHROUGH = "audiooutput.truehdpassthrough";
   static constexpr auto SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH = "audiooutput.dtshdpassthrough";
   static constexpr auto SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK = "audiooutput.dtshdcorefallback";
-  static constexpr auto SETTING_AUDIOOUTPUT_DTSUHDPASSTHROUGH = "audiooutput.dtsuhdpassthrough";
   static constexpr auto SETTING_AUDIOOUTPUT_AV3APASSTHROUGH = "audiooutput.av3apassthrough";
   static constexpr auto SETTING_AUDIOOUTPUT_VOLUMESTEPS = "audiooutput.volumesteps";
   static constexpr auto SETTING_AUDIOOUTPUT_LOWLATENCY = "audiooutput.lowlatency";

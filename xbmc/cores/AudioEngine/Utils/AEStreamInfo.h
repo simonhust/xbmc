@@ -38,7 +38,6 @@ public:
     STREAM_TYPE_MLP,
     STREAM_TYPE_TRUEHD,
     STREAM_TYPE_DTSHD_MA,
-    STREAM_TYPE_DTS_UHD,
     STREAM_TYPE_AV3A
   };
   DataType m_type = STREAM_TYPE_NULL;
@@ -50,21 +49,6 @@ public:
   unsigned int m_dtsPeriod = 0;
   unsigned int m_repeat = 0;
   unsigned int m_frameSize = 0;
-  /* Audio samples in one frame; 0 when the stream type implies it. DTS-UHD
-     takes it from the FTOC (ETSI TS 103 491 clause 6.4.6.9). */
-  unsigned int m_samplesPerFrame = 0;
-};
-
-/* DTS-UHD stream parameters, see ETSI TS 103 491. They are transmitted in sync
-   frames only (clause 6.4.5), so they have to be cached for the frames in
-   between. */
-struct DTSStreamParams
-{
-  bool valid = false;
-  bool fullChannelBasedMix = false;
-  bool audioChunkIdValid = false;
-  unsigned int audioChunkId = 0;
-  unsigned int audioChunkSize = 0;
 };
 
 class CAEStreamParser
@@ -108,7 +92,6 @@ private:
   unsigned int m_fsize = 0;
   int m_substreams = 0;       /* used for TrueHD  */
   AVCRC m_crcTrueHD[1024];  /* TrueHD crc table */
-  DTSStreamParams m_uhdParams;
 
   void GetPacket(uint8_t **buffer, unsigned int *bufferSize);
   unsigned int DetectType(uint8_t *data, unsigned int size);

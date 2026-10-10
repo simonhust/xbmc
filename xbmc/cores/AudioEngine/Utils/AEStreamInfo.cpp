@@ -25,8 +25,6 @@
 #define DTS_PREAMBLE_XBR 0x655e315e
 #define DTS_PREAMBLE_LBR 0x0a801921
 #define DTS_PREAMBLE_XLL 0x41a29547
-#define DTS_PREAMBLE_UHD_SYNC 0x40411bf2
-#define DTS_PREAMBLE_UHD_NOSYNC 0x71c442e8
 #define DTS_SFREQ_COUNT 16
 #define MAX_EAC3_BLOCKS 6
 #define UNKNOWN_DTS_EXTENSION 255
@@ -42,240 +40,6 @@ static const uint8_t THDChanMap[] = {2, 1, 1, 2, 2, 2, 2, 1, 1, 2, 2, 1, 1};
 static const uint32_t DTSSampleRates[DTS_SFREQ_COUNT] = {0,     8000,  16000, 32000, 64000,  128000,
                                                          11025, 22050, 44100, 88200, 176400, 12000,
                                                          24000, 48000, 96000, 192000};
-
-// DTS-UHD FTOC parsing, see ETSI TS 103 491 V1.2.1.
-namespace
-{
-// Field length tables, indexed by the prefix code (clause 5.2.3.1).
-constexpr unsigned int UHD_FTOC_SIZE_TABLE[4] = {5, 8, 10, 12};
-constexpr unsigned int UHD_MD_CHUNK_SIZE_TABLE[4] = {6, 9, 12, 15};
-constexpr unsigned int UHD_AUDIO_CHUNK_ID_TABLE[4] = {2, 4, 6, 8};
-constexpr unsigned int UHD_AUDIO_CHUNK_SIZE_TABLE[4] = {9, 11, 13, 16};
-// Clause 6.4.6.4 and 6.4.6.6.
-constexpr unsigned int UHD_BASE_DURATION[4] = {512, 480, 384, 0};
-constexpr unsigned int UHD_CLOCK_RATE[4] = {32000, 44100, 48000, 0};
-// Largest FTOC payload, clause 6.4.4.3.
-constexpr unsigned int UHD_FTOC_SIZE_MAX = 5408;
-// A frame has to fit in the parser buffer.
-constexpr unsigned int UHD_FRAME_SIZE_MAX = MAX_IEC61937_PACKET;
-
-// A DTS-UHD clock rate is a multiple of 32 kHz, 44.1 kHz or 48 kHz (clause
-// 6.4.6.6), so anything outside a narrow window is a misparse or leftover
-// state rather than a stream parameter.
-bool IsDTSUHDValidSampleRate(unsigned int sampleRate)
-{
-  return sampleRate >= 16000 && sampleRate <= 384000;
-}
-
-struct UHDFTOCInfo
-{
-  bool syncFrame = false;
-  bool fullChannelBasedMix = false;
-  bool hasStreamParams = false;
-  unsigned int ftocBytes = 0;
-  /* Frame length in bytes, 0 when the FTOC does not carry it. */
-  unsigned int frameBytes = 0;
-  unsigned int sampleRate = 0;
-  unsigned int samplesPerFrame = 0;
-};
-
-enum class UHDFTOCResult
-{
-  INVALID,        // not a FTOC sync word, or the FTOC is corrupt
-  VALID,          // FTOC parsed, CRC verified where the stream carries one
-  NEED_MORE_DATA, // not enough bytes buffered yet to tell
-};
-
-/* MSB first bit reader over a byte buffer. */
-struct UHDBitReader
-{
-  const uint8_t* data;
-  unsigned int sizeBits;
-  unsigned int pos = 0;
-
-  unsigned int Read(unsigned int count)
-  {
-    unsigned int value = 0;
-    while (count-- && pos < sizeBits)
-    {
-      value = (value << 1) | ((data[pos >> 3] >> (7 - (pos & 7))) & 1);
-      pos++;
-    }
-    return value;
-  }
-};
-
-/* Variable length field, clause 5.2.3.1: a 0/10/110/111 prefix selects the
-   width of the value that follows. */
-unsigned int ReadVarLenField(UHDBitReader& reader, const unsigned int* table)
-{
-  // Prefix code to field index and prefix length, clause 5.2.3.1.
-  static const unsigned int indexTable[8] = {0, 0, 0, 0, 1, 1, 2, 3};
-  static const unsigned int prefixBitsTable[8] = {1, 1, 1, 1, 2, 2, 3, 3};
-
-  const unsigned int code = reader.Read(3);
-  const unsigned int index = indexTable[code];
-  reader.pos -= 3 - prefixBitsTable[code]; // rewind the unused prefix bits
-
-  unsigned int value = 0;
-  for (unsigned int i = 0; i < index; i++)
-    value += 1u << table[i];
-  return value + reader.Read(table[index]);
-}
-
-/* CRC16 with the nibble lookup table of clause 6.3.8, initial value 0xFFFF. */
-uint16_t UHDCRC16(const uint8_t* data, unsigned int length)
-{
-  static const uint16_t table[16] = {0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5,
-                                     0x60c6, 0x70e7, 0x8108, 0x9129, 0xa14a, 0xb16b,
-                                     0xc18c, 0xd1ad, 0xe1ce, 0xf1ef};
-  uint16_t crc = 0xFFFF;
-  for (unsigned int i = 0; i < length; i++)
-  {
-    crc = (crc << 4) ^ table[(crc >> 12) ^ (data[i] >> 4)];
-    crc = (crc << 4) ^ table[(crc >> 12) ^ (data[i] & 0x0f)];
-  }
-  return crc;
-}
-
-/* A frame starts with the FTOC, whose CRC16 - the check a decoder shall use to
-   detect a false sync word (clause 6.4.18) - covers everything up to the two
-   CRC bytes at the end of the FTOC. */
-bool CheckUHDFTOCCRC(const uint8_t* data, unsigned int ftocBytes)
-{
-  const uint16_t stored = static_cast<uint16_t>((data[ftocBytes - 2] << 8) | data[ftocBytes - 1]);
-  return UHDCRC16(data, ftocBytes - 2) == stored;
-}
-
-/* Parses the FTOC of a DTS-UHD frame and, for streams whose audio is a full
-   channel based mix, its chunk navigation data, which is where the frame length
-   comes from (clause 6.4.13). Object based content (full channel based mix
-   flag false) needs the audio chunk list of the previous frames, so it is left
-   to the sync word search in SyncDTS. */
-UHDFTOCResult ParseUHDFTOC(const uint8_t* data,
-                           unsigned int size,
-                           DTSStreamParams& params,
-                           UHDFTOCInfo& info)
-{
-  if (size < 6)
-    return UHDFTOCResult::NEED_MORE_DATA;
-
-  const unsigned int syncWord = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
-  if (syncWord == DTS_PREAMBLE_UHD_SYNC)
-    info.syncFrame = true;
-  else if (syncWord == DTS_PREAMBLE_UHD_NOSYNC)
-    info.syncFrame = false;
-  else
-    return UHDFTOCResult::INVALID;
-
-  UHDBitReader reader{data, size * 8};
-  reader.Read(32);
-  info.ftocBytes = ReadVarLenField(reader, UHD_FTOC_SIZE_TABLE) + 1;
-  if (info.ftocBytes > UHD_FTOC_SIZE_MAX || info.ftocBytes < 4)
-    return UHDFTOCResult::INVALID;
-  if (size < info.ftocBytes)
-    return UHDFTOCResult::NEED_MORE_DATA;
-
-  if (info.syncFrame)
-  {
-    info.fullChannelBasedMix = reader.Read(1) != 0;
-
-    // Stream version, only coded when the content is not a full channel based
-    // mix (clause 6.4.6.3).
-    if (!info.fullChannelBasedMix)
-    {
-      const bool shortRevision = reader.Read(1) != 0;
-      reader.Read(shortRevision ? 6 : 12);
-    }
-
-    const unsigned int baseDuration = UHD_BASE_DURATION[reader.Read(2)];
-    const unsigned int frameDuration = baseDuration * (reader.Read(3) + 1);
-    const unsigned int clockRate = UHD_CLOCK_RATE[reader.Read(2)];
-    if (!baseDuration || !clockRate)
-      return UHDFTOCResult::INVALID;
-
-    // Time stamp is optional (clause 6.4.6.7): a presence flag, an update flag
-    // for parameters that exist with a predefined value in sync frames, the
-    // value itself and four more bits to complete the 36 bit field.
-    if (reader.Read(1))
-    {
-      if (reader.Read(1))
-      {
-        reader.Read(32);
-        reader.Read(4);
-      }
-    }
-
-    const unsigned int sampleRate = clockRate << reader.Read(2);
-    // Guard against a misparsed FTOC: the stream parameters have to fit in the
-    // FTOC and the frame duration has to convert to a whole number of samples.
-    if (reader.pos > (info.ftocBytes - 2) * 8 || (frameDuration * sampleRate) % clockRate)
-      return UHDFTOCResult::INVALID;
-    if (!IsDTSUHDValidSampleRate(sampleRate))
-      return UHDFTOCResult::INVALID;
-    const unsigned int samplesPerFrame = frameDuration * sampleRate / clockRate;
-    if (!samplesPerFrame)
-      return UHDFTOCResult::INVALID;
-    if (!CheckUHDFTOCCRC(data, info.ftocBytes))
-      return UHDFTOCResult::INVALID;
-
-    info.hasStreamParams = true;
-    info.sampleRate = sampleRate;
-    info.samplesPerFrame = samplesPerFrame;
-    params.valid = true;
-    params.fullChannelBasedMix = info.fullChannelBasedMix;
-  }
-  else
-  {
-    // Stream parameters are transmitted in sync frames only (clause 6.4.5), so
-    // reuse them. The FTOC CRC word is carried by every frame only when the
-    // content is not a full channel based mix (clause 6.4.6.2).
-    info.fullChannelBasedMix = params.fullChannelBasedMix;
-    if (params.valid && !params.fullChannelBasedMix && !CheckUHDFTOCCRC(data, info.ftocBytes))
-      return UHDFTOCResult::INVALID;
-    if (!params.valid)
-      return UHDFTOCResult::VALID; // nothing to derive, let SyncDTS search the next frame
-  }
-
-  if (info.fullChannelBasedMix)
-  {
-    // A full channel based mix has one metadata chunk in sync frames and none
-    // otherwise, plus exactly one audio chunk (clause 6.4.6.1, 6.4.13).
-    unsigned int audioChunkId;
-    unsigned int audioChunkSize = 0;
-    unsigned int payloadBytes = 0;
-    if (info.syncFrame)
-    {
-      payloadBytes += ReadVarLenField(reader, UHD_MD_CHUNK_SIZE_TABLE);
-      audioChunkId = ReadVarLenField(reader, UHD_AUDIO_CHUNK_ID_TABLE);
-      params.audioChunkId = audioChunkId;
-      params.audioChunkIdValid = audioChunkId != 0;
-    }
-    else
-    {
-      audioChunkId = params.audioChunkIdValid ? params.audioChunkId : 1;
-    }
-    if (audioChunkId)
-      audioChunkSize = ReadVarLenField(reader, UHD_AUDIO_CHUNK_SIZE_TABLE);
-    payloadBytes += audioChunkSize;
-    if (info.syncFrame)
-      params.audioChunkSize = audioChunkSize;
-
-    const unsigned int ftocBits = (info.ftocBytes - (info.syncFrame ? 2 : 0)) * 8;
-    if (reader.pos <= ftocBits && payloadBytes && info.ftocBytes + payloadBytes <= UHD_FRAME_SIZE_MAX)
-      info.frameBytes = info.ftocBytes + payloadBytes;
-    else if (!info.syncFrame && params.valid && audioChunkId)
-    {
-      // Non-sync frames carry no FTOC; their payload is the audio chunk whose
-      // size the preceding sync frame announced (clause 6.4.6.1).
-      if (info.ftocBytes + params.audioChunkSize <= UHD_FRAME_SIZE_MAX)
-        info.frameBytes = info.ftocBytes + params.audioChunkSize;
-    }
-  }
-
-  return UHDFTOCResult::VALID;
-}
-} // namespace
 
 CAEStreamParser::CAEStreamParser() : m_syncFunc(&CAEStreamParser::DetectType)
 {
@@ -313,11 +77,8 @@ double CAEStreamInfo::GetDuration() const
     case STREAM_TYPE_DTS_2048:
       duration = 2048.0 / m_sampleRate;
       break;
-    case STREAM_TYPE_DTS_UHD:
     case STREAM_TYPE_AV3A:
-      // The frame duration comes from the DTS-UHD FTOC; AVS3 (and UHD streams
-      // whose FTOC has not been parsed yet) use the fixed 1024 sample frame.
-      duration = (m_samplesPerFrame ? m_samplesPerFrame : 1024.0) / m_sampleRate;
+      duration = AV3A::SAMPLES_PER_FRAME / m_sampleRate;
       break;
     default:
       CLog::Log(LOGERROR, "CAEStreamInfo::GetDuration - invalid stream type");
@@ -343,7 +104,6 @@ void CAEStreamParser::Reset()
   m_bufferSize = 0;
   m_needBytes = 0;
   m_hasSync = false;
-  m_uhdParams = DTSStreamParams{};
 }
 
 int CAEStreamParser::AddData(uint8_t* data,
@@ -508,21 +268,11 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
         possible = skipped;
     }
 
-    // if it could be DTS-UHD (ETSI TS 103 491)
-    if (header == DTS_PREAMBLE_UHD_SYNC || header == DTS_PREAMBLE_UHD_NOSYNC)
-    {
-      unsigned int skip = SyncDTS(data, size);
-      if (m_hasSync || m_needBytes)
-        return skipped + skip;
-      else
-        possible = skipped;
-    }
-
     // AV3A (12-bit sync word 0xFFF) is checked last: it is by far the weakest
     // signal, a 12 bit pattern that occurs by chance in the payload of other
-    // formats. Testing it first made DTS and DTS-UHD frames lock onto AV3A,
-    // e.g. "SyncAV3A - AV3A stream detected (0 channels, ...)" while the
-    // selected track was dts_uhd.
+    // formats. Testing it first made DTS frames lock onto AV3A, e.g.
+    // "SyncAV3A - AV3A stream detected (0 channels, ...)" while the selected
+    // track was dts.
     if (AV3A::HasSyncWord(data, size))
     {
       unsigned int skip = SyncAV3A(data, size);
@@ -840,8 +590,7 @@ unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)
     m_info.m_type = CAEStreamInfo::STREAM_TYPE_AV3A;
     m_info.m_sampleRate = frameHeader.sampleRate ? frameHeader.sampleRate : 48000;
     m_info.m_channels = frameHeader.channels;
-    m_info.m_samplesPerFrame = AV3A::SAMPLES_PER_FRAME;
-    m_info.m_dtsPeriod = m_info.m_samplesPerFrame;
+    m_info.m_dtsPeriod = AV3A::SAMPLES_PER_FRAME;
     m_info.m_frameSize = m_fsize;
     m_info.m_repeat = 1;
     m_syncFunc = &CAEStreamParser::SyncAV3A;
@@ -850,7 +599,7 @@ unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)
       CLog::Log(LOGINFO,
                 "CAEStreamParser::SyncAV3A - AV3A stream detected ({} channels, {}Hz, {} "
                 "samples/frame, {} bytes/frame)",
-                m_info.m_channels, m_info.m_sampleRate, m_info.m_samplesPerFrame, m_fsize);
+                m_info.m_channels, m_info.m_sampleRate, m_info.m_dtsPeriod, m_fsize);
     }
     m_hasSync = true;
     return skip;
@@ -944,103 +693,6 @@ unsigned int CAEStreamParser::SyncDTS(uint8_t* data, unsigned int size)
         m_info.m_dataIsLE = true;
         bits = 16;
         break;
-
-      // DTS-UHD (ETSI TS 103 491)
-      case DTS_PREAMBLE_UHD_SYNC:
-      case DTS_PREAMBLE_UHD_NOSYNC:
-      {
-        const unsigned int available = size - skip;
-        UHDFTOCInfo ftoc;
-        const UHDFTOCResult result = ParseUHDFTOC(data, available, m_uhdParams, ftoc);
-        if (result == UHDFTOCResult::NEED_MORE_DATA)
-        {
-          // Wait until the whole FTOC is buffered instead of guessing a frame size.
-          m_needBytes = ftoc.ftocBytes > available ? ftoc.ftocBytes : available + 1;
-          m_fsize = 0;
-          return skip;
-        }
-        if (result == UHDFTOCResult::INVALID)
-          continue; // false sync word, keep searching (clause 6.4.18)
-
-        // The FTOC states the frame length; verify it against the FTOC of the
-        // next frame when that one is buffered already.
-        m_fsize = ftoc.frameBytes;
-        if (m_fsize && m_fsize + 6 <= available)
-        {
-          UHDFTOCInfo next;
-          if (ParseUHDFTOC(data + m_fsize, available - m_fsize, m_uhdParams, next) ==
-              UHDFTOCResult::INVALID)
-            m_fsize = 0;
-        }
-
-        // Without a usable frame length, the frame ends where the next FTOC
-        // that passes validation starts.
-        if (!m_fsize)
-        {
-          for (unsigned int i = 4; i + 6 <= available; i++)
-          {
-            const unsigned int word =
-                data[i] << 24 | data[i + 1] << 16 | data[i + 2] << 8 | data[i + 3];
-            if (word != DTS_PREAMBLE_UHD_SYNC && word != DTS_PREAMBLE_UHD_NOSYNC)
-              continue;
-            UHDFTOCInfo next;
-            if (ParseUHDFTOC(data + i, available - i, m_uhdParams, next) == UHDFTOCResult::VALID)
-            {
-              m_fsize = i;
-              break;
-            }
-          }
-          if (!m_fsize)
-            m_fsize = available; // next frame is not buffered yet
-        }
-
-        if (m_fsize > available && m_fsize <= sizeof(m_buffer))
-        {
-          // Frame is not buffered completely yet.
-          m_needBytes = m_fsize;
-          m_fsize = 0;
-          return skip;
-        }
-        if (m_fsize > available)
-          m_fsize = available;
-
-        if (ftoc.hasStreamParams)
-        {
-          // Stream parameters are transmitted in sync frames only (clause 6.4.5).
-          m_info.m_sampleRate = ftoc.sampleRate;
-          m_info.m_samplesPerFrame = ftoc.samplesPerFrame;
-        }
-
-        // Sync can be acquired on a non-sync frame, which carries no stream
-        // parameters at all. Whatever the previous stream left behind must not
-        // be reused here: it belongs to another codec and would be reported as
-        // this stream's rate.
-        if (!IsDTSUHDValidSampleRate(m_info.m_sampleRate))
-        {
-          m_info.m_sampleRate = 48000;
-          m_info.m_samplesPerFrame = 1024;
-        }
-
-        m_info.m_dataIsLE = false;
-        m_info.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
-        m_info.m_channels = 8; // default to 7.1 for passthrough; actual count decoded by receiver
-        m_info.m_dtsPeriod = m_info.m_samplesPerFrame;
-        m_info.m_frameSize = m_fsize;
-        m_info.m_repeat = 1;
-        m_syncFunc = &CAEStreamParser::SyncDTS;
-        if (ftoc.hasStreamParams || !m_hasSync)
-        {
-          // One line per sync frame instead of one per frame.
-          CLog::Log(LOGINFO,
-                    "CAEStreamParser::SyncDTS - DTS-UHD {} frame detected ({}Hz, {} samples/frame, "
-                    "FTOC {} bytes, {} bytes/frame)",
-                    ftoc.syncFrame ? "sync" : "non-sync", m_info.m_sampleRate,
-                    m_info.m_samplesPerFrame, ftoc.ftocBytes, m_fsize);
-        }
-        m_hasSync = true;
-        return skip;
-      }
-
 
       default:
         continue;

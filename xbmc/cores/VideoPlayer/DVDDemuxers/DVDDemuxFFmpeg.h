@@ -114,7 +114,6 @@ public:
   std::chrono::milliseconds GetChapterPos(int chapterIdx = -1) override;
   std::string GetStreamCodecName(int iStreamId) override;
 
-  static int ParsePassthroughChannels(uint32_t fourCC, const uint8_t* data, int size);
 
   bool Aborted();
 

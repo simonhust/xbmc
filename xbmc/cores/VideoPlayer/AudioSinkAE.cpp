@@ -364,11 +364,13 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
     case AV_CODEC_ID_DTS:
       if (profile == AV_PROFILE_DTS_HD_HRA)
         format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD;
-      else if (profile == AV_PROFILE_DTS_HD_MA)
-        format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_MA;
-      else if (profile == AV_PROFILE_DTS_HD_MA_X ||
+      else if (profile == AV_PROFILE_DTS_HD_MA ||
+               profile == AV_PROFILE_DTS_HD_MA_X ||
                profile == AV_PROFILE_DTS_HD_MA_X_IMAX)
-        format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
+        // DTS:X Profile 1 carries a DTS-HD MA core, so it is carried over the
+        // same IEC 61937 data-type as plain DTS-HD MA. It is not DTS-UHD: the
+        // FTOC container of Profile 2 has no IEC 61937 data-type at all.
+        format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_MA;
       else
         format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
       format.m_streamInfo.m_sampleRate = samplerate;
@@ -380,7 +382,12 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
       break;
 
     case AV_CODEC_ID_DTS_UHD:
-      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTS_UHD;
+      // DTS-UHD Profile 2 (dtsx, the FTOC container of ETSI TS 103 491) has no
+      // passthrough. IEC 61937-2:2021+AMD1:2026 table 2 assigns it no
+      // data-type, and DTS ships it over a separate HDMI HBR path rather than
+      // as an IEC 61937 data-burst. Leave the type null so the codec factory
+      // picks the libdtsuhd decoder.
+      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_NULL;
       format.m_streamInfo.m_sampleRate = samplerate;
       break;
 
@@ -401,18 +408,14 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
   if (!supports && format.m_streamInfo.m_type != CAEStreamInfo::STREAM_TYPE_DTSHD_CORE &&
       CServiceBroker::GetActiveAE()->UsesDtsCoreFallback())
   {
-    // DTS:X Profile 1 (DTS_UHD type with DTS-HD MA core) falls back to core
-    // when DTS-UHD passthrough is not supported by the sink.
-    if (codecId == AV_CODEC_ID_DTS || codecId == AV_CODEC_ID_DTS_UHD)
+    // DTS:X Profile 1 falls back to the core substream when the sink cannot
+    // take DTS-HD MA.
+    if (codecId == AV_CODEC_ID_DTS)
     {
       format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSHD_CORE;
       supports = CServiceBroker::GetActiveAE()->SupportsRaw(format);
     }
   }
-
-  // DTS-UHD (Profile 2, pure ACE) passthrough disabled: return NULL so the
-  // codec factory picks a decoder (dts_uhd for channel-based, FFmpeg for
-  // object-based). Profile 1 already fell back to DTS-HD core above.
 
   if (supports)
     return format.m_streamInfo.m_type;

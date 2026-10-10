@@ -3633,20 +3633,6 @@
           </dependencies>
           <control type="toggle" />
         </setting>
-        <setting id="audiooutput.dtsuhdpassthrough" type="boolean" label="40814" help="40815">
-          <level>1</level>
-          <default>true</default>
-          <dependencies>
-            <dependency type="visible">
-              <and>
-                <condition on="property" name="aesettingvisible" setting="audiooutput.config">audiooutput.dtsuhdpassthrough</condition>
-                <condition on="property" name="aesettingvisible" setting="audiooutput.passthroughdevice">audiooutput.dtsuhdpassthrough</condition>
-              </and>
-            </dependency>
-            <dependency type="enable" setting="audiooutput.passthrough" operator="is">true</dependency>
-          </dependencies>
-          <control type="toggle" />
-        </setting>
         <setting id="audiooutput.av3apassthrough" type="boolean" label="40816" help="40817">
           <level>1</level>
           <default>true</default>

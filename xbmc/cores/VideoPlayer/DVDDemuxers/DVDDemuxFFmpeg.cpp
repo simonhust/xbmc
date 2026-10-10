@@ -1988,19 +1988,12 @@ CDemuxStream* CDVDDemuxFFmpeg::AddStream(int streamIdx)
           {
             if (pkt->stream_index == streamIdx && pkt->size >= 4)
             {
-              uint32_t syncword = AV_RB32(pkt->data);
-              if ((fourCC == MKTAG('d', 't', 's', 'x') && syncword == 0x40411BF2) ||
-                  (fourCC == MKTAG('a', 'v', '3', 'a') && AV3A::HasSyncWord(pkt->data, static_cast<unsigned int>(pkt->size))))
+              if (fourCC == MKTAG('a', 'v', '3', 'a'))
               {
-                // The DTS-UHD sample entry declares the channel count and it
-                // matches the channel mask of the 'udts' box, so only stream
-                // containers that leave it undefined need the bitstream parse.
-                // AV3A is the opposite: its frame header is authoritative.
-                const bool parsedChannelsNeeded =
-                    fourCC != MKTAG('d', 't', 's', 'x') || st->iChannels <= 2;
-                const int channels = parsedChannelsNeeded
-                                         ? CDVDDemuxFFmpeg::ParsePassthroughChannels(fourCC, pkt->data, pkt->size)
-                                         : 0;
+                // The AV3A frame header is authoritative for the channel count.
+                const AV3A::FrameHeader header =
+                    AV3A::ParseFrameHeader(pkt->data, static_cast<unsigned int>(pkt->size));
+                const int channels = header.valid ? static_cast<int>(header.channels) : 0;
                 if (channels > 0)
                 {
                   st->iChannels = channels;
@@ -2486,9 +2479,9 @@ if (streamIdx > 0 && (st->hdr_type == StreamHdrType::HDR_TYPE_DOLBYVISION ||
     stream->profile = pStream->codecpar->profile;
     stream->level = pStream->codecpar->level;
 
-    // Keep DTS_UHD codec intact so the passthrough path sends the original
-    // DTS-UHD bitstream to the AVR. The core fallback (when passthrough is
-    // disabled) handles Profile 1 vs Profile 2 distinction in AudioSinkAE.
+    // Keep AV_CODEC_ID_DTS_UHD intact: DTS-UHD Profile 2 is decoded rather
+    // than passed through, since IEC 61937 assigns it no data-type (see
+    // AudioSinkAE::GetPassthroughStreamType).
 
     stream->source = STREAM_SOURCE_DEMUX;
     stream->pPrivate = pStream;
@@ -2745,61 +2738,6 @@ bool CDVDDemuxFFmpeg::SeekChapter(int chapter, double* startpts)
 }
 
 // Helper to parse DTS-UHD FTOC for channel count
-static int ParseDTSUHDChannels(const uint8_t* data, int size)
-{
-  if (size < 8) return 0;
-  uint32_t sync = AV_RB32(data);
-  if (sync != 0x40411BF2U) return 0;
-
-  int bytePos = 4, bitPos = 0;
-  auto readBits = [&](int bits) -> int {
-    int value = 0;
-    for (int i = 0; i < bits && bytePos < size; i++) {
-      int bit = (data[bytePos] >> (7 - bitPos)) & 1;
-      value = (value << 1) | bit;
-      if (++bitPos == 8) { bitPos = 0; bytePos++; }
-    }
-    return value;
-  };
-
-  // ExtractFTOC (Table 6-11)
-  int fullChannelMix = readBits(1);
-  int code = readBits(3);
-  static const int ftocTable[4] = {5, 8, 10, 12};
-  readBits(ftocTable[std::min(code, 3)]); // skip FTOC size
-
-  // ExtractStreamParams (Table 6-12)
-  readBits(1); // bSyncFrameFlag
-  int vbits = readBits(1) ? 3 : 6;
-  readBits(vbits); readBits(vbits); // versions
-  readBits(5); // frame duration
-  readBits(2); // clock rate
-  if (readBits(1)) readBits(36); // timestamp
-  readBits(2); // sample rate modifier
-  readBits(1); readBits(1); // reserved + interactive
-
-  // Number of presentations (Table 6-16)
-  int numPres = fullChannelMix ? 1 : ((int[]){0, 2, 4, 5}[std::min(readBits(3), 3)] + 1);
-
-  int maxCh = 0;
-  for (int p = 0; p < numPres; p++) {
-    if (!fullChannelMix) readBits(1); // selectable
-    if (p > 0 && !fullChannelMix) { int m = readBits(p); for (int i = 0; m; i++, m >>= 1) if (m & 1) readBits(1); }
-    int repType = readBits(3);
-    // Skip object metadata to find channel config
-    for (int skip = 0; skip < 16 && bytePos < size - 1; skip++) {
-      int chIdx = readBits(4);
-      static const int chCounts[16] = {1,2,2,4,4,6,6,8,8,10,10,12,12,14,14,16};
-      int ch = chCounts[std::min(chIdx, 15)];
-      if (ch > maxCh) maxCh = ch;
-      if (chIdx < 14) break;
-      // Skip additional mask bits
-      int extra = readBits(4);
-      if (extra < 14) readBits(extra * 4);
-    }
-  }
-  return maxCh;
-}
 
 // Parse the FTOC full_mix bit from a DTS-UHD sync frame.
 // full_mix=1: channel-based ACE (decoder can handle).
@@ -2839,23 +2777,7 @@ static bool DtsUhdIsChannelBased(const uint8_t* data, int size)
   return full_mix == 1;
 }
 
-// Helper to parse AV3A frame for channel count
-static int ParseAV3AChannels(const uint8_t* data, int size)
-{
-  if (size <= 0) return 0;
-  const AV3A::FrameHeader header =
-      AV3A::ParseFrameHeader(data, static_cast<unsigned int>(size));
-  return header.valid ? static_cast<int>(header.channels) : 0;
-}
 
-int CDVDDemuxFFmpeg::ParsePassthroughChannels(uint32_t fourCC, const uint8_t* data, int size)
-{
-  if (fourCC == MKTAG('d', 't', 's', 'x'))
-    return ParseDTSUHDChannels(data, size);
-  else if (fourCC == MKTAG('a', 'v', '3', 'a'))
-    return ParseAV3AChannels(data, size);
-  return 0;
-}
 
 
 std::string CDVDDemuxFFmpeg::GetStreamCodecName(int iStreamId)

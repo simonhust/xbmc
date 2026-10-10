@@ -89,11 +89,6 @@ bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &op
       m_jitterThreshold = JITTER_THRESHOLD_DEFAULT;
       break;
 
-    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
-      m_codecName = "pt-dtsuhd";
-      m_jitterThreshold = JITTER_THRESHOLD_DEFAULT;
-      break;
-
     case CAEStreamInfo::STREAM_TYPE_AV3A:
       m_codecName = "pt-av3a";
       m_jitterThreshold = JITTER_THRESHOLD_DEFAULT;

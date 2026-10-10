@@ -160,8 +160,6 @@ const char* CAEUtil::StreamTypeToStr(const enum CAEStreamInfo::DataType dataType
       return "STREAM_TYPE_MLP";
     case CAEStreamInfo::STREAM_TYPE_TRUEHD:
       return "STREAM_TYPE_TRUEHD";
-    case CAEStreamInfo::STREAM_TYPE_DTS_UHD:
-      return "STREAM_TYPE_DTS_UHD";
     case CAEStreamInfo::STREAM_TYPE_AV3A:
       return "STREAM_TYPE_AV3A";
 
