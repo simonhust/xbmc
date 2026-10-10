@@ -43,8 +43,12 @@ struct FrameHeader
 
 namespace detail
 {
-// Table A.9 of T/UWA 009.1; identical in the UWA packager's FFmpeg
-// (avs3_samplingrate_table) and in the reference decoder (attf_head.c).
+// Table A.9 of T/UWA 009.1-2023 defines only 0x0 to 0x4 (192000, 96000,
+// 48000, 44100, 32000) and reserves 0x5 to 0xf. The reference decoder
+// (attf_head.c) and the UWA packager's FFmpeg (avs3_samplingrate_table)
+// both extend it with 24000, 22050, 16000 and 8000, which is what encoders
+// in the field emit, so the extended table is used here. Index 15 is the
+// escape for an explicit rate and is handled by the caller.
 constexpr unsigned int SAMPLING_RATES[9] = {192000, 96000, 48000, 44100, 32000, 24000,
                                             22050,  16000, 8000};
 
@@ -106,15 +110,16 @@ constexpr ChannelConfig CHANNEL_CONFIGS[14] = {
 
 constexpr unsigned int CHANNEL_CONFIG_COUNT = 14;
 
-/* The sampling frequency index codes one of the nine rates above; index 15 is
-   reserved in aatf_frame() to carry an explicit 24 bit rate instead
-   (T/UWA 009.2 section 5.2.2.2 and 8.3.5). The standard does not enumerate
-   what an explicit rate may be, so it is accepted only when the rest of the
-   pipeline can actually carry it: the rates of the table above, plus the ones
-   the HDMI audio InfoFrame sample rate field can encode (CAESinkALSA
-   GetAESParams). An arbitrary value here is a misparse, and a wrong rate
-   reaches the sink as a stream parameter, where it drives the frame duration,
-   the buffer timing and the AES3 sample rate field. */
+/* The sampling frequency index codes one of the rates above; index 15 is
+   reserved for an explicit 24 bit rate (T/UWA 009.1-2023 table A.6, and
+   section 5.2.2.2 of T/UWA 009.2 for the container side). The standard lets
+   that field hold anything up to 16777214 Hz, which rules nothing out, so
+   accept a rate only when the rest of the pipeline can carry it: the rates of
+   the table above, plus the ones the HDMI audio InfoFrame sample rate field
+   can encode (CAESinkALSA GetAESParams). An arbitrary value here is a
+   misparse, and a wrong rate reaches the sink as a stream parameter, where it
+   drives the frame duration, the buffer timing and the AES3 sample rate
+   field. */
 inline bool IsSupportedSampleRate(unsigned int sampleRate)
 {
   static constexpr unsigned int rates[] = {8000,   16000,  22050,  24000,  32000, 44100,
@@ -254,18 +259,30 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
     return header;
   }
 
-  // Lossless audio (codec id 1, av3a.01). Its frame head differs from the
-  // general layout: there is no nn_type and no bitrate index, and the channel
-  // count is coded directly instead of through a channel configuration
-  // (T/UWA 009.2 section 5.2.2.2, the decoder specific config that mirrors
-  // aatf_frame() for codec id 1).
-  if (header.codecId != 1 || header.profile > 2)
+  // Lossless audio, codec id 1 (av3a.01). Tables A.4 and A.6 of T/UWA 009.1-2023:
+  //
+  //   aatf_frame()          syncword 12, audio_codec_id 4, anc_data_index 1
+  //   aatf_frame_header()   coding_profile 3, sampling_frequency_index 4,
+  //                         sampling_frequency 24 when the index is 15,
+  //                         raw_frame_length 16, aatf_error_check() 8,
+  //                         channel_number {4; 8}, resolution 2
+  //
+  // So unlike general audio it states its own frame length and has no nn_type
+  // and no bitrate index.
+  if (header.codecId != 1)
+    return header;
+
+  readBits(1); // ancillary data
+  header.profile = readBits(3);
+  if (header.profile > 2)
     return header;
 
   const unsigned int sampleRateIndex = readBits(4);
   if (sampleRateIndex == 0x0f)
   {
-    // Index 15 carries an explicit 24 bit rate instead of a table entry.
+    // Index 15 carries an explicit 24 bit rate instead of a table entry. The
+    // standard allows any value up to 16777214 Hz here, which is no check at
+    // all, so require one the pipeline can carry instead.
     const unsigned int explicitRate = readBits(24);
     if (!detail::IsSupportedSampleRate(explicitRate))
       return header;
@@ -273,29 +290,36 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
   }
   else
   {
-    // 9 to 14 are unassigned; only lossless reserves 15 for an explicit rate.
     if (sampleRateIndex >= 9)
       return header;
     header.sampleRate = detail::SAMPLING_RATES[sampleRateIndex];
   }
 
-  readBits(1); // ancillary data
-  header.profile = readBits(3);
-  readBits(4); // reserved
-  const unsigned int channelNumber = readBits(8);
-  readBits(2); // bit depth
-  const unsigned int additionInfoLength = readBits(8);
-  // The frame length is not transmitted, and the addition info it points at is
-  // the only payload length the head states. Without it there is nothing to
-  // resynchronise on, so report the header without a frame size and let the
-  // caller resynchronise the way SyncAC3 does for TrueHD.
-  if (bitPos + additionInfoLength * 8 > size * 8)
+  // The frame length is transmitted here, in bytes. Clamp it to what is
+  // actually buffered rather than trusting it outright: it decides where the
+  // next frame is expected, and a wrong value walks the parser off the stream.
+  const unsigned int rawFrameLength = readBits(16);
+  if (!rawFrameLength)
     return header;
-  readBits(additionInfoLength * 8);
+
+  readBits(8); // aatf_error_check
+
+  // Four bits below 15, otherwise an escape to a full eight bit count
+  // (table A.6, channel_number).
+  unsigned int channelNumber = readBits(4);
+  if (channelNumber == 15)
+  {
+    const unsigned int extended = readBits(8);
+    channelNumber = 15 + extended;
+  }
+  if (!channelNumber)
+    return header;
+
+  readBits(2); // resolution
 
   header.channels = channelNumber;
-  header.frameBytes = 0;
-  header.valid = channelNumber != 0;
+  header.frameBytes = rawFrameLength;
+  header.valid = true;
   return header;
 }
 } // namespace AV3A
