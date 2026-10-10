@@ -304,14 +304,13 @@ inline FrameHeader ParseFrameHeader(const uint8_t* data, unsigned int size)
 
   readBits(8); // aatf_error_check
 
-  // Four bits below 15, otherwise an escape to a full eight bit count
-  // (table A.6, channel_number).
+  // Channel count: four bits below 15, otherwise 15 is an escape to a full
+  // eight bit count (table A.6). The semantics in A.2 are explicit that the
+  // eight bits *are* the channel count, not an offset from 15 - the reference
+  // decoder reads only four more bits there and adds 15, which does not match.
   unsigned int channelNumber = readBits(4);
   if (channelNumber == 15)
-  {
-    const unsigned int extended = readBits(8);
-    channelNumber = 15 + extended;
-  }
+    channelNumber = readBits(8);
   if (!channelNumber)
     return header;
 
