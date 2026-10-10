@@ -371,9 +371,10 @@ void CDVDAudioCodecFFmpeg::BuildChannelMap()
   // The frame carries the channel layout the decoder actually rendered; the
   // codec context is only a hint (0 until a wrapper sets it) and reading it
   // made the map build from a 0-channel layout.
-  const AVChannelLayout& layout = m_pFrame ? m_pFrame->ch_layout : m_pCodecContext->ch_layout;
-  int codecChannels = layout.nb_channels;
-  uint64_t codecChannelLayout = layout.u.mask;
+  const AVChannelLayout& frameLayout =
+      m_pFrame ? m_pFrame->ch_layout : m_pCodecContext->ch_layout;
+  int codecChannels = frameLayout.nb_channels;
+  uint64_t codecChannelLayout = frameLayout.u.mask;
   if (m_channels == codecChannels && m_layout == codecChannelLayout)
     return; //nothing to do here
 
