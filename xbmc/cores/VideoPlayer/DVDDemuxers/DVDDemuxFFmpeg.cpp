@@ -758,6 +758,14 @@ void CDVDDemuxFFmpeg::FindAndCacheMoov()
   if (file_len <= 0)
     return;
 
+  // The scan below moves the input stream. FFmpeg's AVIO buffer assumes the
+  // stream is left where its own read position points, so remember where we
+  // were and restore it before returning. Otherwise the demuxer keeps reading
+  // from EOF and hands the decoders garbage.
+  const int64_t restore_pos = m_pInput->Seek(0, SEEK_CUR);
+  if (restore_pos < 0)
+    return;
+
   // Scan backwards from end for 'moov' box. The MP4 box header is:
   // [4 bytes size][4 bytes type 'moov']. We scan the last 10MB which is
   // more than enough for any moov atom.
@@ -766,9 +774,12 @@ void CDVDDemuxFFmpeg::FindAndCacheMoov()
   int64_t scan_pos = file_len - scan_len;
 
   std::vector<uint8_t> buf(scan_len);
-  if (m_pInput->Seek(scan_pos, SEEK_SET) < 0)
-    return;
-  int read = m_pInput->Read(buf.data(), scan_len);
+  int read = 0;
+  if (m_pInput->Seek(scan_pos, SEEK_SET) >= 0)
+    read = m_pInput->Read(buf.data(), scan_len);
+
+  m_pInput->Seek(restore_pos, SEEK_SET);
+
   if (read < 8)
     return;
 
@@ -805,6 +816,12 @@ void CDVDDemuxFFmpeg::FindAndCacheCues()
   if (file_len <= 0)
     return;
 
+  // Same as FindAndCacheMoov: the scan moves the stream, so restore it before
+  // returning to keep FFmpeg's view of the file position consistent.
+  const int64_t restore_pos = m_pInput->Seek(0, SEEK_CUR);
+  if (restore_pos < 0)
+    return;
+
   // Scan backwards from end for MKV Cues element (EBML ID 0x1C53BB6B).
   // MKV Cues contain the seek index (keyframe positions). They are typically
   // at the end of the file. Over slow cloud WebDAV, reading them on every
@@ -814,9 +831,12 @@ void CDVDDemuxFFmpeg::FindAndCacheCues()
   int64_t scan_pos = file_len - scan_len;
 
   std::vector<uint8_t> buf(scan_len);
-  if (m_pInput->Seek(scan_pos, SEEK_SET) < 0)
-    return;
-  int read = m_pInput->Read(buf.data(), scan_len);
+  int read = 0;
+  if (m_pInput->Seek(scan_pos, SEEK_SET) >= 0)
+    read = m_pInput->Read(buf.data(), scan_len);
+
+  m_pInput->Seek(restore_pos, SEEK_SET);
+
   if (read < 8)
     return;
 
