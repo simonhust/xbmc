@@ -21,6 +21,7 @@
 #include "cores/DataCacheCore.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
+#include "utils/File.h"
 #include "utils/log.h"
 #include "windowing/WinSystem.h"
 
@@ -2761,8 +2762,14 @@ void CActiveAE::LoadSettings(AEAudioFormat *format)
   m_settings.dtspassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSPASSTHROUGH);
   m_settings.dtshdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH);
   m_settings.dtsuhdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSUHDPASSTHROUGH);
+  /* Converting to DTS Core needs the firmware's DTS:X library: it is a real
+   * transcode, and the built-in decoder only produces PCM. If the library is
+   * not present the sub-option stays off rather than promising something that
+   * cannot happen. */
   m_settings.dtsxcorepassthrough =
-      m_settings.dtsuhdpassthrough && settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH);
+      m_settings.dtsuhdpassthrough &&
+      settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH) &&
+      CFile::Exists("/usr/lib/dtsx/dtsx_pt");
   m_settings.av3apassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH);
   m_settings.usesdtscorefallback =
       settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK);
