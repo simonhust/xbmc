@@ -22,7 +22,6 @@
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
 #include "filesystem/File.h"
-#include "utils/log.h"
 #include "windowing/WinSystem.h"
 
 #include <memory>
@@ -2769,7 +2768,7 @@ void CActiveAE::LoadSettings(AEAudioFormat *format)
   m_settings.dtsxcorepassthrough =
       m_settings.dtsuhdpassthrough &&
       settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH) &&
-      CFile::Exists("/usr/lib/dtsx/dtsx_pt");
+      XFILE::CFile::Exists("/usr/lib/dtsx/dtsx_pt");
   m_settings.av3apassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH);
   m_settings.usesdtscorefallback =
       settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK);
