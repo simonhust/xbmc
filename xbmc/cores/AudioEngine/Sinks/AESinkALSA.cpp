@@ -840,9 +840,10 @@ bool CAESinkALSA::Initialize(AEAudioFormat &format, std::string &device)
           break;
 
         case CAEStreamInfo::STREAM_TYPE_DTSUHD:
-          /* Profile 1 output rides the DTS-HD MA codec type; the native
-           * Profile 2 FTOC stream needs the DTS-UHD (HBR) codec type. */
-          codec = CServiceBroker::GetActiveAE()->UsesDtsXDtsxP2ToP1() ? _DTS_HD_MA : _DTS_UHD;
+          // The conversion yields plain DTS Core, which carries as an ordinary
+          // IEC 61937 DTS data-type; the native Profile 2 stream needs the
+          // DTS-UHD codec type for the driver's HBR path.
+          codec = CServiceBroker::GetActiveAE()->ConvertsDtsXToDtsCore() ? DTS : _DTS_UHD;
           break;
 
         case CAEStreamInfo::STREAM_TYPE_TRUEHD:

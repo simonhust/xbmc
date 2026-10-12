@@ -53,7 +53,7 @@ struct AudioSettings
   bool truehdpassthrough;
   bool dtshdpassthrough;
   bool dtsuhdpassthrough;
-  bool dtsxuhdp2top1;
+  bool dtsxcorepassthrough;
   bool av3apassthrough;
   bool usesdtscorefallback;
   bool stereoupmix;
@@ -266,7 +266,7 @@ public:
   bool SupportsRaw(AEAudioFormat &format) override;
   bool SupportsSilenceTimeout() override;
   bool UsesDtsCoreFallback() override;
-  bool UsesDtsXDtsxP2ToP1() override;
+  bool ConvertsDtsXToDtsCore() override;
   bool HasStereoAudioChannelCount() override;
   bool HasHDAudioChannelCount() override;
   bool SupportsQualityLevel(enum AEQuality level) override;

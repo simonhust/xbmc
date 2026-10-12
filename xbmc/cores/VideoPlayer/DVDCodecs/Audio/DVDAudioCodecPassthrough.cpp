@@ -119,7 +119,7 @@ bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &op
       // which is what makes the Amlogic HDMI TX take its HBR path.
       m_codecName = "pt-dtsuhd";
       m_jitterThreshold = JITTER_THRESHOLD_DEFAULT;
-      if (CServiceBroker::GetActiveAE()->UsesDtsXDtsxP2ToP1())
+      if (CServiceBroker::GetActiveAE()->ConvertsDtsXToDtsCore())
       {
         // Without the helper we would burst a Profile 2 ACE frame the receiver
         // cannot read, so fall back to native P2 rather than emitting silence.
@@ -127,7 +127,7 @@ bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &op
           m_p2ToP1Child = true;
         else
           CLog::Log(LOGWARNING,
-                    "pt-dtsuhd: P2->P1 helper unavailable, passing Profile 2 through");
+                    "pt-dtsuhd: DTS Core helper unavailable, passing Profile 2 through");
       }
       break;
 
@@ -175,14 +175,14 @@ bool CDVDAudioCodecPassthrough::StartP2ToP1Child()
   int inPipe[2], outPipe[2];
   if (pipe(inPipe) != 0)
   {
-    CLog::Log(LOGERROR, "pt-dtsuhd: pipe() failed for the DTS:X P2->P1 helper");
+    CLog::Log(LOGERROR, "pt-dtsuhd: pipe() failed for the DTS:X -> DTS Core helper");
     return false;
   }
   if (pipe(outPipe) != 0)
   {
     close(inPipe[0]);
     close(inPipe[1]);
-    CLog::Log(LOGERROR, "pt-dtsuhd: pipe() failed for the DTS:X P2->P1 helper");
+    CLog::Log(LOGERROR, "pt-dtsuhd: pipe() failed for the DTS:X -> DTS Core helper");
     return false;
   }
 
@@ -193,7 +193,7 @@ bool CDVDAudioCodecPassthrough::StartP2ToP1Child()
     close(inPipe[1]);
     close(outPipe[0]);
     close(outPipe[1]);
-    CLog::Log(LOGERROR, "pt-dtsuhd: fork() failed for the DTS:X P2->P1 helper");
+    CLog::Log(LOGERROR, "pt-dtsuhd: fork() failed for the DTS:X -> DTS Core helper");
     return false;
   }
 
@@ -283,7 +283,7 @@ int CDVDAudioCodecPassthrough::ConvertP2ToP1(const uint8_t* in,
       }
       if (n < 0 && errno == EINTR)
         continue;
-      CLog::Log(LOGERROR, "pt-dtsuhd: DTS:X P2->P1 helper write failed");
+      CLog::Log(LOGERROR, "pt-dtsuhd: DTS:X -> DTS Core helper write failed");
       StopP2ToP1Child();
       return 0;
     }
@@ -656,9 +656,9 @@ int CDVDAudioCodecPassthrough::GetData(uint8_t** dst)
   if (!m_dataSize)
     AddData(DemuxPacket());
 
-  // DTS:X with the P2->P1 helper: the demuxer gave us an ACE frame and what the
-  // receiver needs is the legacy DTS bitstream the vendor transcoder makes of
-  // it. Swap it in before anything else looks at m_buffer.
+  // DTS:X with the conversion on: the demuxer gave us an ACE frame and what a
+  // receiver without DTS:X support needs is the plain DTS Core bitstream the
+  // vendor library makes of it. Swap it in before anything looks at m_buffer.
   //
   // The helper returns whole IEC 61937 frames for a whole input window, which is
   // far more than one sink buffer (MAX_IEC61937_PACKET). Handing that straight
@@ -678,7 +678,7 @@ int CDVDAudioCodecPassthrough::GetData(uint8_t** dst)
           // The helper died; fall back to native Profile 2 rather than silence.
           m_p2ToP1Child = false;
           CLog::Log(LOGWARNING,
-                    "pt-dtsuhd: P2->P1 helper stopped, passing Profile 2 through");
+                    "pt-dtsuhd: DTS Core helper stopped, passing Profile 2 through");
         }
         return 0;
       }

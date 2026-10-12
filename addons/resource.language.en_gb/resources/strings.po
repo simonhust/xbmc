@@ -25659,11 +25659,11 @@ msgstr ""
 #. Option label for #60112 "Convert DTS:X Profile 2 to Profile 1"
 #: system/settings/settings.xml
 msgctxt "#60112"
-msgid "Convert DTS:X P2 to P1"
+msgid "Convert DTS:X to DTS Core"
 msgstr ""
 
-#. Option help for #60112 "Convert DTS:X Profile 2 to Profile 1"
+#. Option help for #60112 "Convert DTS:X to DTS Core"
 #: system/settings/settings.xml
 msgctxt "#60113"
-msgid "Down-convert DTS:X Profile 2 to Profile 1 before passing it through, for receivers that accept DTS:X Profile 1 only. Immersive object audio is lost in the conversion."
+msgid "Down-convert DTS:X Profile 2 to plain DTS Core before passing it through, for receivers that do not accept DTS:X. Immersive object audio is lost in the conversion."
 msgstr ""

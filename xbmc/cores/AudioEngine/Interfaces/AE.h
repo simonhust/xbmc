@@ -210,14 +210,16 @@ public:
   virtual bool UsesDtsCoreFallback() { return false; }
 
   /*!
-   * \brief Returns true if DTS:X Profile 2 streams must be down-converted to
-   *        Profile 1 before being passed through.
+   * \brief Returns true if DTS:X streams must be down-converted to plain DTS
+   *        Core before being passed through.
    *
-   * Only meaningful while DTS-UHD passthrough is enabled. Receivers that
-   * accept DTS:X Profile 1 only cannot decode the Profile 2 (FTOC) stream, so
-   * the bitstream is transcoded down and then carried as DTS-HD MA.
+   * Only meaningful while DTS-UHD passthrough is enabled. A receiver without
+   * DTS:X support cannot decode the Profile 2 (FTOC / ACE) stream, which also
+   * carries no backwards compatible core, so the bitstream is transcoded down
+   * to DTS Core. Immersive object audio is lost either way; DTS-HD MA is not
+   * produced.
    */
-  virtual bool UsesDtsXDtsxP2ToP1() { return false; }
+  virtual bool ConvertsDtsXToDtsCore() { return false; }
 
   /*!
    * \brief Returns true if the AudioEngine is currently configured for stereo audio

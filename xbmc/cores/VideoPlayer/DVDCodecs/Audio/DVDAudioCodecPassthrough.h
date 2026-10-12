@@ -73,14 +73,18 @@ private:
   int GetData(uint8_t** dst);
   unsigned int PackTrueHD();
 
-  // DTS:X Profile 2 -> Profile 1 conversion.
+  // DTS:X -> DTS Core conversion.
   //
   // A Profile 2 stream is ACE / FTOC 7.1.4 object audio with no backwards
-  // compatible core, so there is no core substream to hand a Profile 1
-  // receiver: it has to be transcoded. Passthrough bypasses the ffmpeg
+  // compatible core, so there is no core substream to hand a receiver that
+  // lacks DTS:X: it has to be transcoded. Passthrough bypasses the ffmpeg
   // decoder, so this runs in a dtsx_pt child process which drives the same
   // vendor library the software decoder uses (decoder -> PCM -> postprocess
-  // -> IEC 61937 DTS bitstream on the RAW bus).
+  // -> IEC 61937 DTS Core bitstream on the RAW bus).
+  //
+  // Note this yields DTS Core, not DTS-HD MA. The vendor postprocess reports
+  // two channels on the raw bus whatever dtsx_core2_spkrout says, so MA would
+  // need DTS_Xcoder_Transcode_API instead.
   //
   // dtsx_pt speaks a length-prefixed pipe protocol and replies once per record
   // written. It buffers a window internally, so short records legitimately come

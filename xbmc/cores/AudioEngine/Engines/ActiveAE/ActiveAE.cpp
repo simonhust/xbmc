@@ -2761,8 +2761,8 @@ void CActiveAE::LoadSettings(AEAudioFormat *format)
   m_settings.dtspassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSPASSTHROUGH);
   m_settings.dtshdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH);
   m_settings.dtsuhdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSUHDPASSTHROUGH);
-  m_settings.dtsxuhdp2top1 =
-      m_settings.dtsuhdpassthrough && settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSXUHDP2TOP1);
+  m_settings.dtsxcorepassthrough =
+      m_settings.dtsuhdpassthrough && settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH);
   m_settings.av3apassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH);
   m_settings.usesdtscorefallback =
       settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK);
@@ -2928,9 +2928,9 @@ bool CActiveAE::UsesDtsCoreFallback()
   return m_settings.usesdtscorefallback;
 }
 
-bool CActiveAE::UsesDtsXDtsxP2ToP1()
+bool CActiveAE::ConvertsDtsXToDtsCore()
 {
-  return m_settings.dtsxuhdp2top1;
+  return m_settings.dtsxcorepassthrough;
 }
 
 bool CActiveAE::SupportsSilenceTimeout()

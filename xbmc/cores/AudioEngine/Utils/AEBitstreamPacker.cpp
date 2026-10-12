@@ -50,14 +50,14 @@ void CAEBitstreamPacker::Pack(CAEStreamInfo &info, uint8_t* data, int size)
       break;
 
     case CAEStreamInfo::STREAM_TYPE_DTSUHD:
-      /* Two very different inputs reach here. With "Convert DTS:X P2 to P1"
+      /* Two very different inputs reach here. With "Convert DTS:X to DTS Core"
        * enabled the bytes come from the vendor dtsx_pt helper, which already
        * emits complete IEC 61937 frames (0x72F81F4E preamble, data-type 0x0B)
        * at the sink's burst period. Wrapping that again would double-encapsulate
        * it, so it is forwarded untouched.
        * Otherwise the bytes are the raw Profile 2 FTOC frame and still need the
        * DTS-UHD subtype applied here. */
-      if (CServiceBroker::GetActiveAE()->UsesDtsXDtsxP2ToP1())
+      if (CServiceBroker::GetActiveAE()->ConvertsDtsXToDtsCore())
       {
         /* The helper's reply is already IEC 61937 framed and arrives in
          * chunks no larger than one sink buffer (see

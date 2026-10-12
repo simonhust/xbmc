@@ -3614,7 +3614,7 @@
           </dependencies>
           <control type="toggle" />
         </setting>
-        <setting id="audiooutput.dtsxuhdp2top1" type="boolean" parent="audiooutput.dtsuhdpassthrough" label="60112" help="60113">
+        <setting id="audiooutput.dtsxcorepassthrough" type="boolean" parent="audiooutput.dtsuhdpassthrough" label="60112" help="60113">
           <level>2</level>
           <default>false</default>
           <dependencies>
