@@ -21,7 +21,7 @@
 #include "cores/DataCacheCore.h"
 #include "settings/Settings.h"
 #include "settings/SettingsComponent.h"
-#include "utils/File.h"
+#include "filesystem/File.h"
 #include "utils/log.h"
 #include "windowing/WinSystem.h"
 
