@@ -25643,3 +25643,27 @@ msgstr ""
 msgctxt "#60109"
 msgid "Histogram+"
 msgstr ""
+
+#. Option label for #60110 "DTS-UHD capable receiver"
+#: system/settings/settings.xml
+msgctxt "#60110"
+msgid "DTS-UHD capable receiver"
+msgstr ""
+
+#. Option help for #60110 "DTS-UHD capable receiver"
+#: system/settings/settings.xml
+msgctxt "#60111"
+msgid "Select this option if your receiver is capable of decoding DTS:X Profile 2 (DTS-UHD) streams. When enabled, DTS:X streams are sent to the receiver instead of being decoded locally."
+msgstr ""
+
+#. Option label for #60112 "Convert DTS:X Profile 2 to Profile 1"
+#: system/settings/settings.xml
+msgctxt "#60112"
+msgid "Convert DTS:X P2 to P1"
+msgstr ""
+
+#. Option help for #60112 "Convert DTS:X Profile 2 to Profile 1"
+#: system/settings/settings.xml
+msgctxt "#60113"
+msgid "Down-convert DTS:X Profile 2 to Profile 1 before passing it through, for receivers that accept DTS:X Profile 1 only. Immersive object audio is lost in the conversion."
+msgstr ""

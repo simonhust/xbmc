@@ -11,6 +11,8 @@
 #include "AEPackIEC61937.h"
 #include "AEStreamInfo.h"
 #include "utils/log.h"
+#include "ServiceBroker.h"
+#include "cores/AudioEngine/Interfaces/AE.h"
 
 #include <array>
 #include <stddef.h>
@@ -45,6 +47,33 @@ void CAEBitstreamPacker::Pack(CAEStreamInfo &info, uint8_t* data, int size)
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
       PackDTSHD (info, data, size);
+      break;
+
+    case CAEStreamInfo::STREAM_TYPE_DTSUHD:
+      /* Two very different inputs reach here. With "Convert DTS:X P2 to P1"
+       * enabled the bytes come from the vendor dtsx_pt helper, which already
+       * emits complete IEC 61937 frames (0x72F81F4E preamble, data-type 0x0B)
+       * at the sink's burst period. Wrapping that again would double-encapsulate
+       * it, so it is forwarded untouched.
+       * Otherwise the bytes are the raw Profile 2 FTOC frame and still need the
+       * DTS-UHD subtype applied here. */
+      if (CServiceBroker::GetActiveAE()->UsesDtsXDtsxP2ToP1())
+      {
+        /* The helper's reply is already IEC 61937 framed and arrives in
+         * chunks no larger than one sink buffer (see
+         * CDVDAudioCodecPassthrough::GetData), so forward it as-is. */
+        if (static_cast<unsigned int>(size) > MAX_IEC61937_PACKET)
+        {
+          CLog::Log(LOGERROR, "CAEBitstreamPacker::Pack - converted DTS:X frame too large");
+          break;
+        }
+        memcpy(m_packedBuffer, data, size);
+        m_dataSize = size;
+      }
+      else
+      {
+        PackDTSUHD (info, data, size);
+      }
       break;
 
     case CAEStreamInfo::STREAM_TYPE_AV3A:
@@ -156,6 +185,15 @@ void CAEBitstreamPacker::PackDTSHD(CAEStreamInfo &info, uint8_t* data, int size)
       CAEPackIEC61937::PackDTSHD(m_dtsHD.data(), dataSize, m_packedBuffer, info.m_dtsPeriod);
 }
 
+void CAEBitstreamPacker::PackDTSUHD(CAEStreamInfo &info, uint8_t* data, int size)
+{
+  /* DTS:X Profile 2. IEC 61937-5 carries it as data-type 0x11 with the
+   * DTS-UHD subtype (Pc[11]~Pc[12] = 0x8), which is what the Amlogic HDMI TX
+   * path expects (AUD_CODEC_TYPE_DTS_UHD). No start code is prepended: the
+   * burst payload is the raw DTS:X frame as it appears in the container. */
+  m_dataSize = CAEPackIEC61937::PackDTSUHD(data, size, m_packedBuffer, info.m_dtsPeriod);
+}
+
 void CAEBitstreamPacker::PackEAC3(CAEStreamInfo &info, uint8_t* data, int size)
 {
   unsigned int framesPerBurst = info.m_repeat;
@@ -227,6 +265,9 @@ unsigned int CAEBitstreamPacker::GetOutputRate(const CAEStreamInfo& info)
     case CAEStreamInfo::STREAM_TYPE_DTSHD_MA:
       rate = 192000;
       break;
+    case CAEStreamInfo::STREAM_TYPE_DTSUHD:
+      rate = 192000;
+      break;
     case CAEStreamInfo::STREAM_TYPE_AV3A:
       /* AV3A carries four bytes per sample (one frame per burst), so the IEC 60958
        * frame rate equals the audio sample rate. */
@@ -251,6 +292,7 @@ CAEChannelInfo CAEBitstreamPacker::GetOutputChannelMap(const CAEStreamInfo& info
     case CAEStreamInfo::STREAM_TYPE_DTS_2048:
     case CAEStreamInfo::STREAM_TYPE_DTSHD_CORE:
     case CAEStreamInfo::STREAM_TYPE_DTSHD:
+    case CAEStreamInfo::STREAM_TYPE_DTSUHD:
     case CAEStreamInfo::STREAM_TYPE_AV3A:
       channels = 2;
       break;

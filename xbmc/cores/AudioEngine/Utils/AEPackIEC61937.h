@@ -71,6 +71,7 @@ public:
   static int PackDTS_2048(uint8_t *data, unsigned int size, uint8_t *dest, bool littleEndian);
   static int PackTrueHD(const uint8_t* data, unsigned int size, uint8_t* dest);
   static int PackDTSHD(uint8_t* data, unsigned int size, uint8_t* dest, unsigned int period);
+  static int PackDTSUHD(uint8_t* data, unsigned int size, uint8_t* dest, unsigned int period);
   static int PackAV3A (uint8_t* data, unsigned int size, uint8_t* dest, unsigned int frameLength);
   static int PackPause(uint8_t *dest, unsigned int millis, unsigned int framesize, unsigned int samplerate, unsigned int rep_period, unsigned int encodedRate);
 private:
@@ -86,6 +87,10 @@ private:
     IEC61937_TYPE_DTS2   = 0x0C, /* 1024 samples */
     IEC61937_TYPE_DTS3   = 0x0D, /* 2048 samples */
     IEC61937_TYPE_DTSHD  = 0x11,
+    /* IEC 61937-5 type IV subtypes live in Pc[11]~Pc[12]. DTS-UHD is subtype
+     * 0x8 of the 0x11 data-type, which is how DTS:X Profile 2 (the FTOC
+     * container) is carried. */
+    IEC61937_TYPE_DTSUHD = 0x08,
     IEC61937_TYPE_EAC3   = 0x15,
     IEC61937_TYPE_TRUEHD = 0x16
   };

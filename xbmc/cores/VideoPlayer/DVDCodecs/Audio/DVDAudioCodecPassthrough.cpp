@@ -16,9 +16,17 @@
 #include "cores/AudioEngine/Utils/PackerMAT.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
 #include "utils/log.h"
+#include "ServiceBroker.h"
+#include "cores/AudioEngine/Interfaces/AE.h"
 
 #include <algorithm>
 #include <cmath>
+
+#include <arpa/inet.h>
+#include <poll.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 extern "C"
 {
@@ -105,6 +113,24 @@ bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &op
       m_jitterThreshold = JITTER_THRESHOLD_DEFAULT;
       break;
 
+    case CAEStreamInfo::STREAM_TYPE_DTSUHD:
+      // DTS:X Profile 2 (the FTOC container). The frame is handed to the packer
+      // unchanged and burst as IEC 61937 type IV with the DTS-UHD subtype,
+      // which is what makes the Amlogic HDMI TX take its HBR path.
+      m_codecName = "pt-dtsuhd";
+      m_jitterThreshold = JITTER_THRESHOLD_DEFAULT;
+      if (CServiceBroker::GetActiveAE()->UsesDtsXDtsxP2ToP1())
+      {
+        // Without the helper we would burst a Profile 2 ACE frame the receiver
+        // cannot read, so fall back to native P2 rather than emitting silence.
+        if (StartP2ToP1Child())
+          m_p2ToP1Child = true;
+        else
+          CLog::Log(LOGWARNING,
+                    "pt-dtsuhd: P2->P1 helper unavailable, passing Profile 2 through");
+      }
+      break;
+
     case CAEStreamInfo::STREAM_TYPE_TRUEHD:
       m_codecName = "pt-truehd";
       // TrueHD keeps 100ms: the MAT packer's GetSamplesOffset provides
@@ -137,8 +163,183 @@ bool CDVDAudioCodecPassthrough::Open(CDVDStreamInfo &hints, CDVDCodecOptions &op
   return true;
 }
 
+//============================================================================
+// DTS:X Profile 2 -> Profile 1
+//============================================================================
+
+bool CDVDAudioCodecPassthrough::StartP2ToP1Child()
+{
+  if (m_p2ChildIn >= 0)
+    return true;
+
+  int inPipe[2], outPipe[2];
+  if (pipe(inPipe) != 0)
+  {
+    CLog::Log(LOGERROR, "pt-dtsuhd: pipe() failed for the DTS:X P2->P1 helper");
+    return false;
+  }
+  if (pipe(outPipe) != 0)
+  {
+    close(inPipe[0]);
+    close(inPipe[1]);
+    CLog::Log(LOGERROR, "pt-dtsuhd: pipe() failed for the DTS:X P2->P1 helper");
+    return false;
+  }
+
+  const pid_t pid = fork();
+  if (pid < 0)
+  {
+    close(inPipe[0]);
+    close(inPipe[1]);
+    close(outPipe[0]);
+    close(outPipe[1]);
+    CLog::Log(LOGERROR, "pt-dtsuhd: fork() failed for the DTS:X P2->P1 helper");
+    return false;
+  }
+
+  if (pid == 0)
+  {
+    close(inPipe[1]);
+    close(outPipe[0]);
+    dup2(inPipe[0], STDIN_FILENO);
+    dup2(outPipe[1], STDOUT_FILENO);
+    if (inPipe[0] != STDIN_FILENO)
+      close(inPipe[0]);
+    if (outPipe[1] != STDOUT_FILENO)
+      close(outPipe[1]);
+
+    // dtsx_pt is armhf and dlopen()s the vendor decoder itself, so it needs
+    // the same private loader and library path the decode path uses.
+    static const char home[] = "/usr/lib/dtsx";
+    char serv[sizeof(home) + 16];
+    snprintf(serv, sizeof(serv), "%s/dtsx_pt", home);
+
+    char libenv[sizeof(home) + 48];
+    snprintf(libenv, sizeof(libenv), "DTSX_LIB=%s/libHwAudio_dtsx_bionic.so", home);
+
+    char *const argv[] = {serv, nullptr};
+    char *const envp[] = {libenv, nullptr};
+    execve(serv, argv, envp);
+    _exit(127);
+  }
+
+  close(inPipe[0]);
+  close(outPipe[1]);
+  m_p2ChildIn = inPipe[1];
+  m_p2ChildOut = outPipe[0];
+  m_p2ChildPid = pid;
+
+  CLog::LogF(LOGINFO, "pt-dtsuhd: converting Profile 2 to Profile 1 (helper pid {})", pid);
+  return true;
+}
+
+void CDVDAudioCodecPassthrough::StopP2ToP1Child()
+{
+  if (m_p2ChildIn >= 0)
+  {
+    close(m_p2ChildIn);
+    m_p2ChildIn = -1;
+  }
+  if (m_p2ChildOut >= 0)
+  {
+    close(m_p2ChildOut);
+    m_p2ChildOut = -1;
+  }
+  if (m_p2ChildPid > 0)
+  {
+    int status;
+    // dtsx_pt exits once its stdin is closed, which we just did.
+    if (waitpid(m_p2ChildPid, &status, 0) < 0)
+      kill(m_p2ChildPid, SIGKILL);
+    m_p2ChildPid = 0;
+  }
+  m_p2ToP1Child = false;
+}
+
+int CDVDAudioCodecPassthrough::ConvertP2ToP1(const uint8_t* in,
+                                           unsigned int inSize,
+                                           std::vector<uint8_t>& out)
+{
+  out.clear();
+  if (m_p2ChildIn < 0 || in == nullptr || inSize == 0)
+    return 0;
+
+  // One record written, exactly one reply read. Emitting a second reply would
+  // desynchronise every packet after it.
+  const uint32_t netLen = htonl(inSize);
+  const uint8_t* const parts[2] = {reinterpret_cast<const uint8_t*>(&netLen), in};
+  const size_t partLen[2] = {4, inSize};
+
+  for (int p = 0; p < 2; ++p)
+  {
+    size_t off = 0;
+    while (off < partLen[p])
+    {
+      const ssize_t n = write(m_p2ChildIn, parts[p] + off, partLen[p] - off);
+      if (n > 0)
+      {
+        off += static_cast<size_t>(n);
+        continue;
+      }
+      if (n < 0 && errno == EINTR)
+        continue;
+      CLog::Log(LOGERROR, "pt-dtsuhd: DTS:X P2->P1 helper write failed");
+      StopP2ToP1Child();
+      return 0;
+    }
+  }
+
+  uint32_t netReply = 0;
+  size_t got = 0;
+  while (got < sizeof(netReply))
+  {
+    struct pollfd pfd = {m_p2ChildOut, POLLIN, 0};
+    if (poll(&pfd, 1, 10000) <= 0)
+      return 0;
+    const ssize_t n = read(m_p2ChildOut, reinterpret_cast<uint8_t*>(&netReply) + got,
+                           sizeof(netReply) - got);
+    if (n > 0)
+    {
+      got += static_cast<size_t>(n);
+      continue;
+    }
+    if (n < 0 && errno == EINTR)
+      continue;
+    return 0;
+  }
+
+  const uint32_t replySize = ntohl(netReply);
+  if (replySize == 0)
+  {
+    // The helper is still filling its window. Nothing to emit this call; the
+    // sink waits for the next frame rather than seeing a truncated burst.
+    return 0;
+  }
+  if (replySize > (32u << 20))
+    return 0;
+
+  out.resize(replySize);
+  got = 0;
+  while (got < replySize)
+  {
+    const ssize_t n = read(m_p2ChildOut, out.data() + got, replySize - got);
+    if (n > 0)
+    {
+      got += static_cast<size_t>(n);
+      continue;
+    }
+    if (n < 0 && errno == EINTR)
+      continue;
+    out.clear();
+    return 0;
+  }
+  return static_cast<int>(replySize);
+}
+
 void CDVDAudioCodecPassthrough::Dispose()
 {
+  StopP2ToP1Child();
+
   if (m_buffer)
   {
     delete[] m_buffer;
@@ -454,6 +655,53 @@ int CDVDAudioCodecPassthrough::GetData(uint8_t** dst)
 {
   if (!m_dataSize)
     AddData(DemuxPacket());
+
+  // DTS:X with the P2->P1 helper: the demuxer gave us an ACE frame and what the
+  // receiver needs is the legacy DTS bitstream the vendor transcoder makes of
+  // it. Swap it in before anything else looks at m_buffer.
+  //
+  // The helper returns whole IEC 61937 frames for a whole input window, which is
+  // far more than one sink buffer (MAX_IEC61937_PACKET). Handing that straight
+  // over would overflow the packer, so it is queued and released one
+  // buffer-sized chunk per call, always cut on a frame boundary.
+  if (m_p2ToP1Child && (m_p2ChildIn >= 0 || !m_ptBuffer.empty()))
+  {
+    if (m_ptBuffer.empty())
+    {
+      if (!m_dataSize || !m_buffer)
+        return 0;
+      if (ConvertP2ToP1(m_buffer, m_dataSize, m_ptPending) <= 0)
+      {
+        m_dataSize = 0;
+        if (m_p2ChildIn < 0)
+        {
+          // The helper died; fall back to native Profile 2 rather than silence.
+          m_p2ToP1Child = false;
+          CLog::Log(LOGWARNING,
+                    "pt-dtsuhd: P2->P1 helper stopped, passing Profile 2 through");
+        }
+        return 0;
+      }
+      m_ptBuffer = std::move(m_ptPending);
+      m_ptOffset = 0;
+    }
+
+    if (m_ptOffset >= m_ptBuffer.size())
+    {
+      m_ptBuffer.clear();
+      m_ptOffset = 0;
+      return 0;
+    }
+
+    // The sink writes to ALLA as a plain byte stream, so a chunk boundary does
+    // not have to land on a frame edge as long as the chunks stay in order.
+    const size_t remaining = m_ptBuffer.size() - m_ptOffset;
+    const size_t chunk = std::min<size_t>(remaining, MAX_IEC61937_PACKET);
+
+    *dst = m_ptBuffer.data() + m_ptOffset;
+    m_ptOffset += chunk;
+    return static_cast<int>(chunk);
+  }
 
   if (m_format.m_streamInfo.m_type == CAEStreamInfo::STREAM_TYPE_TRUEHD)
     *dst = m_trueHDBuffer.data();

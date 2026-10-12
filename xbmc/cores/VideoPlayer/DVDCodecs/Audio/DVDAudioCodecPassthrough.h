@@ -19,6 +19,8 @@
 #include "cores/AudioEngine/Utils/AEBitstreamPacker.h"
 #include "cores/AudioEngine/Utils/AEStreamInfo.h"
 
+#include <sys/types.h>
+
 #include <list>
 #include <memory>
 #include <vector>
@@ -70,6 +72,30 @@ public:
 private:
   int GetData(uint8_t** dst);
   unsigned int PackTrueHD();
+
+  // DTS:X Profile 2 -> Profile 1 conversion.
+  //
+  // A Profile 2 stream is ACE / FTOC 7.1.4 object audio with no backwards
+  // compatible core, so there is no core substream to hand a Profile 1
+  // receiver: it has to be transcoded. Passthrough bypasses the ffmpeg
+  // decoder, so this runs in a dtsx_pt child process which drives the same
+  // vendor library the software decoder uses (decoder -> PCM -> postprocess
+  // -> IEC 61937 DTS bitstream on the RAW bus).
+  //
+  // dtsx_pt speaks a length-prefixed pipe protocol and replies once per record
+  // written. It buffers a window internally, so short records legitimately come
+  // back empty; that is not an error and must not stall playback.
+  bool StartP2ToP1Child();
+  void StopP2ToP1Child();
+  int ConvertP2ToP1(const uint8_t* in, unsigned int inSize, std::vector<uint8_t>& out);
+  bool m_p2ToP1Child{false};
+  int m_p2ChildIn{-1};
+  int m_p2ChildOut{-1};
+  pid_t m_p2ChildPid{0};
+  std::vector<uint8_t> m_ptBuffer;   // queued converted frames
+  std::vector<uint8_t> m_ptPending;  // scratch for the next helper reply
+  size_t m_ptOffset{0};
+
   CDVDStreamInfo m_hints;
   CAEStreamParser m_parser;
   uint8_t* m_buffer = nullptr;

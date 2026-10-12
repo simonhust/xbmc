@@ -33,6 +33,7 @@ public:
 
 private:
   void PackDTSHD(CAEStreamInfo &info, uint8_t* data, int size);
+  void PackDTSUHD(CAEStreamInfo &info, uint8_t* data, int size);
   void PackEAC3(CAEStreamInfo &info, uint8_t* data, int size);
 
   std::vector<uint8_t> m_dtsHD;

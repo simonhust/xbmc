@@ -210,6 +210,16 @@ public:
   virtual bool UsesDtsCoreFallback() { return false; }
 
   /*!
+   * \brief Returns true if DTS:X Profile 2 streams must be down-converted to
+   *        Profile 1 before being passed through.
+   *
+   * Only meaningful while DTS-UHD passthrough is enabled. Receivers that
+   * accept DTS:X Profile 1 only cannot decode the Profile 2 (FTOC) stream, so
+   * the bitstream is transcoded down and then carried as DTS-HD MA.
+   */
+  virtual bool UsesDtsXDtsxP2ToP1() { return false; }
+
+  /*!
    * \brief Returns true if the AudioEngine is currently configured for stereo audio
    *
    * \returns true if the AudioEngine is currently configured for stereo audio

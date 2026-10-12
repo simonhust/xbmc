@@ -38,7 +38,11 @@ public:
     STREAM_TYPE_MLP,
     STREAM_TYPE_TRUEHD,
     STREAM_TYPE_DTSHD_MA,
-    STREAM_TYPE_AV3A
+    STREAM_TYPE_AV3A,
+    // DTS:X Profile 2 (FTOC container). Only produced when DTS-UHD
+    // passthrough is enabled; otherwise AudioSinkAE leaves the type null so
+    // the codec factory picks the libdtsuhd decoder.
+    STREAM_TYPE_DTSUHD
   };
   DataType m_type = STREAM_TYPE_NULL;
   // Initialised explicitly: a stream type that does not carry a sample rate yet
@@ -98,6 +102,7 @@ private:
   bool TrySyncAC3(uint8_t *data, unsigned int size, bool resyncing, bool wantEAC3dependent);
   unsigned int SyncAC3(uint8_t *data, unsigned int size);
   unsigned int SyncDTS(uint8_t *data, unsigned int size);
+  unsigned int SyncDTSX(uint8_t *data, unsigned int size);
   unsigned int SyncAV3A(uint8_t *data, unsigned int size);
   unsigned int SyncTrueHD(uint8_t *data, unsigned int size);
 

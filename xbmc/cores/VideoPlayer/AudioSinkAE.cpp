@@ -383,11 +383,11 @@ CAEStreamInfo::DataType CAudioSinkAE::GetPassthroughStreamType(AVCodecID codecId
 
     case AV_CODEC_ID_DTS_UHD:
       // DTS-UHD Profile 2 (dtsx, the FTOC container of ETSI TS 103 491) has no
-      // passthrough. IEC 61937-2:2021+AMD1:2026 table 2 assigns it no
-      // data-type, and DTS ships it over a separate HDMI HBR path rather than
-      // as an IEC 61937 data-burst. Leave the type null so the codec factory
-      // picks the libdtsuhd decoder.
-      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_NULL;
+      // IEC 61937 data-type of its own. It is offered to the sink here only as
+      // STREAM_TYPE_DTSUHD; the SupportsRaw() call below rejects it unless the
+      // user enabled DTS-UHD passthrough, in which case the type falls back to
+      // null and the codec factory picks the libdtsuhd decoder.
+      format.m_streamInfo.m_type = CAEStreamInfo::STREAM_TYPE_DTSUHD;
       format.m_streamInfo.m_sampleRate = samplerate;
       break;
 

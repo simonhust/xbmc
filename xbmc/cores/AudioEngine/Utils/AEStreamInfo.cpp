@@ -80,6 +80,10 @@ double CAEStreamInfo::GetDuration() const
     case STREAM_TYPE_AV3A:
       duration = AV3A::SAMPLES_PER_FRAME / m_sampleRate;
       break;
+    case STREAM_TYPE_DTSUHD:
+      // FTOC frames are variable length; the DTS:X block rate is 1024 samples.
+      duration = 1024.0 / m_sampleRate;
+      break;
     default:
       CLog::Log(LOGERROR, "CAEStreamInfo::GetDuration - invalid stream type");
       break;
@@ -262,6 +266,18 @@ unsigned int CAEStreamParser::DetectType(uint8_t* data, unsigned int size)
         header == DTS_PREAMBLE_16LE || header == DTS_PREAMBLE_16BE)
     {
       unsigned int skip = SyncDTS(data, size);
+      if (m_hasSync || m_needBytes)
+        return skipped + skip;
+      else
+        possible = skipped;
+    }
+
+    // DTS:X Profile 2 (FTOC). Checked before AV3A: both use distinctive
+    // 32-bit patterns, but the FTOC sync must win while a DTS:X track is
+    // selected, since AV3A's 12-bit sync is far weaker.
+    if (data[0] == 0x40 && data[1] == 0x41 && data[2] == 0x1b && data[3] == 0xf2)
+    {
+      unsigned int skip = SyncDTSX(data, size);
       if (m_hasSync || m_needBytes)
         return skipped + skip;
       else
@@ -506,6 +522,61 @@ unsigned int CAEStreamParser::SyncAC3(uint8_t* data, unsigned int size)
   CLog::Log(LOGINFO, "CAEStreamParser::SyncAC3 - AC3 sync lost");
   m_hasSync = false;
   return skip;
+}
+
+// DTS:X Profile 2 (FTOC container, ETSI TS 103 491). Only 0x40411bf2 is used
+// as a boundary: 0x71c442e8 also appears in DTS:X streams (it replaces the sync
+// word in non-initial frames) but occurs freely inside the ACE/FTOC payload, so
+// treating it as a frame start tears the stream into fragments the vendor
+// decoder rejects. Channel count and sample rate are already carried in m_info
+// from the demuxer, so only the frame length is derived here.
+unsigned int CAEStreamParser::SyncDTSX(uint8_t* data, unsigned int size)
+{
+  const unsigned int kHeaderBytes = 4;
+  if (size < kHeaderBytes)
+  {
+    if (m_needBytes < kHeaderBytes)
+      m_needBytes = kHeaderBytes + 1;
+    return 0;
+  }
+
+  const auto isSync = [](const uint8_t* p) {
+    return p[0] == 0x40 && p[1] == 0x41 && p[2] == 0x1b && p[3] == 0xf2;
+  };
+
+  for (unsigned int skip = 0; size - skip > kHeaderBytes; ++skip, ++data)
+  {
+    if (!isSync(data))
+      continue;
+
+    // A frame runs up to the next sync word of either kind. The buffer is not
+    // guaranteed to hold the whole frame, so report the tail and let the
+    // caller refill; this mirrors how SyncDTS handles partial frames.
+    unsigned int available = size - skip;
+    unsigned int next = kHeaderBytes;
+    while (next + kHeaderBytes <= available && !isSync(data + next))
+      ++next;
+
+    m_fsize = next;
+    // One DTS:X block is 1024 samples, i.e. 32 chunks of 32 samples, matching
+    // the block accounting SyncDTS uses for its resync comparison.
+    m_dtsBlocks = 1024 / 32;
+    m_info.m_type = CAEStreamInfo::STREAM_TYPE_DTSUHD;
+    m_hasSync = true;
+    m_info.m_dataIsLE = true;
+    if (!m_info.m_sampleRate)
+      m_info.m_sampleRate = 48000;
+    if (!m_info.m_channels)
+      m_info.m_channels = 8;
+    // Samples carried by this frame expressed in IEC 60958 frames, same
+    // conversion SyncDTS applies to the DTS-HD stream types.
+    m_info.m_dtsPeriod = (192000 * (m_dtsBlocks << 5)) / m_info.m_sampleRate;
+    return skip;
+  }
+
+  m_hasSync = false;
+  m_fsize = 0;
+  return size - kHeaderBytes;
 }
 
 unsigned int CAEStreamParser::SyncAV3A(uint8_t* data, unsigned int size)

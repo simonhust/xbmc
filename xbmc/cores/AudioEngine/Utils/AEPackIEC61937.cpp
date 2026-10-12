@@ -185,6 +185,38 @@ int CAEPackIEC61937::PackDTSHD(uint8_t *data, unsigned int size, uint8_t *dest, 
   return burstsize;
 }
 
+int CAEPackIEC61937::PackDTSUHD(uint8_t *data, unsigned int size, uint8_t *dest, unsigned int period)
+{
+  struct IEC61937Packet *packet = (struct IEC61937Packet*)dest;
+
+  const unsigned int burstsize = period << 2;
+  const unsigned int payload = size + (size & 0x1);
+  if (burstsize > MAX_IEC61937_PACKET || payload > burstsize - IEC61937_DATA_OFFSET)
+  {
+    CLog::Log(LOGERROR, "CAEPackIEC61937::PackDTSUHD - {} byte frame does not fit a {} byte burst",
+              size, burstsize);
+    return 0;
+  }
+
+  packet->m_preamble1 = IEC61937_PREAMBLE1;
+  packet->m_preamble2 = IEC61937_PREAMBLE2;
+  /* Data-type 0x11 (type IV) with the DTS-UHD subtype in Pc[11]~Pc[12]. */
+  packet->m_type = IEC61937_TYPE_DTSHD | (IEC61937_TYPE_DTSUHD << 8);
+  packet->m_length = ((size + 0x17) &~ 0x0f) - 0x08;
+
+  if (data == NULL)
+    data = packet->m_data;
+#ifdef __BIG_ENDIAN__
+  else
+    memcpy(packet->m_data, data, size);
+#else
+  size = CopyFrameSwapped(packet->m_data, data, size);
+#endif
+
+  memset(packet->m_data + size, 0, burstsize - IEC61937_DATA_OFFSET - size);
+  return burstsize;
+}
+
 int CAEPackIEC61937::PackDTS(uint8_t *data, unsigned int size, uint8_t *dest, bool littleEndian,
                              unsigned int frameSize, uint16_t type)
 {
