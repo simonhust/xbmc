@@ -25,6 +25,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -208,18 +209,23 @@ bool CDVDAudioCodecPassthrough::StartP2ToP1Child()
     if (outPipe[1] != STDOUT_FILENO)
       close(outPipe[1]);
 
-    // dtsx_pt is armhf and dlopen()s the vendor decoder itself, so it needs
-    // the same private loader and library path the decode path uses.
+    // dtsx_pt is armhf and dlopen()s the vendor decoder itself, so it needs the
+    // same private loader and library path the decode path uses. It runs the
+    // same library search the decode path's probe already ran, so handing it a
+    // fixed path here would only pin it to one candidate of that search.
+    //
+    // The environment is passed as this process has it, with one exception: an
+    // LD_LIBRARY_PATH from the aarch64 side would only mislead the relay's
+    // private loader, which resolves the vendor library's libc.so and libm.so
+    // through it. dtsxserv sets what it needs before it dlopen()s.
     static const char home[] = "/usr/lib/dtsx";
     char serv[sizeof(home) + 16];
     snprintf(serv, sizeof(serv), "%s/dtsx_pt", home);
 
-    char libenv[sizeof(home) + 48];
-    snprintf(libenv, sizeof(libenv), "DTSX_LIB=%s/libHwAudio_dtsx_bionic.so", home);
+    unsetenv("LD_LIBRARY_PATH");
 
     char *const argv[] = {serv, nullptr};
-    char *const envp[] = {libenv, nullptr};
-    execve(serv, argv, envp);
+    execv(serv, argv);
     _exit(127);
   }
 
