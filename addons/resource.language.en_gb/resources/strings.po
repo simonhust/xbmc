@@ -25590,16 +25590,16 @@ msgctxt "#40813"
 msgid "Full sync"
 msgstr ""
 
-#. Label for Audio Vivid (AV3A) passthrough setting
+#. Label for AUDIO VIVID (AVS3-P3) passthrough setting
 #: system/settings/settings.xml
 msgctxt "#40816"
-msgid "Audio Vivid capable receiver"
+msgid "AUDIO VIVID capable receiver"
 msgstr ""
 
-#. Description of setting with label #40816 "Audio Vivid capable receiver"
+#. Description of setting with label #40816 "AUDIO VIVID capable receiver"
 #: system/settings/settings.xml
 msgctxt "#40817"
-msgid "Select this option if your receiver is capable of playing Audio Vivid (AV3A) streams via HDMI passthrough. When disabled, AV3A streams will be decoded to PCM."
+msgid "Select this option if your receiver is capable of playing AUDIO VIVID streams via HDMI passthrough. When disabled, these streams will be decoded to PCM."
 msgstr ""
 
 #. Label for HDR10+ RPU peak brightness source setting of label #60103
