@@ -1944,6 +1944,7 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       if (device.substr(0, device.find(':')) == "surround71")
       {
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
+        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_TRUEHD);
       }
@@ -1956,6 +1957,7 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_2048);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_512);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_EAC3);
+        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       }
     }
@@ -1964,6 +1966,7 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AC3);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
+      info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_CORE);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_1024);
