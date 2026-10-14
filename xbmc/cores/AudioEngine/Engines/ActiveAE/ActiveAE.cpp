@@ -46,37 +46,6 @@ constexpr float MIN_WATER_LEVEL_RESAMPLE = 0.1f; // min buffer time in resample 
 constexpr float BUFFER_LEVEL_INCREMENT = 0.0001f; // increment step for ramp-up
 constexpr double MAX_BUFFER_TIME = 0.1; // max time of a buffer in seconds;
 
-// Is the vendor DTS:X library usable? It is a 32-bit Android binary, so this
-// aarch64 process cannot dlopen() it and cannot tell from the file being there:
-// the Android build is soft-float with Bionic symbol versioning while the
-// private armhf loader in /usr/lib/dtsx is a hard-float glibc, so a firmware
-// copy can be present and readable and still be unloadable. dtsxserv --probe
-// runs on the armhf side of the AArch32 boundary and answers exactly that, the
-// same answer the decode path uses to pick between the vendor and the built-in
-// decoder, so the two stay in step.
-bool DtsxVendorReady()
-{
-#if defined(TARGET_POSIX)
-  static const char serv[] = "/usr/lib/dtsx/dtsxserv";
-  static const char probe[] = "--probe";
-
-  const pid_t pid = fork();
-  if (pid < 0)
-    return false;
-  if (pid == 0)
-  {
-    execl(serv, serv, probe, static_cast<char*>(nullptr));
-    _exit(127);
-  }
-
-  int status{};
-  if (waitpid(pid, &status, 0) < 0)
-    return false;
-  return WIFEXITED(status) && WEXITSTATUS(status) == 0;
-#else
-  return false;
-#endif
-}
 } // unnamed namespace
 
 void CEngineStats::Reset(unsigned int sampleRate, bool pcm)
@@ -2798,14 +2767,6 @@ void CActiveAE::LoadSettings(AEAudioFormat *format)
   m_settings.dtspassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSPASSTHROUGH);
   m_settings.dtshdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH);
   m_settings.dtsuhdpassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSUHDPASSTHROUGH);
-  /* Converting to DTS Core needs the vendor DTS:X library: it is a real
-   * transcode, and the built-in decoder only produces PCM. So the sub-option
-   * follows the same load boolean the decode path uses, and stays off when no
-   * library loads rather than promising something that cannot happen. */
-  m_settings.dtsxcorepassthrough =
-      m_settings.dtsuhdpassthrough &&
-      settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH) &&
-      XFILE::CFile::Exists("/usr/lib/dtsx/dtsx_pt") && DtsxVendorReady();
   m_settings.av3apassthrough = settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH);
   m_settings.usesdtscorefallback =
       settings->GetBool(CSettings::SETTING_AUDIOOUTPUT_DTSHDCOREFALLBACK);
@@ -2971,11 +2932,6 @@ bool CActiveAE::UsesDtsCoreFallback()
   return m_settings.usesdtscorefallback;
 }
 
-bool CActiveAE::ConvertsDtsXToDtsCore()
-{
-  return m_settings.dtsxcorepassthrough;
-}
-
 bool CActiveAE::SupportsSilenceTimeout()
 {
   return true;
@@ -3068,11 +3024,6 @@ bool CActiveAE::IsSettingVisible(const std::string &settingId)
     const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
     if (SupportsFormat(format) &&
         settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
-      return true;
-  }
-  else if (settingId == CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH)
-  {
-    if (DtsxVendorReady())
       return true;
   }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_EAC3PASSTHROUGH)

@@ -3614,25 +3614,7 @@
           </dependencies>
           <control type="toggle" />
         </setting>
-        <setting id="audiooutput.dtsxcorepassthrough" type="boolean" parent="audiooutput.dtsuhdpassthrough" label="60112" help="60113">
-          <level>2</level>
-          <default>false</default>
-          <dependencies>
-            <dependency type="visible">
-              <and>
-                <condition setting="audiooutput.dtsuhdpassthrough" operator="is">true</condition>
-                <condition on="property" name="aesettingvisible" setting="audiooutput.dtsuhdpassthrough">audiooutput.dtsuhdpassthrough</condition>
-              </and>
-            </dependency>
-            <dependency type="enable">
-              <and>
-                <condition setting="audiooutput.passthrough" operator="is">true</condition>
-                <condition setting="audiooutput.dtsuhdpassthrough" operator="is">true</condition>
-              </and>
-            </dependency>
-          </dependencies>
-          <control type="toggle" />
-        </setting>
+
         <setting id="audiooutput.dtshdpassthrough" type="boolean" label="347" help="36370">
           <level>1</level>
           <default>true</default>

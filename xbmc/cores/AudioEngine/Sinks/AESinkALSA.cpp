@@ -19,7 +19,7 @@
 
 namespace
 {
-bool ReceiverSupportsAV3A()
+bool ReceiverAudCapSupports(const char *needle)
 {
   std::ifstream f("/sys/class/amhdmitx/amhdmitx0/aud_cap");
   if (!f.is_open())
@@ -27,7 +27,7 @@ bool ReceiverSupportsAV3A()
   std::string line;
   while (std::getline(f, line))
   {
-    if (line.find("AV3A") != std::string::npos)
+    if (line.find(needle) != std::string::npos)
       return true;
   }
   return false;
@@ -1962,9 +1962,10 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       if (device.substr(0, device.find(':')) == "surround71")
       {
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-        if (ReceiverSupportsAV3A())
+        if (ReceiverAudCapSupports("AV3A"))
           info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
-        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
+        if (ReceiverAudCapSupports("DTS-UHD"))
+          info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_TRUEHD);
       }
       else
@@ -1976,9 +1977,10 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_2048);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_512);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_EAC3);
-        if (ReceiverSupportsAV3A())
+        if (ReceiverAudCapSupports("AV3A"))
           info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
-        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
+        if (ReceiverAudCapSupports("DTS-UHD"))
+          info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       }
     }
     else
@@ -1986,9 +1988,10 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AC3);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-      if (ReceiverSupportsAV3A())
+      if (ReceiverAudCapSupports("AV3A"))
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
-      info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
+      if (ReceiverAudCapSupports("DTS-UHD"))
+        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_CORE);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_1024);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_2048);
