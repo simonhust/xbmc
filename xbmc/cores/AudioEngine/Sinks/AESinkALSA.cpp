@@ -15,6 +15,23 @@
 #include "cores/AudioEngine/Sinks/alsa/ALSAHControlMonitor.h"
 #endif
 #include "cores/AudioEngine/Utils/AEELDParser.h"
+
+namespace
+{
+bool ReceiverSupportsAV3A()
+{
+  std::ifstream f("/sys/class/amhdmitx/amhdmitx0/aud_cap");
+  if (!f.is_open())
+    return true;
+  std::string line;
+  while (std::getline(f, line))
+  {
+    if (line.find("AV3A") != std::string::npos)
+      return true;
+  }
+  return false;
+}
+}
 #include "cores/AudioEngine/Utils/AEUtil.h"
 #include "cores/DataCacheCore.h"
 #include "platform/Platform.h"
@@ -1944,7 +1961,8 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       if (device.substr(0, device.find(':')) == "surround71")
       {
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
+        if (ReceiverSupportsAV3A())
+          info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_TRUEHD);
       }
@@ -1957,7 +1975,8 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_2048);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_512);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_EAC3);
-        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
+        if (ReceiverSupportsAV3A())
+          info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       }
     }
@@ -1966,7 +1985,8 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AC3);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
-      info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
+      if (ReceiverSupportsAV3A())
+        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_CORE);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_1024);
