@@ -471,7 +471,10 @@ bool CDVDAudioCodecPassthrough::AddData(const DemuxPacket &packet)
   m_format.m_sampleRate = m_parser.GetSampleRate();
   m_format.m_frameSize = 1;
   CAEChannelInfo layout;
-  for (unsigned int i = 0; i < m_parser.GetChannels(); i++)
+  unsigned int ch = m_parser.GetChannels();
+  if (ch > 16)
+    ch = 16;
+  for (unsigned int i = 0; i < ch; i++)
   {
     layout += AE_CH_RAW;
   }
