@@ -3070,6 +3070,11 @@ bool CActiveAE::IsSettingVisible(const std::string &settingId)
         settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
       return true;
   }
+  else if (settingId == CSettings::SETTING_AUDIOOUTPUT_DTSXCOREPASSTHROUGH)
+  {
+    if (DtsxVendorReady())
+      return true;
+  }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_EAC3PASSTHROUGH)
   {
     AEAudioFormat format;
