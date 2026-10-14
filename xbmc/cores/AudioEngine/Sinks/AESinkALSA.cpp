@@ -15,6 +15,7 @@
 #include "cores/AudioEngine/Sinks/alsa/ALSAHControlMonitor.h"
 #endif
 #include "cores/AudioEngine/Utils/AEELDParser.h"
+#include <fstream>
 
 namespace
 {
@@ -1987,7 +1988,7 @@ void CAESinkALSA::EnumerateDevice(AEDeviceInfoList &list, const std::string &dev
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_MA);
       if (ReceiverSupportsAV3A())
         info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_AV3A);
-        info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
+      info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSUHD);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTSHD_CORE);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_1024);
       info.m_streamTypes.push_back(CAEStreamInfo::STREAM_TYPE_DTS_2048);
