@@ -3087,9 +3087,7 @@ bool CActiveAE::IsSettingVisible(const std::string &settingId)
   }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_AV3APASSTHROUGH)
   {
-    const std::shared_ptr<CSettings> settings = CServiceBroker::GetSettingsComponent()->GetSettings();
-    if (settings->GetInt(CSettings::SETTING_AUDIOOUTPUT_CONFIG) != AE_CONFIG_FIXED)
-      return true;
+    return false;
   }
   else if (settingId == CSettings::SETTING_AUDIOOUTPUT_STEREOUPMIX)
   {
