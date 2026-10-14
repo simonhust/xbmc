@@ -128,7 +128,7 @@ std::string AMLCodecToStr(const enum IEC958_mode_codec codec)
     "AC3 Layout B",
     "OBA",
     "DTS-UHD",
-    "AV3A"
+    "AUDIO VIVID"
   };
 
   return codec_str[codec];
