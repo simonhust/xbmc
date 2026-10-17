@@ -2196,6 +2196,33 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   else
     AmlDisplay->aml_set_drmProperty("dv_enable", DRM_MODE_OBJECT_CRTC, 0);
 
+  // Route non-DV content through AMDV when SDR2DV/HDR2DV conversion is active.
+  // The kernel's set_dv_provide_name() detects "decoder" in the chain and
+  // switches AMDV to receive from it instead of dvbldec.
+  if (!dv_enable && device_support_dv && !user_dv_disable && display_support_dv)
+  {
+    const auto settings = CServiceBroker::GetSettingsComponent()->GetSettings();
+    bool convert_to_dv = false;
+    if (hints.hdrType == StreamHdrType::HDR_TYPE_NONE)
+      convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_SDR2DV);
+    else if (hints.hdrType == StreamHdrType::HDR_TYPE_HDR10)
+      convert_to_dv = settings->GetBool(CSettings::SETTING_COREELEC_AMLOGIC_HDR2DV);
+
+    if (convert_to_dv)
+    {
+      AmlDisplay->aml_set_drmProperty("dv_enable", DRM_MODE_OBJECT_CRTC, 1);
+      AmlDisplay->aml_set_drmProperty("dv_policy", DRM_MODE_OBJECT_CRTC, AMDV_FORCE_OUTPUT_MODE);
+      if (settings->GetInt(CSettings::SETTING_COREELEC_AMLOGIC_DV_LED) == AML_DV_PLAYER_LED)
+        AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC, AMDV_OUTPUT_MODE_IPT);
+      else
+        AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC, AMDV_OUTPUT_MODE_IPT_TUNNEL);
+      SetVfmMap("default", "decoder amlvideo deinterlace amvideo");
+      m_dvConvertActive = true;
+      CLog::Log(LOGINFO, "CAMLCodec::OpenDecoder DV conversion active ({} -> DV), routing through amlvideo",
+                CStreamDetails::HdrTypeToString(hints.hdrType));
+    }
+  }
+
   // DEC_CONTROL_FLAG_DISABLE_FAST_POC
   CSysfsPath("/sys/module/amvdec_h264/parameters/dec_control", 4);
 
@@ -2521,6 +2548,14 @@ void CAMLCodec::CloseDecoder()
   // after the stream ends, so the restore still lands before the GUI returns.
   CSysfsPath("/sys/module/aml_media/parameters/osd_pq_bypass", 1);
 
+  // restore DV conversion DRM properties when active
+  if (m_dvConvertActive)
+  {
+    AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC, AMDV_OUTPUT_MODE_BYPASS);
+    AmlDisplay->aml_set_drmProperty("dv_policy", DRM_MODE_OBJECT_CRTC, 0);
+    AmlDisplay->aml_set_drmProperty("dv_enable", DRM_MODE_OBJECT_CRTC, 0);
+  }
+
   // never leave vcodec ff/rw or paused.
   if (m_speed != DVD_PLAYSPEED_NORMAL)
   {
@@ -2605,8 +2640,9 @@ void CAMLCodec::CloseAmlVideo()
 {
   m_amlVideoFile.reset();
 
-  if (am_private->vcodec.dec_mode == STREAM_TYPE_SINGLE)
+  if (am_private->vcodec.dec_mode == STREAM_TYPE_SINGLE || m_dvConvertActive)
     SetVfmMap("default", m_defaultVfmMap);
+  m_dvConvertActive = false;
 
   m_amlVideoFile = NULL;
 }

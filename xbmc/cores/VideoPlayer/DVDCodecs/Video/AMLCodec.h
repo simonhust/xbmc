@@ -132,6 +132,7 @@ private:
 
   PosixFilePtr     m_amlVideoFile;
   std::string      m_defaultVfmMap;
+  bool             m_dvConvertActive{false};
 
   static std::atomic_flag  m_pollSync;
   static int m_pollDevice;
