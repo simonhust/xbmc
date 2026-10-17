@@ -189,6 +189,8 @@ protected:
   bool m_dv_direct_pair = false;
   bool m_isBluray = false;
   double m_dv_seek_time = DVD_NOPTS_VALUE;
+  uint64_t m_blurayReadBase{0};
+  std::map<int, uint64_t> m_blurayReadPos;
 
   // Last-seen RPU for single-track DV (RPU NAL units embedded in BL stream).
   // When a frame lacks RPU, reuse the last RPU so the DV engine never outputs
