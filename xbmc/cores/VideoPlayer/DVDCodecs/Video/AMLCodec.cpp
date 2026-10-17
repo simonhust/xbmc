@@ -2400,11 +2400,23 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (am_private->vcodec.dec_mode == STREAM_TYPE_SINGLE)
     SetVfmMap("default", "decoder amlvideo deinterlace amvideo");
 
-  int ret = m_dll->codec_init(&am_private->vcodec);
-  if (ret != CODEC_ERROR_NONE)
+  /* Keep-alive warm path: decoder is already initialized from a previous
+   * play, skip codec_init (firmware reload) and resume directly. */
+  bool wasKeepWarm = m_keepAlive;
+  int ret = 0;
+  if (wasKeepWarm)
   {
-    CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder codec init failed, ret=0x{:x}", -ret);
-    return false;
+    m_dll->codec_resume(&am_private->vcodec);
+    CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder - keep-alive warm: resuming initialized decoder");
+  }
+  else
+  {
+    ret = m_dll->codec_init(&am_private->vcodec);
+    if (ret != CODEC_ERROR_NONE)
+    {
+      CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder codec init failed, ret=0x{:x}", -ret);
+      return false;
+    }
   }
 
   am_private->dumpdemux = false;
@@ -2571,7 +2583,19 @@ void CAMLCodec::CloseDecoder()
     AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
                                     AMDV_OUTPUT_MODE_BYPASS);
 
-  m_dll->codec_close(&am_private->vcodec);
+  if (m_keepAlive)
+  {
+    /* Keep the decoder warm: pause instead of close so the next play
+     * skips firmware reinit. codec_reset drops queued buffers and
+     * returns the hardware to idle but leaves it initialized. */
+    m_dll->codec_pause(&am_private->vcodec);
+    m_dll->codec_reset(&am_private->vcodec);
+    CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder - keep-alive: decoder paused, not closed");
+  }
+  else
+  {
+    m_dll->codec_close(&am_private->vcodec);
+  }
   dumpfile_close(am_private);
   m_opened = false;
 

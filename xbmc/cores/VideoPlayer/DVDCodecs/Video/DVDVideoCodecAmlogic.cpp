@@ -91,6 +91,12 @@ CDVDVideoCodecAmlogic::~CDVDVideoCodecAmlogic()
   Close();
 }
 
+void CDVDVideoCodecAmlogic::SetDecoderKeepAlive()
+{
+  if (m_Codec)
+    m_Codec->SetKeepAlive(true);
+}
+
 std::unique_ptr<CDVDVideoCodec> CDVDVideoCodecAmlogic::Create(CProcessInfo& processInfo)
 {
   return std::make_unique<CDVDVideoCodecAmlogic>(processInfo);

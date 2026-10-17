@@ -76,6 +76,7 @@ public:
 
   void          SetSpeed(int speed);
   void          SetDrain(bool drain){m_drain = drain;};
+  void          SetKeepAlive(bool keepAlive){m_keepAlive = keepAlive;};
   void          SetVideoRect(const CRect &SrcRect, const CRect &DestRect);
   void          SetVideoRate(int videoRate);
   uint64_t      GetOMXPts() const { return m_cur_pts; }
@@ -133,6 +134,7 @@ private:
   PosixFilePtr     m_amlVideoFile;
   std::string      m_defaultVfmMap;
   bool             m_dvConvertActive{false};
+  bool             m_keepAlive{false};
 
   static std::atomic_flag  m_pollSync;
   static int m_pollDevice;
