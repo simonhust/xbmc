@@ -3347,7 +3347,12 @@ void CVideoPlayer::HandleMessages()
           // at the demuxer level. Without the libbluray call, BD-J may
           // override the change via BD_EVENT_AUDIO_STREAM.
           auto pStream = std::static_pointer_cast<CDVDInputStreamBluray>(m_pInputStream);
-          pStream->SetActiveAudioStream(pMsg2->GetStreamId() + 1);
+          if (m_pDemuxer)
+          {
+            CDemuxStream* stream = m_pDemuxer->GetStream(st.demuxerId, st.id);
+            if (stream && pStream->SetActiveAudioStream(stream->dvdNavId))
+              m_dvd.iSelectedAudioStream = stream->dvdNavId;
+          }
           CloseStream(m_CurrentAudio, false);
           OpenStream(m_CurrentAudio, st.demuxerId, st.id, st.source);
           AdaptForcedSubtitles();
@@ -3441,7 +3446,13 @@ void CVideoPlayer::HandleMessages()
           // at the demuxer level. Without the libbluray call, BD-J may
           // override the change via BD_EVENT_PG_TEXTST_STREAM.
           auto pStream = std::static_pointer_cast<CDVDInputStreamBluray>(m_pInputStream);
-          pStream->SetActiveSubtitleStream(pMsg2->GetStreamId() + 1, true);
+          if (m_pDemuxer)
+          {
+            CDemuxStream* stream = m_pDemuxer->GetStream(st.demuxerId, st.id);
+            if (stream && pStream->SetActiveSubtitleStream(stream->dvdNavId,
+                                                          m_VideoPlayerVideo->IsSubtitleEnabled()))
+              m_dvd.iSelectedSPUStream = stream->dvdNavId;
+          }
           CloseStream(m_CurrentSubtitle, false);
           OpenStream(m_CurrentSubtitle, st.demuxerId, st.id, st.source);
 
@@ -3501,6 +3512,12 @@ void CVideoPlayer::HandleMessages()
         SetEnableStream(m_CurrentSubtitle, false);
 
       SetSubtitleVisibleInternal(isVisible);
+
+#if defined(HAVE_LIBBLURAY)
+      if (m_pInputStream && m_pInputStream->IsStreamType(DVDSTREAM_TYPE_BLURAY))
+        std::static_pointer_cast<CDVDInputStreamBluray>(m_pInputStream)
+            ->SetSubtitleVisible(isVisible);
+#endif
 
       // Image type subtitles (e.g. VOBSUB) can support "forced" flag on overlays (images)
       // so you need to keep the stream open to parse "forced" flag on each image
