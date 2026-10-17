@@ -1885,6 +1885,15 @@ void CVideoPlayer::Process()
         }
       }
 
+      // closing the old streams drops the queue of a player that is not in sync
+      if (m_pInputStream->IsStreamType(DVDSTREAM_TYPE_BLURAY) &&
+          m_State.menuType == MenuType::NATIVE &&
+          ShouldWaitForSync(std::chrono::steady_clock::now()))
+      {
+        CThread::Sleep(10ms);
+        continue;
+      }
+
       // if there is another stream available, reopen demuxer
       CDVDInputStream::ENextStream next = m_pInputStream->NextStream();
       if(next == CDVDInputStream::NEXTSTREAM_OPEN)
@@ -1937,6 +1946,8 @@ void CVideoPlayer::Process()
 
       break;
     }
+
+    m_syncWait.reset();
 
     // see if we can find something better to play
     CheckBetterStream(m_CurrentAudio,    pStream);
@@ -2256,6 +2267,32 @@ CacheInfo CVideoPlayer::GetCachingTimes()
     info.level = cacheLevel;
 
   return info;
+}
+
+bool CVideoPlayer::ShouldWaitForSync(std::chrono::steady_clock::time_point now)
+{
+  const auto starting = [](const CCurrentStream& current)
+  {
+    return current.id >= 0 && current.packets > 0 &&
+           current.syncState == IDVDStreamPlayer::SYNC_STARTING;
+  };
+  // the video player squeezes its decoder until it reports a stall
+  const bool busy = (starting(m_CurrentAudio) && m_VideoPlayerAudio->HasData()) ||
+                    (starting(m_CurrentVideo) &&
+                     (m_VideoPlayerVideo->HasData() || !m_VideoPlayerVideo->IsStalled())) ||
+                    m_messenger.GetPacketCount(CDVDMsg::PLAYER_STARTED) > 0;
+
+  // an audio sink reopen at the item start takes up to half a second; a player that does not
+  // sync within the bound gets the drop at the close
+  constexpr auto NAV_SYNC_WAIT_MAX = 2000ms;
+  if (!busy || (m_syncWait && now - *m_syncWait >= NAV_SYNC_WAIT_MAX))
+  {
+    m_syncWait.reset();
+    return false;
+  }
+  if (!m_syncWait)
+    m_syncWait = now;
+  return true;
 }
 
 void CVideoPlayer::HandlePlaySpeed()
