@@ -29,10 +29,14 @@
 #include "video/VideoFileItemClassify.h"
 #include "video/VideoInfoTag.h"
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -427,6 +431,10 @@ void CDVDInputStreamBluray::Close()
   m_bd = nullptr;
   m_pstream.reset();
   m_rootPath.clear();
+  m_readPos = 0;
+  m_clipSpans.clear();
+  m_hasMVCExtension = false;
+  m_clipStart.clear();
 }
 
 void CDVDInputStreamBluray::FreeTitleInfo()
@@ -527,7 +535,8 @@ void CDVDInputStreamBluray::ProcessEvent() {
   case BD_EVENT_END_OF_TITLE:
     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_END_OF_TITLE {}", m_event.param);
     /* when a title ends, playlist WILL eventually change */
-    FreeTitleInfo();
+    if (m_navmode)
+      FreeTitleInfo();
     break;
 
   case BD_EVENT_TITLE:
@@ -563,6 +572,7 @@ void CDVDInputStreamBluray::ProcessEvent() {
     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_PLAYITEM {}", m_event.param);
     if (m_titleInfo && m_event.param < m_titleInfo->clip_count)
       m_clip = &m_titleInfo->clips[m_event.param];
+    OpenClipSpan();
     uint64_t clip_start, clip_in, bytepos;
     ret = bd_get_clip_infos(m_bd, m_event.param, &clip_start, &clip_in, &bytepos, nullptr);
     if (ret)
@@ -595,6 +605,7 @@ void CDVDInputStreamBluray::ProcessEvent() {
       pid = m_clip->pg_streams[m_event.param - 1].pid;
     CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - BD_EVENT_PG_TEXTST_STREAM {}, {}", m_event.param,
               pid);
+    m_pgStreamNumber = m_event.param;
     m_player->OnDiscNavResult(static_cast<void*>(&pid), BD_EVENT_PG_TEXTST_STREAM);
     break;
 
@@ -679,6 +690,19 @@ void CDVDInputStreamBluray::DisableExtention()
 int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
 {
   int result = 0;
+  if (!m_clipStart.empty())
+  {
+    if (m_clipStartHeld)
+      return 0;
+
+    result = std::min(buf_size, static_cast<int>(m_clipStart.size() - m_clipStartOffset));
+    std::copy_n(m_clipStart.data() + m_clipStartOffset, result, buf);
+    m_clipStartOffset += result;
+    m_readPos += result;
+    if (m_clipStartOffset == m_clipStart.size())
+      m_clipStart.clear();
+    return result;
+  }
   m_dispTimeBeforeRead = static_cast<int>((bd_tell_time(m_bd) / 90));
   if(m_navmode)
   {
@@ -709,6 +733,12 @@ int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
           if(m_hold != HOLD_DATA)
           {
             m_hold = HOLD_HELD;
+            // the read starts the new play item, which the demuxer being closed must not consume
+            if (m_event.event == BD_EVENT_PLAYITEM && result > 0 && !m_hasMVCExtension)
+            {
+              HoldClipStart(buf, result);
+              return 0;
+            }
             return result;
           }
           break;
@@ -735,8 +765,21 @@ int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
   else
   {
     result = bd_read(m_bd, buf, buf_size);
+    bool discontinuity = false;
     while (bd_get_event(m_bd, &m_event))
+    {
+      if (m_event.event == BD_EVENT_DISCONTINUITY)
+        discontinuity = true;
       ProcessEvent();
+    }
+    // the read starts the new clip, which the demuxer being reset must not consume
+    if (discontinuity && result > 0 && !m_hasMVCExtension)
+    {
+      HoldClipStart(buf, result);
+      return 0;
+    }
+    if (result > 0)
+      m_readPos += result;
   }
   return result;
 }
@@ -995,6 +1038,7 @@ bool CDVDInputStreamBluray::PosTime(int ms)
   EMPTY_QUEUE(m_clipQueue);
   while (bd_get_event(m_bd, &m_event))
     ProcessEvent();
+  OpenClipSpan();
 
   if (m_bMVCPlayback)
   {
@@ -1028,6 +1072,7 @@ bool CDVDInputStreamBluray::SeekChapter(int ch)
   EMPTY_QUEUE(m_clipQueue);
   while (bd_get_event(m_bd, &m_event))
     ProcessEvent();
+  OpenClipSpan();
 
   if (m_bMVCPlayback)
   {
@@ -1159,6 +1204,10 @@ void CDVDInputStreamBluray::UserInput(bd_vk_key_e vk)
   if(m_bd == nullptr || !m_navmode)
     return;
 
+  // an event the input stream still holds for the player came first
+  if (m_event.event != BD_EVENT_NONE)
+    ProcessEvent();
+
   int ret = bd_user_input(m_bd, -1, vk);
   if (ret < 0)
   {
@@ -1212,29 +1261,58 @@ bool CDVDInputStreamBluray::MouseClick(const CPoint &point)
   return false;
 }
 
-bool CDVDInputStreamBluray::SetActiveAudioStream(int streamIdx)
+static unsigned int stream_number(int pid, const BLURAY_STREAM_INFO* info, int count)
 {
-  if (m_bd == nullptr || !m_navmode)
+  for (int i = 0; i < count; ++i)
+  {
+    if (info[i].pid == static_cast<uint16_t>(pid))
+      return i + 1;
+  }
+  return 0;
+}
+
+bool CDVDInputStreamBluray::CanSelectStream() const
+{
+  // libbluray already plays the play item of a held event, which m_clip does not describe yet
+  return m_bd && m_navmode && m_titleInfo && m_clip && m_hold != HOLD_HELD &&
+         m_event.event == BD_EVENT_NONE;
+}
+
+bool CDVDInputStreamBluray::SetActiveAudioStream(int pid)
+{
+  if (!CanSelectStream())
     return false;
 
-  CLog::Log(LOGDEBUG,
-            "CDVDInputStreamBluray::SetActiveAudioStream - select audio stream index {}",
-            streamIdx);
-  bd_select_stream(m_bd, BLURAY_AUDIO_STREAM, streamIdx, 1);
+  const unsigned int number{stream_number(pid, m_clip->audio_streams, m_clip->audio_stream_count)};
+  if (number == 0)
+    return false;
+
+  // returns an int only since libbluray 1.4.1, and 0 also when nothing changed
+  bd_select_stream(m_bd, BLURAY_AUDIO_STREAM, number, 1);
   return true;
 }
 
-bool CDVDInputStreamBluray::SetActiveSubtitleStream(int streamIdx, bool enable)
+bool CDVDInputStreamBluray::SetActiveSubtitleStream(int pid, bool visible)
 {
-  if (m_bd == nullptr || !m_navmode)
+  if (!CanSelectStream())
     return false;
 
-  CLog::Log(LOGDEBUG,
-            "CDVDInputStreamBluray::SetActiveSubtitleStream - select subtitle stream index {}, "
-            "enable: {}",
-            streamIdx, enable);
-  bd_select_stream(m_bd, BLURAY_PG_TEXTST_STREAM, streamIdx, enable ? 1 : 0);
+  const unsigned int number{stream_number(pid, m_clip->pg_streams, m_clip->pg_stream_count)};
+  if (number == 0)
+    return false;
+
+  bd_select_stream(m_bd, BLURAY_PG_TEXTST_STREAM, number, visible);
+  m_pgStreamNumber = number;
   return true;
+}
+
+void CDVDInputStreamBluray::SetSubtitleVisible(bool visible)
+{
+  if (!CanSelectStream() || m_pgStreamNumber == 0 ||
+      m_pgStreamNumber > static_cast<uint32_t>(m_clip->pg_stream_count))
+    return;
+
+  bd_select_stream(m_bd, BLURAY_PG_TEXTST_STREAM, m_pgStreamNumber, visible);
 }
 
 bool CDVDInputStreamBluray::OnMenu()
@@ -1606,4 +1684,72 @@ void CDVDInputStreamBluray::UpdateStack(CFileItem& item)
 {
   return UpdateStackItem(item,
                          m_titleInfo ? std::chrono::milliseconds(m_titleInfo->duration / 90) : 0ms);
+}
+
+void CDVDInputStreamBluray::HoldClipStart(const uint8_t* buf, int size)
+{
+  m_clipStart.assign(buf, buf + size);
+  m_clipStartOffset = 0;
+  m_clipStartHeld = true;
+  m_clipStartEnd = bd_tell(m_bd);
+  CLog::Log(LOGDEBUG, "CDVDInputStreamBluray - holding {} bytes of the new clip", size);
+}
+
+// a menu action or a disc program can move away from the held play item during the hold; an HDMV
+// jump is reported only when the VM runs again, a BD-J reposition shows only in the read position
+void CDVDInputStreamBluray::DropClipStartOnJump()
+{
+  while (true)
+  {
+    if (bd_read_ext(m_bd, nullptr, 0, &m_event) < 0)
+    {
+      m_hold = HOLD_ERROR;
+      break;
+    }
+    if (m_event.event == BD_EVENT_NONE)
+      break;
+
+    switch (m_event.event)
+    {
+      case BD_EVENT_SEEK:
+      case BD_EVENT_TITLE:
+      case BD_EVENT_ANGLE:
+      case BD_EVENT_PLAYLIST:
+      case BD_EVENT_PLAYLIST_STOP:
+        m_clipStart.clear();
+        break;
+      default:
+        break;
+    }
+    ProcessEvent();
+  }
+
+  if (m_hold == HOLD_ERROR || m_hold == HOLD_EXIT || bd_tell(m_bd) != m_clipStartEnd)
+    m_clipStart.clear();
+  else if (!m_clipStart.empty())
+    m_hold = HOLD_NONE;
+}
+
+void CDVDInputStreamBluray::OpenClipSpan()
+{
+  if (m_navmode)
+    return;
+
+  ClipSpan span{m_readPos};
+  if (m_clip)
+    span.time = ClipTime{m_clip->in_time, m_clip->start_time};
+  m_clipSpans.push_back(span);
+}
+
+std::optional<CDVDInputStreamBluray::ClipTime> CDVDInputStreamBluray::GetClipTime(
+    uint64_t readPos) const
+{
+  if (m_hasMVCExtension)
+    return {};
+
+  const auto it = std::ranges::upper_bound(m_clipSpans, readPos, {}, &ClipSpan::readPos);
+  if (it == m_clipSpans.begin())
+    return {};
+
+  return std::prev(it)->time;
 }

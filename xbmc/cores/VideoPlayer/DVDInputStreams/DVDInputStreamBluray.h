@@ -117,8 +117,23 @@ public:
   void UserInput(bd_vk_key_e vk);
   bool MouseMove(const CPoint &point);
   bool MouseClick(const CPoint &point);
-  bool SetActiveAudioStream(int streamIdx);
-  bool SetActiveSubtitleStream(int streamIdx, bool enable);
+
+  //! libbluray owns audio/subtitle stream numbers in nav mode - query before changing them
+  bool CanSelectStream() const;
+  bool SetActiveAudioStream(int pid);
+  bool SetActiveSubtitleStream(int pid, bool visible);
+  void SetSubtitleVisible(bool visible);
+
+  struct ClipTime
+  {
+    uint64_t inTime{0};
+    uint64_t startTime{0};
+  };
+
+  uint64_t GetReadPos() const { return m_readPos; }
+  std::optional<ClipTime> GetClipTime(uint64_t readPos) const;
+  void ReleaseClipStart() { m_clipStartHeld = false; }
+  bool IsClipStartHeld() const { return !m_navmode && m_clipStartHeld && !m_clipStart.empty(); }
 
   int GetChapter() override;
   int GetChapterCount() override;
@@ -239,4 +254,23 @@ protected:
     std::chrono::steady_clock::time_point m_startWatchTime{};
     std::vector<PlaylistInformation> m_playedPlaylists;
     CCriticalSection m_statesLock;
+
+    struct ClipSpan
+    {
+      uint64_t readPos{0};
+      std::optional<ClipTime> time{};
+    };
+
+    void OpenClipSpan();
+    void HoldClipStart(const uint8_t* buf, int size);
+    void DropClipStartOnJump();
+
+    uint64_t m_readPos{0};
+    std::vector<ClipSpan> m_clipSpans;
+    bool m_hasMVCExtension{false};
+    std::vector<uint8_t> m_clipStart;
+    size_t m_clipStartOffset{0};
+    bool m_clipStartHeld{false};
+    uint64_t m_clipStartEnd{0};
+    uint32_t m_pgStreamNumber{0};
 };
