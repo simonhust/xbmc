@@ -822,9 +822,10 @@ bool CDVDVideoCodecAmlogic::AddData(const DemuxPacket &packet)
         bool dual_layer_queued = false;
         if (packet.isDualStream)
         {
-          if (packet.isNoElEpMap && !packet.isMultiClip)
+          if (packet.isNoElEpMap && !packet.isMultiClip && !packet.isDirectPair)
           {
-            /* Always feed the dual-queue for synchronization. */
+            /* Blu-ray DT-DL: dual-queue DTS-based pairing.
+             * MP4/MKV DT-DL FEL uses single-sequence pairing (else branch). */
             DualLayerAccumulate(packet);
 
             if (packet.isDirectPair)
