@@ -690,6 +690,8 @@ void CDVDInputStreamBluray::DisableExtention()
 int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
 {
   int result = 0;
+  if (m_navmode && !m_clipStart.empty() && !m_clipStartHeld && m_clipStartOffset == 0)
+    DropClipStartOnJump();
   if (!m_clipStart.empty())
   {
     if (m_clipStartHeld)
@@ -754,10 +756,37 @@ int CDVDInputStreamBluray::Read(uint8_t* buf, int buf_size)
           break;
       }
 
+      const bool queued = m_event.event != BD_EVENT_NONE && m_hold != HOLD_DATA;
       if(result > 0)
         m_hold = HOLD_NONE;
 
       ProcessEvent();
+
+      // a clip open can queue its play item behind other events of the same read
+      while(result > 0 && queued && m_hold == HOLD_NONE && bd_get_event(m_bd, &m_event))
+      {
+        switch(m_event.event) {
+          case BD_EVENT_PLAYITEM:
+            if(!m_hasMVCExtension)
+            {
+              m_hold = HOLD_HELD;
+              HoldClipStart(buf, result);
+              return 0;
+            }
+            [[fallthrough]];
+          case BD_EVENT_SEEK:
+          case BD_EVENT_TITLE:
+          case BD_EVENT_ANGLE:
+          case BD_EVENT_PLAYLIST:
+          case BD_EVENT_STILL_TIME:
+            m_hold = HOLD_HELD;
+            return result;
+
+          default:
+            break;
+        }
+        ProcessEvent();
+      }
 
     } while(result == 0);
 
