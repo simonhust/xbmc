@@ -1920,6 +1920,39 @@ static inline int calc_chunk_size(int size)
   return (size + need_padding_size);
 }
 
+/* Static warm-pool storage */
+std::map<enum AVCodecID, std::shared_ptr<CAMLCodec>> CAMLCodec::s_warmPool;
+CCriticalSection CAMLCodec::s_warmPoolLock;
+
+std::shared_ptr<CAMLCodec> CAMLCodec::AcquireWarm(enum AVCodecID codec)
+{
+  std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
+  auto it = s_warmPool.find(codec);
+  if (it != s_warmPool.end())
+  {
+    if (auto warm = it->second.lock())
+    {
+      CLog::Log(LOGDEBUG, "CAMLCodec::AcquireWarm - reusing warm decoder for codec {:d}", codec);
+      s_warmPool.erase(it);
+      return warm;
+    }
+    s_warmPool.erase(it);
+  }
+  return nullptr;
+}
+
+void CAMLCodec::ReleaseWarm(std::shared_ptr<CAMLCodec> codec)
+{
+  if (!codec)
+    return;
+  std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
+  /* Evict any stale entry for this codec type */
+  s_warmPool.erase(codec->m_hints.codec);
+  s_warmPool[codec->m_hints.codec] = codec;
+  CLog::Log(LOGDEBUG, "CAMLCodec::ReleaseWarm - decoder for codec {:d} returned to warm pool",
+            codec->m_hints.codec);
+}
+
 /*************************************************************************/
 CAMLCodec::CAMLCodec(CProcessInfo &processInfo)
   : m_opened(false)
@@ -2400,14 +2433,14 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (am_private->vcodec.dec_mode == STREAM_TYPE_SINGLE)
     SetVfmMap("default", "decoder amlvideo deinterlace amvideo");
 
-  /* Keep-alive warm path: decoder is already initialized from a previous
-   * play, skip codec_init (firmware reload) and resume directly. */
-  bool wasKeepWarm = m_keepAlive;
+  /* Warm path: decoder is already initialized from a previous play,
+   * skip codec_init (firmware reload) and resume directly. */
   int ret = 0;
-  if (wasKeepWarm)
+  if (m_warm)
   {
     m_dll->codec_resume(&am_private->vcodec);
-    CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder - keep-alive warm: resuming initialized decoder");
+    m_warm = false;
+    CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder - warm: resuming initialized decoder");
   }
   else
   {
@@ -2590,11 +2623,13 @@ void CAMLCodec::CloseDecoder()
      * returns the hardware to idle but leaves it initialized. */
     m_dll->codec_pause(&am_private->vcodec);
     m_dll->codec_reset(&am_private->vcodec);
-    CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder - keep-alive: decoder paused, not closed");
+    m_warm = true;
+    CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder - keep-alive: decoder paused, warm for reuse");
   }
   else
   {
     m_dll->codec_close(&am_private->vcodec);
+    m_warm = false;
   }
   dumpfile_close(am_private);
   m_opened = false;

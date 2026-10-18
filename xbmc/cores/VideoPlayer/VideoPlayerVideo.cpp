@@ -285,13 +285,6 @@ void CVideoPlayerVideo::CloseStream(bool bWaitForBuffers)
   m_messageQueue.End();
 
   CLog::Log(LOGINFO, "deleting video codec");
-  // Keep decoder warm before Close() so codec_close is skipped and
-  // the next play resumes without firmware reinit.
-  if (m_pVideoCodec)
-  {
-    if (auto* aml = dynamic_cast<CDVDVideoCodecAmlogic*>(m_pVideoCodec.get()))
-      aml->SetDecoderKeepAlive();
-  }
   m_pVideoCodec.reset();
 
   if (m_picture.videoBuffer)

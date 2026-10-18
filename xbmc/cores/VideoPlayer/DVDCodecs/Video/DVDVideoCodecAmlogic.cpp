@@ -97,6 +97,12 @@ void CDVDVideoCodecAmlogic::SetDecoderKeepAlive()
     m_Codec->SetKeepAlive(true);
 }
 
+void CDVDVideoCodecAmlogic::ReleaseWarmCodec()
+{
+  if (m_Codec)
+    CAMLCodec::ReleaseWarm(std::move(m_Codec));
+}
+
 std::unique_ptr<CDVDVideoCodec> CDVDVideoCodecAmlogic::Create(CProcessInfo& processInfo)
 {
   return std::make_unique<CDVDVideoCodecAmlogic>(processInfo);
@@ -410,11 +416,20 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
 
   m_aspect_ratio = m_hints.aspect;
 
-  m_Codec = std::shared_ptr<CAMLCodec>(new CAMLCodec(m_processInfo));
-  if (!m_Codec)
+  /* Try to reuse a warm codec from the pool */
+  m_Codec = CAMLCodec::AcquireWarm(m_hints.codec);
+  if (m_Codec)
   {
-    CLog::Log(LOGERROR, "{}: Failed to create Amlogic Codec", __MODULE_NAME__);
-    goto FAIL;
+    CLog::Log(LOGDEBUG, "{}::{} - reusing warm Amlogic codec from pool", __MODULE_NAME__, __FUNCTION__);
+  }
+  else
+  {
+    m_Codec = std::shared_ptr<CAMLCodec>(new CAMLCodec(m_processInfo));
+    if (!m_Codec)
+    {
+      CLog::Log(LOGERROR, "{}: Failed to create Amlogic Codec", __MODULE_NAME__);
+      goto FAIL;
+    }
   }
 
   // allocate a dummy VideoPicture buffer.
@@ -488,7 +503,11 @@ void CDVDVideoCodecAmlogic::Close(void)
   m_videoBufferPool = nullptr;
 
   if (m_Codec)
-    m_Codec->CloseDecoder(), m_Codec = nullptr;
+  {
+    m_Codec->CloseDecoder();
+    CAMLCodec::ReleaseWarm(std::move(m_Codec));
+    m_Codec = nullptr;
+  }
 
   m_videobuffer.iFlags = 0;
 
