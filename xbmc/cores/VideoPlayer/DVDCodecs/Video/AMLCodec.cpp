@@ -1920,24 +1920,26 @@ static inline int calc_chunk_size(int size)
   return (size + need_padding_size);
 }
 
-/* Static warm-pool storage */
-std::map<enum AVCodecID, std::shared_ptr<CAMLCodec>> CAMLCodec::s_warmPool;
+/* Static warm-pool storage: single-slot, keyed by last codec type */
+std::weak_ptr<CAMLCodec> CAMLCodec::s_warmCodec;
 CCriticalSection CAMLCodec::s_warmPoolLock;
 
 std::shared_ptr<CAMLCodec> CAMLCodec::AcquireWarm(enum AVCodecID codec)
 {
   std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
-  auto it = s_warmPool.find(codec);
-  if (it != s_warmPool.end())
+  if (auto warm = s_warmCodec.lock())
   {
-    if (auto warm = it->second.lock())
+    if (warm->m_hints.codec == codec)
     {
       CLog::Log(LOGDEBUG, "CAMLCodec::AcquireWarm - reusing warm decoder for codec {:d}", codec);
-      s_warmPool.erase(it);
+      s_warmCodec.reset();
       return warm;
     }
-    s_warmPool.erase(it);
+    /* Different codec: evict old warm decoder (cold close it) */
+    warm->SetKeepAlive(false);
+    warm->CloseDecoder();
   }
+  s_warmCodec.reset();
   return nullptr;
 }
 
@@ -1946,10 +1948,14 @@ void CAMLCodec::ReleaseWarm(std::shared_ptr<CAMLCodec> codec)
   if (!codec)
     return;
   std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
-  /* Evict any stale entry for this codec type */
-  s_warmPool.erase(codec->m_hints.codec);
-  s_warmPool[codec->m_hints.codec] = codec;
-  CLog::Log(LOGDEBUG, "CAMLCodec::ReleaseWarm - decoder for codec {:d} returned to warm pool",
+  /* Evict previous warm decoder if different codec */
+  if (auto old = s_warmCodec.lock())
+  {
+    if (old->m_hints.codec != codec->m_hints.codec)
+      old->CloseDecoder();
+  }
+  s_warmCodec = codec;
+  CLog::Log(LOGDEBUG, "CAMLCodec::ReleaseWarm - decoder for codec {:d} kept warm",
             codec->m_hints.codec);
 }
 

@@ -142,7 +142,7 @@ private:
   bool             m_keepAlive{false};
   bool             m_warm{false};
 
-  static std::map<enum AVCodecID, std::weak_ptr<CAMLCodec>> s_warmPool;
+  static std::weak_ptr<CAMLCodec> s_warmCodec;
   static CCriticalSection s_warmPoolLock;
 
   static std::atomic_flag  m_pollSync;
