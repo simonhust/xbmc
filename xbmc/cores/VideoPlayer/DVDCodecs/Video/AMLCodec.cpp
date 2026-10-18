@@ -229,6 +229,32 @@ public:
   }
 };
 
+/* A parked (warm) decoder can only be resumed when the new stream maps to the
+ * same kernel-visible decoder configuration: on the warm path codec_init() is
+ * skipped, so any configuration difference would never reach the hardware.
+ * Compares exactly the fields codec_init_para() copies from the generic
+ * parameters (i.e. what codec_init() would have pushed to the kernel). */
+static bool WarmConfigMatches(const codec_para_t &oldCfg, const codec_para_t &newCfg)
+{
+  return oldCfg.has_video == newCfg.has_video
+      && oldCfg.noblock == newCfg.noblock
+      && oldCfg.dv_enable == newCfg.dv_enable
+      && oldCfg.video_type == newCfg.video_type
+      && oldCfg.video_pid == newCfg.video_pid
+      && oldCfg.stream_type == newCfg.stream_type
+      && oldCfg.dec_mode == newCfg.dec_mode
+      && oldCfg.video_path == newCfg.video_path
+      && oldCfg.am_sysinfo.format == newCfg.am_sysinfo.format
+      && oldCfg.am_sysinfo.width == newCfg.am_sysinfo.width
+      && oldCfg.am_sysinfo.height == newCfg.am_sysinfo.height
+      && oldCfg.am_sysinfo.rate == newCfg.am_sysinfo.rate
+      && oldCfg.am_sysinfo.extra == newCfg.am_sysinfo.extra
+      && oldCfg.am_sysinfo.status == newCfg.am_sysinfo.status
+      && oldCfg.am_sysinfo.ratio == newCfg.am_sysinfo.ratio
+      && oldCfg.am_sysinfo.ratio64 == newCfg.am_sysinfo.ratio64
+      && oldCfg.am_sysinfo.param == newCfg.am_sysinfo.param;
+}
+
 //-----------------------------------------------------------------------------------
 //-----------------------------------------------------------------------------------
 // AppContext - Application state
@@ -1920,43 +1946,62 @@ static inline int calc_chunk_size(int size)
   return (size + need_padding_size);
 }
 
-/* Static warm-pool storage: single-slot, keyed by last codec type */
-std::weak_ptr<CAMLCodec> CAMLCodec::s_warmCodec;
+/* Static warm-pool storage: single slot, keyed by last codec type.
+ * Holds a strong reference: the object owns the live decoder fds, so it must
+ * survive after CDVDVideoCodecAmlogic has released it. */
+std::shared_ptr<CAMLCodec> CAMLCodec::s_warmCodec;
 CCriticalSection CAMLCodec::s_warmPoolLock;
 
 std::shared_ptr<CAMLCodec> CAMLCodec::AcquireWarm(enum AVCodecID codec)
 {
-  std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
-  if (auto warm = s_warmCodec.lock())
+  std::shared_ptr<CAMLCodec> warm;
   {
-    if (warm->m_hints.codec == codec)
+    std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
+    if (!s_warmCodec)
+      return nullptr;
+    if (s_warmCodec->m_warm && s_warmCodec->m_hints.codec == codec)
     {
-      CLog::Log(LOGDEBUG, "CAMLCodec::AcquireWarm - reusing warm decoder for codec {:d}", codec);
+      warm = std::move(s_warmCodec);
       s_warmCodec.reset();
+      CLog::Log(LOGDEBUG, "CAMLCodec::AcquireWarm - reusing warm decoder for codec {:d}", codec);
       return warm;
     }
-    /* Different codec: evict old warm decoder (cold close it) */
-    warm->SetKeepAlive(false);
-    warm->CloseDecoder();
+    /* Different codec or no longer warm: evict */
+    warm = std::move(s_warmCodec);
+    s_warmCodec.reset();
   }
-  s_warmCodec.reset();
+  warm->CloseWarmDecoder();
   return nullptr;
 }
 
 void CAMLCodec::ReleaseWarm(std::shared_ptr<CAMLCodec> codec)
 {
-  if (!codec)
-    return;
-  std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
-  /* Evict previous warm decoder if different codec */
-  if (auto old = s_warmCodec.lock())
+  if (!codec || !codec->m_warm)
+    return; /* nothing worth keeping: let it die */
+
+  std::shared_ptr<CAMLCodec> old;
   {
-    if (old->m_hints.codec != codec->m_hints.codec)
-      old->CloseDecoder();
+    std::unique_lock<CCriticalSection> lock(s_warmPoolLock);
+    old = std::move(s_warmCodec);
+    s_warmCodec = std::move(codec);
   }
-  s_warmCodec = codec;
-  CLog::Log(LOGDEBUG, "CAMLCodec::ReleaseWarm - decoder for codec {:d} kept warm",
-            codec->m_hints.codec);
+  if (old)
+    old->CloseWarmDecoder();
+  CLog::Log(LOGDEBUG, "CAMLCodec::ReleaseWarm - decoder kept warm in pool");
+}
+
+void CAMLCodec::CloseWarmDecoder()
+{
+  if (!m_warm)
+    return;
+
+  CLog::Log(LOGDEBUG, "CAMLCodec::CloseWarmDecoder - closing parked decoder");
+  m_dll->codec_close(&am_private->vcodec);
+  am_private->vcodec.handle             = -1;
+  am_private->vcodec.cntl_handle        = -1;
+  am_private->vcodec.sub_handle         = -1;
+  am_private->vcodec.audio_utils_handle = -1;
+  m_warm = false;
 }
 
 /*************************************************************************/
@@ -1983,6 +2028,12 @@ CAMLCodec::CAMLCodec(CProcessInfo &processInfo)
 
 CAMLCodec::~CAMLCodec()
 {
+  /* Defensive: never leave the decoder (and its fds) open if the object dies
+   * outside the normal CloseDecoder/CloseWarmDecoder flow. codec_close() on
+   * already-closed handles (-1) is a harmless no-op. */
+  if ((m_warm || m_opened) && m_dll && am_private)
+    m_dll->codec_close(&am_private->vcodec);
+
   delete am_private;
   am_private = NULL;
   delete m_dll, m_dll = NULL;
@@ -2424,6 +2475,15 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   }
   am_private->gcodec.param = (void *)((std::uintptr_t)am_private->gcodec.param | (am_private->video_rotation_degree << 16));
 
+  /* A warm decoder still owns its kernel handles. codec_init_para() wipes the
+   * vcodec struct (memset, handles -> -1), so keep a copy of the parked state:
+   * it provides the live handles to recover and the old configuration to
+   * compare the new stream against. */
+  const bool haveWarm = m_warm && am_private->vcodec.handle >= 0;
+  codec_para_t warmVcodec{};
+  if (haveWarm)
+    warmVcodec = am_private->vcodec;
+
   // translate from generic to firmware version dependent
   m_dll->codec_init_para(&am_private->gcodec, &am_private->vcodec);
 
@@ -2439,17 +2499,31 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints, bool doviIsFEL)
   if (am_private->vcodec.dec_mode == STREAM_TYPE_SINGLE)
     SetVfmMap("default", "decoder amlvideo deinterlace amvideo");
 
-  /* Warm path: decoder is already initialized from a previous play,
-   * skip codec_init (firmware reload) and resume directly. */
+  /* Warm path: the decoder is already initialized from a previous play, skip
+   * codec_init (firmware reload) and resume directly - but only when the new
+   * stream needs the exact same kernel-side configuration. */
   int ret = 0;
-  if (m_warm)
+  const bool warmResume = haveWarm && WarmConfigMatches(warmVcodec, am_private->vcodec);
+  if (warmResume)
   {
+    am_private->vcodec.handle             = warmVcodec.handle;
+    am_private->vcodec.cntl_handle        = warmVcodec.cntl_handle;
+    am_private->vcodec.sub_handle         = warmVcodec.sub_handle;
+    am_private->vcodec.audio_utils_handle = warmVcodec.audio_utils_handle;
     m_dll->codec_resume(&am_private->vcodec);
     m_warm = false;
     CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder - warm: resuming initialized decoder");
   }
   else
   {
+    if (haveWarm)
+    {
+      /* The parked decoder cannot serve this stream: close it before the
+       * fresh codec_init() so no live instance collides with the new one. */
+      CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder - warm decoder incompatible with new stream, cold reinit");
+      m_dll->codec_close(&warmVcodec);
+      m_warm = false;
+    }
     ret = m_dll->codec_init(&am_private->vcodec);
     if (ret != CODEC_ERROR_NONE)
     {
@@ -2622,18 +2696,21 @@ void CAMLCodec::CloseDecoder()
     AmlDisplay->aml_set_drmProperty("dv_mode", DRM_MODE_OBJECT_CRTC,
                                     AMDV_OUTPUT_MODE_BYPASS);
 
-  if (m_keepAlive)
+  if (m_keepAlive && m_opened)
   {
-    /* Keep the decoder warm: pause instead of close so the next play
-     * skips firmware reinit. codec_reset drops queued buffers and
-     * returns the hardware to idle but leaves it initialized. */
+    /* Keep the decoder warm: pause ONLY, so the kernel keeps the decoder
+     * initialized (firmware loaded, buffers allocated) for the next play.
+     * NOTE: do NOT call codec_reset() here - libamcodec implements it as
+     * codec_close() + codec_init(), which would destroy the warm state and
+     * pay the full init cost at close time. */
     m_dll->codec_pause(&am_private->vcodec);
-    m_dll->codec_reset(&am_private->vcodec);
     m_warm = true;
     CLog::Log(LOGDEBUG, "CAMLCodec::CloseDecoder - keep-alive: decoder paused, warm for reuse");
   }
   else
   {
+    /* Cold close. Also the eviction path: a warm decoder that is being
+     * dropped still has its handles open and must be closed here. */
     m_dll->codec_close(&am_private->vcodec);
     m_warm = false;
   }
@@ -2643,7 +2720,10 @@ void CAMLCodec::CloseDecoder()
   am_packet_release(&am_private->am_pkt);
   am_private->extradata = {};
   if (am_private->vcodec.config)
+  {
     free(am_private->vcodec.config);
+    am_private->vcodec.config = nullptr;
+  }
   // return tsync to default so external apps work
   CSysfsPath("/sys/class/tsync/enable", 1);
   // disable Dolby Vision driver

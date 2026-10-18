@@ -91,18 +91,6 @@ CDVDVideoCodecAmlogic::~CDVDVideoCodecAmlogic()
   Close();
 }
 
-void CDVDVideoCodecAmlogic::SetDecoderKeepAlive()
-{
-  if (m_Codec)
-    m_Codec->SetKeepAlive(true);
-}
-
-void CDVDVideoCodecAmlogic::ReleaseWarmCodec()
-{
-  if (m_Codec)
-    CAMLCodec::ReleaseWarm(std::move(m_Codec));
-}
-
 std::unique_ptr<CDVDVideoCodec> CDVDVideoCodecAmlogic::Create(CProcessInfo& processInfo)
 {
   return std::make_unique<CDVDVideoCodecAmlogic>(processInfo);
@@ -504,6 +492,10 @@ void CDVDVideoCodecAmlogic::Close(void)
 
   if (m_Codec)
   {
+    // Keep the decoder initialized for the next play: CloseDecoder pauses it
+    // instead of closing (only when it was fully opened), and the codec is
+    // handed over to the warm pool for the next CDVDVideoCodecAmlogic.
+    m_Codec->SetKeepAlive(true);
     m_Codec->CloseDecoder();
     CAMLCodec::ReleaseWarm(std::move(m_Codec));
     m_Codec = nullptr;

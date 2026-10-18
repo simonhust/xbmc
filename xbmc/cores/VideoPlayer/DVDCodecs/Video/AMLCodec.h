@@ -11,6 +11,7 @@
 #include "DVDVideoCodec.h"
 #include "cores/VideoPlayer/DVDStreamInfo.h"
 #include "cores/IPlayer.h"
+#include "threads/CriticalSection.h"
 #include "windowing/Resolution.h"
 #include "rendering/RenderSystem.h"
 #include "utils/BitstreamConverter.h"
@@ -18,6 +19,7 @@
 
 #include <deque>
 #include <atomic>
+#include <memory>
 
 typedef struct am_private_t am_private_t;
 
@@ -103,6 +105,9 @@ private:
   void          SetVideoSaturation(const int saturation);
   bool          OpenAmlVideo(const CDVDStreamInfo &hints);
   void          CloseAmlVideo();
+  /* Close a still-warm decoder: codec_close() only, no display teardown
+   * (that already ran when the codec was parked). */
+  void          CloseWarmDecoder();
   std::string   GetVfmMap(const std::string &name);
   void          SetVfmMap(const std::string &name, const std::string &map);
   int           DequeueBuffer();
@@ -142,7 +147,9 @@ private:
   bool             m_keepAlive{false};
   bool             m_warm{false};
 
-  static std::weak_ptr<CAMLCodec> s_warmCodec;
+  /* Single warm slot. Holds a strong reference: the object owns the live
+   * decoder file descriptors, so letting it die would leak the decoder. */
+  static std::shared_ptr<CAMLCodec> s_warmCodec;
   static CCriticalSection s_warmPoolLock;
 
   static std::atomic_flag  m_pollSync;
